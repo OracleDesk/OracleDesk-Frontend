@@ -664,7 +664,12 @@ const PortfolioAnalytics = () => {
               <h4 className="font-headline-sm mb-2">Oracle Premium</h4>
               <p className="text-body-md text-on-primary-container/80 mb-4">Unlock advanced trace depth and lower trade fees with the Premium pass.</p>
             </div>
-            <button className="w-full bg-primary-fixed text-on-primary-fixed py-3 rounded font-bold font-label-caps text-[12px] tracking-widest">UPGRADE NOW</button>
+            <Link 
+              href="/premium" 
+              className="w-full bg-primary-fixed text-on-primary-fixed py-3 rounded font-bold font-label-caps text-[12px] tracking-widest text-center hover:brightness-110 transition-all"
+            >
+              UPGRADE NOW
+            </Link>
           </div>
         </div>
       </div>

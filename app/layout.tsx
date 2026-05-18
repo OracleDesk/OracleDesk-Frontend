@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { WalletProvider } from "@/lib/contexts/WalletContext";
+import { ConnectWalletModal } from "@/components/modals/ConnectWalletModal";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,9 +43,12 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-body-md text-on-surface">
-        <Navbar />
-        {children}
-        <Footer />
+        <WalletProvider>
+          <Navbar />
+          {children}
+          <Footer />
+          <ConnectWalletModal />
+        </WalletProvider>
       </body>
     </html>
   );

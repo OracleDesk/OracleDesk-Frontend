@@ -3,12 +3,22 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useWallet } from "@/lib/contexts/WalletContext";
 
 export const Navbar = () => {
   const pathname = usePathname();
+  const { isConnected, address, openModal, disconnect } = useWallet();
 
   const navLinks = [
-    { name: "Markets", href: "/market" },
+    { 
+      name: "Markets", 
+      href: "/markets",
+      dropdown: [
+        // { name: "Market Overview", href: "/markets" },
+        { name: "Live Terminal", href: "/markets/terminal" },
+        { name: "Active Market Detail", href: "/market" },
+      ]
+    },
     { name: "Reasoning", href: "/reasoning" },
     { 
       name: "Portfolio", 
@@ -16,9 +26,11 @@ export const Navbar = () => {
       dropdown: [
         { name: "Active Positions", href: "/portfolio" },
         { name: "Analytics", href: "/portfolio/analytics" },
+        { name: "Portfolio & Assets", href: "/portfolio/wallets" },
       ]
     },
-    { name: "Stats", href: "#" },
+    { name: "Stats", href: "/stats" },
+    { name: "Admin", href: "/admin" },
   ];
 
   return (
@@ -41,7 +53,7 @@ export const Navbar = () => {
                         isActive
                           ? "text-primary border-b-2 border-primary pb-1 font-bold"
                           : "text-on-surface-variant font-medium hover:text-primary"
-                      } transition-colors duration-200 cursor-pointer font-label-caps text-label-caps flex items-center gap-1`}
+                      } transition-colors duration-200 cursor-pointer font-label-caps text-label-caps flex items-center gap-1 h-full`}
                       aria-haspopup="menu"
                     >
                       {link.name}
@@ -76,7 +88,7 @@ export const Navbar = () => {
                     isActive
                       ? "text-primary border-b-2 border-primary pb-1 font-bold"
                       : "text-on-surface-variant font-medium hover:text-primary"
-                  } transition-colors duration-200 cursor-pointer font-label-caps text-label-caps`}
+                  } transition-colors duration-200 cursor-pointer font-label-caps text-label-caps h-full flex items-center`}
                 >
                   {link.name}
                 </Link>
@@ -85,12 +97,30 @@ export const Navbar = () => {
           </nav>
         </div>
         <div className="flex items-center gap-4">
-          <button className="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer">
+          <Link 
+            href="/notifications"
+            className={`material-symbols-outlined ${
+              pathname === "/notifications" ? "text-primary" : "text-on-surface-variant"
+            } hover:text-primary transition-colors cursor-pointer relative`}
+          >
             notifications
-          </button>
-          <button className="bg-primary text-primary-foreground px-4 py-2 font-label-caps text-label-caps rounded-lg hover:opacity-90 active:opacity-80 transition-all cursor-pointer">
-            Connect Wallet
-          </button>
+            <span className="absolute top-0 right-0 w-2 h-2 bg-tertiary rounded-full border border-white"></span>
+          </Link>
+          {isConnected ? (
+            <button 
+              onClick={disconnect}
+              className="bg-primary-container text-on-primary-container border border-primary px-4 py-2 font-data-mono text-[13px] rounded-lg hover:bg-primary-container/80 transition-all cursor-pointer"
+            >
+              {address}
+            </button>
+          ) : (
+            <button 
+              onClick={openModal}
+              className="bg-primary text-primary-foreground px-4 py-2 font-label-caps text-label-caps rounded-lg hover:opacity-90 active:opacity-80 transition-all cursor-pointer"
+            >
+              Connect Wallet
+            </button>
+          )}
           <button className="material-symbols-outlined text-on-surface-variant cursor-pointer">
             expand_more
           </button>
