@@ -166,4 +166,17 @@
 
   .probability-yes { background-color: #10b981; }
   .probability-no { background-color: #ef4444; }
+
+  .reasoning-node::before {
+    content: '';
+    position: absolute;
+    left: -17px;
+    top: 12px;
+    width: 1px;
+    height: calc(100% + 16px);
+    background: #bfc8cc;
+  }
+  .reasoning-node:last-child::before {
+    display: none;
+  }
 }

@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OracleDesk Frontend
 
-## Getting Started
+Institutional-grade AI prediction terminal.
 
-First, run the development server:
+## 🚀 Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🗺️ Application Roadmap & Pages
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Below are the links to all the pages created in this project:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 🏠 Core Pages
+- [Home (Dashboard)](/)
+- [Notifications](/notifications)
+- [Settings](/settings)
+- [Stats](/stats)
 
-## Learn More
+### 📈 Markets
+- [Market Overview](/markets)
+- [Quick View](/markets/quick-view)
+- [Live Terminal](/markets/terminal)
+- [Active Market Detail](/market)
 
-To learn more about Next.js, take a look at the following resources:
+### 🧠 AI Reasoning
+- [Reasoning Overview](/reasoning)
+- [Reasoning Trace Detail](/reasoning/detail)
+- [Reasoning Verification](/reasoning/verify)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 💼 Portfolio
+- [Active Positions](/portfolio)
+- [Analytics](/portfolio/analytics)
+- [Portfolio & Wallets](/portfolio/wallets)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### ⚡ Execution & Trading
+- [Execution Terminal](/execution-terminal)
+- [Copy Trade](/copy-trade)
+- [Buy YES Demo](/buy-yes-demo)
+- [Buy NO Demo](/buy-no-demo)
+- [Wallet Demo](/wallet-demo)
 
-## Deploy on Vercel
+### 💳 Premium Features
+- [Premium Dashboard](/premium)
+- [Trace Analysis](/premium/trace)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 🛠 Admin
+- [Admin Dashboard](/admin)
+- [Create New Market](/admin/create)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 🔄 Transaction States
+- [Transaction Status](/transaction-status)
+- [Transaction Success](/transaction-success)
+- [Transaction Failed](/transaction-failed)
+
+---
+*Built with Next.js, Tailwind CSS.*
