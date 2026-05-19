@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 
 const FilterBar = () => {
   return (
@@ -68,11 +69,11 @@ const MarketCard = ({ category, aiSignal, aiStatus, expiry, title, yesProb, liqu
           </div>
           <span className="font-data-mono text-label-caps text-on-surface-variant">EXP: {expiry}</span>
         </div>
-        <a href="/market" className="block">
+        <Link href="/markets/quick-view" className="block">
           <h3 className="font-headline-sm text-headline-sm text-on-surface mb-6 group-hover:text-primary transition-colors line-clamp-3">
             {title}
           </h3>
-        </a>
+        </Link>
         <div className="space-y-4">
           <div>
             <div className="flex justify-between text-label-caps font-label-caps mb-2">
@@ -107,8 +108,8 @@ const MarketCard = ({ category, aiSignal, aiStatus, expiry, title, yesProb, liqu
         </div>
       </div>
       <div className="p-3 grid grid-cols-2 gap-2 bg-surface-container-low border-t border-outline-variant">
-        <button className="bg-secondary text-on-secondary py-2.5 rounded-lg font-label-caps text-label-caps font-bold hover:brightness-110 active:opacity-80 transition-all uppercase">Bet Yes</button>
-        <button className="bg-tertiary text-on-tertiary py-2.5 rounded-lg font-label-caps text-label-caps font-bold hover:brightness-110 active:opacity-80 transition-all uppercase">Bet No</button>
+        <Link href="/markets/quick-view" className="bg-secondary text-on-secondary py-2.5 rounded-lg font-label-caps text-label-caps font-bold hover:brightness-110 active:opacity-80 transition-all uppercase text-center">Bet Yes</Link>
+        <Link href="/markets/quick-view" className="bg-tertiary text-on-tertiary py-2.5 rounded-lg font-label-caps text-label-caps font-bold hover:brightness-110 active:opacity-80 transition-all uppercase text-center">Bet No</Link>
       </div>
     </motion.div>
   );

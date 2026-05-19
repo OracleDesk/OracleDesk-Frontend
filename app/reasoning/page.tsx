@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 const extraLogs = [
   "> [08:27:01] Processing L3 cross-chain events...",
@@ -204,13 +205,13 @@ const ReasoningCard = ({
       {isExpanded && (
         <div className="p-6 bg-surface border-t border-outline-variant flex flex-wrap gap-4 items-center justify-between">
           <div className="flex gap-2">
-            <button className="px-4 py-2 bg-surface-container-low border border-outline text-on-surface rounded font-label-caps text-label-caps hover:bg-surface-variant transition-all">Verify</button>
+            <Link href="/reasoning/verify" className="px-4 py-2 bg-surface-container-low border border-outline text-on-surface rounded font-label-caps text-label-caps hover:bg-surface-variant transition-all">Verify</Link>
             <button className="px-4 py-2 bg-primary-container text-white rounded font-label-caps text-label-caps hover:opacity-90 active:opacity-80 transition-all">Copy Trade</button>
           </div>
-          <button className="flex items-center gap-2 text-primary font-bold font-label-caps text-label-caps border border-primary px-4 py-2 rounded hover:bg-primary-fixed-dim/10">
+          <Link href="/premium/trace" className="flex items-center gap-2 text-primary font-bold font-label-caps text-label-caps border border-primary px-4 py-2 rounded hover:bg-primary-fixed-dim/10">
             <span className="material-symbols-outlined">lock_open</span>
             Unlock Premium Trace
-          </button>
+          </Link>
         </div>
       )}
     </div>
