@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useWallet } from "@/lib/contexts/WalletContext";
 
 export default function ExecutionTerminalPage() {
+  const { openModal, isConnected } = useWallet();
   const [amount, setAmount] = useState<string>("1000.00");
   const [isModalOpen, setIsModalOpen] = useState(true);
 
@@ -11,29 +13,20 @@ export default function ExecutionTerminalPage() {
   const shares = (parseFloat(amount) || 0) / price;
   const potentialPayout = shares; // usually 1 USDC per share on success
 
-  return (
-    <div className="min-h-screen bg-surface font-body-md text-on-surface antialiased overflow-x-hidden">
-      {/* Header Navigation Shell */}
-      <header className="bg-surface dark:bg-on-background border-b border-outline-variant dark:border-outline h-16 w-full fixed top-0 z-50">
-        <div className="flex justify-between items-center w-full h-16 px-gutter max-w-container-max-width mx-auto">
-          <div className="flex items-center gap-8">
-            <span className="font-headline-md text-headline-md font-bold text-on-surface dark:text-surface-bright">OracleDesk</span>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link className="text-on-surface-variant dark:text-surface-variant font-medium hover:text-primary transition-colors duration-200" href="#">Markets</Link>
-              <Link className="text-on-surface-variant dark:text-surface-variant font-medium hover:text-primary transition-colors duration-200" href="#">Reasoning</Link>
-              <Link className="text-on-surface-variant dark:text-surface-variant font-medium hover:text-primary transition-colors duration-200" href="#">Portfolio</Link>
-              <Link className="text-on-surface-variant dark:text-surface-variant font-medium hover:text-primary transition-colors duration-200" href="#">Stats</Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="material-symbols-outlined text-on-surface-variant cursor-pointer hidden sm:inline">notifications</span>
-            <button className="bg-primary text-on-primary px-4 py-2 font-label-caps text-label-caps rounded hover:opacity-90 transition-opacity">Connect Wallet</button>
-          </div>
-        </div>
-      </header>
+  const handleTrade = (side: 'YES' | 'NO') => {
+    if (!isConnected) {
+      alert("Please connect your wallet first.");
+      openModal();
+      return;
+    }
+    alert(`Trade executed: Buy ${side} shares for ${amount} USDC`);
+    setIsModalOpen(false);
+  };
 
+  return (
+    <div className="min-h-screen bg-surface font-body-md text-on-surface antialiased overflow-x-hidden pt-20">
       {/* Main Content Canvas (Blurred Background Context) */}
-      <main className={`pt-24 px-gutter max-w-container-max-width mx-auto min-h-screen transition-all duration-300 ${isModalOpen ? 'blur-sm grayscale-[0.1]' : ''}`}>
+      <main className={`px-gutter max-w-container-max-width mx-auto min-h-[calc(100vh-200px)] transition-all duration-300 ${isModalOpen ? 'blur-sm grayscale-[0.1]' : ''}`}>
         <div className="grid grid-cols-12 gap-6 opacity-30 select-none pointer-events-none">
           {/* Background Mock UI */}
           <div className="col-span-12 lg:col-span-8 space-y-6">
@@ -64,7 +57,7 @@ export default function ExecutionTerminalPage() {
             <div className="p-5 sm:p-6 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
               <div>
                 <span className="font-label-caps text-label-caps text-tertiary uppercase tracking-widest block mb-1">Execution Terminal</span>
-                <h2 className="font-headline-sm text-headline-sm text-on-surface">Buy <span className="text-tertiary">NO</span> Shares</h2>
+                <h2 className="font-headline-sm text-headline-sm text-on-surface">Buy Shares</h2>
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
@@ -96,7 +89,7 @@ export default function ExecutionTerminalPage() {
                 </div>
                 <div className="relative">
                   <input 
-                    className="w-full bg-surface-container-low border border-outline-variant focus:border-tertiary focus:ring-1 focus:ring-tertiary rounded-lg px-4 py-3 sm:py-4 font-headline-md text-xl sm:text-headline-md text-on-surface outline-none transition-all placeholder:text-outline-variant" 
+                    className="w-full bg-surface-container-low border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-3 sm:py-4 font-headline-md text-xl sm:text-headline-md text-on-surface outline-none transition-all placeholder:text-outline-variant" 
                     placeholder="0.00" 
                     type="number" 
                     value={amount}
@@ -129,19 +122,23 @@ export default function ExecutionTerminalPage() {
                 </div>
               </div>
 
-              {/* Reasoning Insight (Subtle AI Branding) */}
-              <div className="bg-tertiary/5 border border-tertiary/10 rounded-lg p-3 flex gap-3">
-                <span className="material-symbols-outlined text-tertiary text-lg flex-shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>insights</span>
-                <p className="font-body-md text-[12px] sm:text-[13px] text-on-surface-variant leading-tight">
-                  <span className="font-bold text-tertiary">Oracle Insight:</span> Market sentiment has shifted 4% toward &apos;NO&apos; in the last hour following the latest legislative session report.
-                </p>
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={() => handleTrade('YES')}
+                  className="w-full bg-secondary text-white py-3 sm:py-4 rounded-lg font-headline-sm text-lg sm:text-headline-sm hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-secondary/20 flex items-center justify-center gap-2"
+                >
+                  <span>BUY YES</span>
+                  <span className="material-symbols-outlined text-xl">trending_up</span>
+                </button>
+                <button 
+                  onClick={() => handleTrade('NO')}
+                  className="w-full bg-tertiary text-white py-3 sm:py-4 rounded-lg font-headline-sm text-lg sm:text-headline-sm hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-tertiary/20 flex items-center justify-center gap-2"
+                >
+                  <span>BUY NO</span>
+                  <span className="material-symbols-outlined text-xl">trending_down</span>
+                </button>
               </div>
-
-              {/* Action Button */}
-              <button className="w-full bg-tertiary text-on-tertiary py-3 sm:py-4 rounded-lg font-headline-sm text-lg sm:text-headline-sm hover:bg-tertiary-container active:scale-[0.98] transition-all shadow-lg shadow-tertiary/20 flex items-center justify-center gap-2">
-                <span>BUY NO</span>
-                <span className="material-symbols-outlined text-xl">trending_down</span>
-              </button>
               <p className="text-center font-label-caps text-[9px] sm:text-[10px] text-on-surface-variant uppercase tracking-tighter">
                 Orders are final and cannot be cancelled once executed on-chain.
               </p>
@@ -149,19 +146,6 @@ export default function ExecutionTerminalPage() {
           </div>
         </div>
       )}
-
-      {/* Footer Shell */}
-      <footer className="bg-surface-container-low dark:bg-on-background border-t border-outline-variant dark:border-outline fixed bottom-0 w-full z-40">
-        <div className="flex flex-col md:flex-row justify-between items-center w-full py-4 px-gutter max-w-container-max-width mx-auto gap-4">
-          <span className="font-label-caps text-label-caps font-black text-on-surface-variant">ORACLEDESK INSTITUTIONAL</span>
-          <div className="hidden sm:flex gap-6">
-            <Link className="font-body-md text-body-md text-on-surface-variant dark:text-surface-variant hover:text-primary transition-colors" href="#">System Status</Link>
-            <Link className="font-body-md text-body-md text-on-surface-variant dark:text-surface-variant hover:text-primary transition-colors" href="#">API Docs</Link>
-            <Link className="font-body-md text-body-md text-on-surface-variant dark:text-surface-variant hover:text-primary transition-colors" href="#">Legal</Link>
-          </div>
-          <span className="font-body-md text-body-md text-on-surface-variant text-[12px]">© 2024 OracleDesk Institutional.</span>
-        </div>
-      </footer>
     </div>
   );
 }

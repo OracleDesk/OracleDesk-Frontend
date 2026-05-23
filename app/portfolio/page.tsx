@@ -105,13 +105,26 @@ const PositionRow = ({ market, category, platform, side, sideColor, entry, prob,
       </td>
       <td className="px-6 py-4 text-right space-x-2">
         {claimable ? (
-          <button className="bg-secondary text-primary-foreground px-3 py-1 rounded font-label-caps text-[10px] uppercase shadow-sm active:scale-95 transition-transform">
+          <button 
+            className="bg-secondary text-primary-foreground px-3 py-1 rounded font-label-caps text-[10px] uppercase shadow-sm active:scale-95 transition-transform"
+            onClick={() => alert("Reward claiming coming soon.")}
+          >
             Claim Rewards
           </button>
         ) : (
           <>
-            <button className="text-primary hover:underline font-label-caps text-label-caps">Manage</button>
-            <button className="text-tertiary hover:underline font-label-caps text-label-caps">Close</button>
+            <button 
+              className="text-primary hover:underline font-label-caps text-label-caps"
+              onClick={() => alert("Position management coming soon.")}
+            >
+              Manage
+            </button>
+            <button 
+              className="text-tertiary hover:underline font-label-caps text-label-caps"
+              onClick={() => alert("Closing functionality coming soon.")}
+            >
+              Close
+            </button>
           </>
         )}
       </td>

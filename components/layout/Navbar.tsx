@@ -106,9 +106,6 @@ const Navbar = () => {
           
           <WalletDropdown />
 
-          <button className="material-symbols-outlined text-on-surface-variant cursor-pointer">
-            expand_more
-          </button>
         </div>
       </div>
     </header>

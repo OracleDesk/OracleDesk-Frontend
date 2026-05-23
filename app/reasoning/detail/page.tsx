@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 
 export default function ReasoningTraceDetailPage() {
   const [logs, setLogs] = useState([
@@ -264,12 +265,15 @@ export default function ReasoningTraceDetailPage() {
                 </div>
               </div>
             </div>
-            <button className="w-full bg-secondary text-primary-foreground font-headline-sm text-headline-sm py-4 rounded-xl flex items-center justify-center gap-3 hover:opacity-90 transition-opacity active:scale-[0.98] transform cursor-pointer">
+            <Link 
+              href="/copy-trade?traceId=TRD-7724&marketId=MKT-9204"
+              className="w-full bg-secondary text-primary-foreground font-headline-sm text-headline-sm py-4 rounded-xl flex items-center justify-center gap-3 hover:opacity-90 transition-opacity active:scale-[0.98] transform cursor-pointer"
+            >
               <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
                 bolt
               </span>
               Copy Trade (YES)
-            </button>
+            </Link>
             <p className="font-label-caps text-[10px] text-center text-on-surface-variant">
               Protocol execution fee: 0.05%
             </p>

@@ -203,7 +203,12 @@ const ReasoningCard = ({
         <div className="p-6 bg-surface border-t border-outline-variant flex flex-wrap gap-4 items-center justify-between">
           <div className="flex gap-2">
             <Link href="/reasoning/verify" className="px-4 py-2 bg-surface-container-low border border-outline text-on-surface rounded font-label-caps text-label-caps hover:bg-surface-variant transition-all">Verify</Link>
-            <button className="px-4 py-2 bg-primary-container text-white rounded font-label-caps text-label-caps hover:opacity-90 active:opacity-80 transition-all">Copy Trade</button>
+            <Link 
+              href={`/copy-trade?traceId=${id}&marketId=${id.split('-')[0]}`} 
+              className="px-4 py-2 bg-primary-container text-white rounded font-label-caps text-label-caps hover:opacity-90 active:opacity-80 transition-all"
+            >
+              Copy Trade
+            </Link>
           </div>
           <Link href="/premium/trace" className="flex items-center gap-2 text-primary font-bold font-label-caps text-label-caps border border-primary px-4 py-2 rounded hover:bg-primary-fixed-dim/10">
             <span className="material-symbols-outlined">lock_open</span>

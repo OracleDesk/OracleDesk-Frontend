@@ -169,7 +169,7 @@ export default function VerifyTracePage() {
                     key={i}
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className={log.includes("[SUCCESS]") ? "text-secondary-fixed font-bold" : "text-secondary-fixed"}
+                    className={log && log.includes("[SUCCESS]") ? "text-secondary-fixed font-bold" : "text-secondary-fixed"}
                   >
                     {log}
                   </motion.p>

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useWallet } from "@/lib/contexts/WalletContext";
 
 const Ticker = () => {
   const tickerItems = [
@@ -27,6 +28,7 @@ const Ticker = () => {
 };
 
 const Hero = () => {
+  const { openModal } = useWallet();
   const [yesProb, setYesProb] = useState(84.2);
 
   useEffect(() => {
@@ -73,9 +75,9 @@ const Hero = () => {
             <Link href="/markets" className="bg-primary text-primary-foreground px-8 py-4 rounded-lg font-label-caps text-label-caps tracking-widest hover:brightness-110 transition-all flex items-center gap-2">
               BROWSE MARKETS <span className="material-symbols-outlined">trending_up</span>
             </Link>
-            <button className="border border-outline text-primary px-8 py-4 rounded-lg font-label-caps text-label-caps tracking-widest hover:bg-surface-container-low transition-all">
+            <Link href="/reasoning" className="border border-outline text-primary px-8 py-4 rounded-lg font-label-caps text-label-caps tracking-widest hover:bg-surface-container-low transition-all text-center">
               VIEW AI FORECASTS
-            </button>
+            </Link>
           </motion.div>
         </div>
         <div className="relative">
@@ -334,14 +336,20 @@ const PortfolioAnalytics = () => {
 };
 
 const CTA = () => {
+  const { openModal } = useWallet();
   return (
     <section className="py-20 bg-on-background text-surface">
       <div className="max-w-container-max-width mx-auto px-gutter text-center">
         <h2 className="font-display-lg text-display-lg mb-8">Ready to predict the future?</h2>
         <p className="text-surface-variant max-w-xl mx-auto mb-10 text-body-lg">Join 10,000+ institutional analysts and traders leveraging OracleDesk for superior market edges.</p>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
-          <button className="bg-secondary-fixed text-primary-foreground px-10 py-5 rounded-lg font-bold font-label-caps tracking-widest hover:scale-105 transition-transform">CONNECT WALLET</button>
-          <button className="border border-outline-variant px-10 py-5 rounded-lg font-bold font-label-caps tracking-widest hover:bg-white/10 transition-colors">READ DOCUMENTATION</button>
+          <button 
+            className="border border-outline-variant text-primary-foreground px-10 py-5 rounded-lg font-bold font-label-caps tracking-widest hover:bg-white/10 hover:scale-105 transition-transform"
+            onClick={() => openModal()}
+          >
+            CONNECT WALLET
+          </button>
+          <button className="border border-outline-variant px-10 py-5 rounded-lg font-bold font-label-caps tracking-widest hover:bg-white/10 hover:scale-105 transition-colors">READ DOCUMENTATION</button>
         </div>
       </div>
     </section>

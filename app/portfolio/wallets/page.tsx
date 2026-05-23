@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useWallet } from "@/lib/contexts/WalletContext";
 
 const WalletCard = ({ name, address, balance, active }: { name: string, address: string, balance: string, active?: boolean }) => (
   <div className={`bg-white border ${active ? 'border-primary' : 'border-outline-variant'} rounded p-4 flex items-center justify-between group hover:border-primary transition-colors cursor-pointer`}>
@@ -46,6 +47,7 @@ const TransactionRow = ({ type, icon, iconColor, asset, amount, amountColor, sta
 );
 
 export default function WalletsPage() {
+  const { openModal } = useWallet();
   const [terminalLogs, setTerminalLogs] = useState([
     { time: "14:42:01", msg: "PING: Connection to Solana Mainnet verified via Phantom_Ext.", type: "default" },
     { time: "14:41:55", msg: "VALIDATE: USDC Balance sync initiated for 0x71C...4242", type: "default" },
@@ -79,10 +81,16 @@ export default function WalletsPage() {
           <p className="text-on-surface-variant font-body-md">Manage institutional-grade liquidity and multi-chain wallet connections.</p>
         </div>
         <div className="flex gap-3">
-          <button className="bg-surface-container-high text-primary px-6 py-2.5 rounded font-label-caps text-label-caps hover:bg-surface-variant transition-colors border border-outline-variant">
+          <button 
+            className="bg-surface-container-high text-primary px-6 py-2.5 rounded font-label-caps text-label-caps hover:bg-surface-variant transition-colors border border-outline-variant"
+            onClick={() => alert("Withdraw functionality coming soon.")}
+          >
             WITHDRAW USDC
           </button>
-          <button className="bg-primary text-primary-foreground px-6 py-2.5 rounded font-label-caps text-label-caps hover:brightness-110 active:opacity-80 transition-all shadow-sm">
+          <button 
+            className="bg-primary text-primary-foreground px-6 py-2.5 rounded font-label-caps text-label-caps hover:brightness-110 active:opacity-80 transition-all shadow-sm"
+            onClick={() => alert("Deposit functionality coming soon.")}
+          >
             DEPOSIT USDC
           </button>
         </div>
@@ -146,7 +154,10 @@ export default function WalletsPage() {
           <h3 className="font-headline-sm text-headline-sm text-on-surface">Connected Wallets</h3>
           <WalletCard name="MetaMask" address="0x71C...4242" balance="$842,000.00" active />
           <WalletCard name="Phantom" address="D5rX...kP9z" balance="$406,392.45" />
-          <button className="w-full py-3 border-2 border-dashed border-outline-variant rounded text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2">
+          <button 
+            className="w-full py-3 border-2 border-dashed border-outline-variant rounded text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2"
+            onClick={() => openModal()}
+          >
             <span className="material-symbols-outlined text-[18px]">add</span> ADD NEW WALLET
           </button>
         </div>

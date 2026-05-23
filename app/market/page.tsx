@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import {
   AreaChart,
   Area,
@@ -351,56 +352,98 @@ const RecentActivity = () => {
 
 const TradeExecution = () => {
   const [amount, setAmount] = useState(1000);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
   return (
-    <div className="bg-surface-container-lowest border border-outline-variant p-6 rounded shadow-sm">
-      <h3 className="font-headline-sm text-headline-sm mb-6 text-on-background">Execute Trade</h3>
-      <div className="flex gap-2 p-1 bg-surface-container rounded-lg mb-6">
-        <button className="flex-1 py-2 bg-white shadow-sm border border-outline-variant rounded font-label-caps text-label-caps text-on-surface">MARKET</button>
-        <button className="flex-1 py-2 font-label-caps text-label-caps text-on-surface-variant hover:bg-white/50 transition-colors">LIMIT</button>
-      </div>
-      <div className="space-y-4 mb-6">
-        <div>
-          <label className="font-label-caps text-[10px] text-on-surface-variant mb-1 block">INVESTMENT (USDC)</label>
-          <div className="relative">
-            <input 
-              className="w-full bg-surface-container border-outline-variant focus:ring-primary focus:border-primary rounded px-4 py-3 font-data-mono text-lg outline-none" 
-              type="number" 
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-            />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant font-bold cursor-pointer">MAX</span>
+    <>
+      <div className="bg-surface-container-lowest border border-outline-variant p-6 rounded shadow-sm">
+        <h3 className="font-headline-sm text-headline-sm mb-6 text-on-background">Execute Trade</h3>
+        <div className="flex gap-2 p-1 bg-surface-container rounded-lg mb-6">
+          <button className="flex-1 py-2 bg-white shadow-sm border border-outline-variant rounded font-label-caps text-label-caps text-on-surface">MARKET</button>
+          <button className="flex-1 py-2 font-label-caps text-label-caps text-on-surface-variant hover:bg-white/50 transition-colors">LIMIT</button>
+        </div>
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="font-label-caps text-[10px] text-on-surface-variant mb-1 block">INVESTMENT (USDC)</label>
+            <div className="relative">
+              <input 
+                className="w-full bg-surface-container border-outline-variant focus:ring-primary focus:border-primary rounded px-4 py-3 font-data-mono text-lg outline-none" 
+                type="number" 
+                value={amount}
+                onChange={(e) => setAmount(Number(e.target.value))}
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant font-bold cursor-pointer">MAX</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <button 
+              className="py-4 border-2 border-secondary bg-secondary-container/10 rounded flex flex-col items-center hover:bg-secondary-container/20 transition-all cursor-pointer"
+              onClick={() => setIsTerminalOpen(true)}
+            >
+              <span className="text-secondary font-black font-headline-sm">YES</span>
+              <span className="text-on-surface-variant text-label-caps">$0.642</span>
+            </button>
+            <button 
+              className="py-4 border-2 border-tertiary bg-tertiary-container/5 rounded flex flex-col items-center hover:bg-tertiary-container/10 transition-all cursor-pointer"
+              onClick={() => setIsTerminalOpen(true)}
+            >
+              <span className="text-tertiary font-black font-headline-sm">NO</span>
+              <span className="text-on-surface-variant text-label-caps">$0.358</span>
+            </button>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <button className="py-4 border-2 border-secondary bg-secondary-container/10 rounded flex flex-col items-center hover:bg-secondary-container/20 transition-all cursor-pointer">
-            <span className="text-secondary font-black font-headline-sm">YES</span>
-            <span className="text-on-surface-variant text-label-caps">$0.642</span>
+        <div className="bg-surface-container-low p-4 rounded mb-6 space-y-2 border border-outline-variant">
+          <div className="flex justify-between text-label-caps">
+            <span className="text-on-surface-variant">Est. Payout</span>
+            <span className="text-secondary font-bold">${(amount * 1.557).toFixed(2)} (+55.7%)</span>
+          </div>
+          <div className="flex justify-between text-label-caps">
+            <span className="text-on-surface-variant">Fee (0.25%)</span>
+            <span className="text-on-surface">${(amount * 0.0025).toFixed(2)}</span>
+          </div>
+        </div>
+        <div className="space-y-3">
+          <button 
+            className="w-full bg-primary text-primary-foreground py-4 rounded-xl font-headline-sm hover:opacity-90 transition-opacity"
+            onClick={() => setIsTerminalOpen(true)}
+          >
+            BUY YES
           </button>
-          <button className="py-4 border-2 border-tertiary bg-tertiary-container/5 rounded flex flex-col items-center hover:bg-tertiary-container/10 transition-all cursor-pointer">
-            <span className="text-tertiary font-black font-headline-sm">NO</span>
-            <span className="text-on-surface-variant text-label-caps">$0.358</span>
-          </button>
+          <Link 
+            href="/copy-trade?marketId=MKT-9204"
+            className="w-full bg-primary-container text-on-primary-container py-3 rounded-xl font-label-caps text-label-caps flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+          >
+            <span className="material-symbols-outlined text-[18px]">content_copy</span>
+            COPY AI TRADE
+          </Link>
         </div>
       </div>
-      <div className="bg-surface-container-low p-4 rounded mb-6 space-y-2 border border-outline-variant">
-        <div className="flex justify-between text-label-caps">
-          <span className="text-on-surface-variant">Est. Payout</span>
-          <span className="text-secondary font-bold">${(amount * 1.557).toFixed(2)} (+55.7%)</span>
+
+      {isTerminalOpen && (
+        <div className="fixed inset-0 bg-on-background/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-[480px] rounded-xl shadow-2xl overflow-hidden border border-outline-variant animate-in fade-in zoom-in duration-300">
+            <div className="p-6 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">Execution Terminal</h2>
+              <button onClick={() => setIsTerminalOpen(false)} className="text-on-surface-variant hover:text-on-surface">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <p className="text-on-surface-variant">Confirming trade for <strong>{amount} USDC</strong> on <strong>#MKT-9204</strong>.</p>
+              <button 
+                className="w-full bg-primary text-primary-foreground py-4 rounded-xl font-headline-sm"
+                onClick={() => {
+                  alert("Trade executed successfully!");
+                  setIsTerminalOpen(false);
+                }}
+              >
+                CONFIRM EXECUTION
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex justify-between text-label-caps">
-          <span className="text-on-surface-variant">Fee (0.25%)</span>
-          <span className="text-on-surface">${(amount * 0.0025).toFixed(2)}</span>
-        </div>
-      </div>
-      <div className="space-y-3">
-        <button className="w-full bg-primary text-primary-foreground py-4 rounded-xl font-headline-sm hover:opacity-90 transition-opacity">BUY YES</button>
-        <button className="w-full bg-primary-container text-on-primary-container py-3 rounded-xl font-label-caps text-label-caps flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
-          <span className="material-symbols-outlined text-[18px]">content_copy</span>
-          COPY AI TRADE
-        </button>
-      </div>
-    </div>
+      )}
+    </>
   );
 };
 

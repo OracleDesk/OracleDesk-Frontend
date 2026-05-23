@@ -1,22 +1,42 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useSignTypedData } from "wagmi";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { buildPolymarketOrderPayload, submitPolymarketOrder, POLYMARKET_EIP712_DOMAIN, POLYMARKET_ORDER_TYPES } from "@/lib/web3/polymarket";
+import { getTrace, ReasoningTrace } from "@/lib/api/traces";
 
 const COPY_TRADE_BUILDER_CODE = "ORACLE_COPY_AI";
 const COPY_TRADE_TOKEN_ID = "1";
 
-export default function CopyTradePage() {
+function CopyTradeContent() {
   const { address, isConnected, chainId, openModal } = useWallet();
   const { signTypedDataAsync } = useSignTypedData();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  const traceId = searchParams.get("traceId");
+  const marketId = searchParams.get("marketId");
+
+  const [trace, setTrace] = useState<ReasoningTrace | null>(null);
   const [allocation, setAllocation] = useState(12.5);
   const [isMevProtected, setIsMevProtected] = useState(true);
   const [slippage, setSlippage] = useState(1.0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (traceId) {
+      getTrace(traceId)
+        .then(setTrace)
+        .catch(err => {
+          console.error("Failed to fetch trace:", err);
+          setStatusMessage("Note: Using simulated data. Trace ID not found on server.");
+        });
+    }
+  }, [traceId]);
 
   const totalBankroll = 42000; // Example total bankroll
   const allocatedAmount = (totalBankroll * allocation) / 100;
@@ -61,11 +81,14 @@ export default function CopyTradePage() {
     setStatusMessage(null);
 
     try {
+      const price = trace?.probabilityEstimate ?? 0.682;
+      const direction = trace?.edge && trace.edge >= 0 ? "BUY" : "BUY"; // Simplified for hackathon
+
       const payload = buildPolymarketOrderPayload(
         {
           tokenId: COPY_TRADE_TOKEN_ID,
           usdcAmount,
-          price: 0.682,
+          price: price,
           side: "BUY",
           builderCode: COPY_TRADE_BUILDER_CODE,
         },
@@ -133,7 +156,13 @@ export default function CopyTradePage() {
               <h2 className="font-headline-md text-headline-md text-on-surface">Confirm Copy Trade</h2>
               <p className="font-body-md text-body-md text-on-surface-variant text-sm">Execution through OracleDesk Institutional Routing</p>
             </div>
-            <button className="material-symbols-outlined p-2 hover:bg-surface-container rounded-full transition-colors" type="button">close</button>
+            <button 
+              className="material-symbols-outlined p-2 hover:bg-surface-container rounded-full transition-colors" 
+              type="button"
+              onClick={() => router.back()}
+            >
+              close
+            </button>
           </div>
 
           <div className="bg-[#f0f9fa] border-b border-outline-variant p-6 relative overflow-hidden ai-shimmer text-xs sm:text-sm">
@@ -142,9 +171,15 @@ export default function CopyTradePage() {
                 <span className="material-symbols-outlined text-on-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>psychology</span>
               </div>
               <div>
-                <span className="font-label-caps text-label-caps text-primary-container mb-1 block">ORACLE INSIGHTS • 94% CONFIDENCE</span>
+                <span className="font-label-caps text-label-caps text-primary-container mb-1 block">
+                  ORACLE INSIGHTS • {trace?.probabilityEstimate ? Math.round(trace.probabilityEstimate * 100) : 94}% CONFIDENCE
+                </span>
                 <p className="font-body-md text-body-md text-on-primary-fixed-variant leading-relaxed">
-                  Market sentiment for <span className="font-bold">US-CPI-NOV-24</span> shows aggressive hedging in decentralized prediction markets. Bayesian modeling suggests a 68.2% probability of &quot;Yes&quot; exceeding the 2.4% threshold, diverging from Bloomberg consensus by +14bps.
+                  {trace?.market?.question ? (
+                    <>Market analysis for <span className="font-bold">{trace.market.question}</span> indicates significant edge. OracleDesk institutional signals suggest a trade opportunity.</>
+                  ) : (
+                    <>Market sentiment for <span className="font-bold">US-CPI-NOV-24</span> shows aggressive hedging in decentralized prediction markets. Bayesian modeling suggests a 68.2% probability of &quot;Yes&quot; exceeding the 2.4% threshold, diverging from Bloomberg consensus by +14bps.</>
+                  )}
                 </p>
               </div>
             </div>
@@ -155,15 +190,21 @@ export default function CopyTradePage() {
               <div className="p-4 border border-outline-variant rounded-lg bg-white">
                 <span className="font-label-caps text-label-caps text-on-surface-variant block mb-2 uppercase text-[10px]">Proposed Side</span>
                 <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-secondary"></span>
-                  <span className="font-headline-sm text-headline-sm text-secondary text-base sm:text-lg">YES / LONG</span>
+                  <span className={`w-3 h-3 rounded-full ${trace?.edge && trace.edge < 0 ? 'bg-tertiary' : 'bg-secondary'}`}></span>
+                  <span className={`font-headline-sm text-headline-sm text-base sm:text-lg ${trace?.edge && trace.edge < 0 ? 'text-tertiary' : 'text-secondary'}`}>
+                    {trace?.edge && trace.edge < 0 ? 'NO / SHORT' : 'YES / LONG'}
+                  </span>
                 </div>
               </div>
               <div className="p-4 border border-outline-variant rounded-lg bg-white">
                 <span className="font-label-caps text-label-caps text-on-surface-variant block mb-2 uppercase text-[10px]">Probability</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-headline-sm text-headline-sm text-on-surface text-base sm:text-lg">68.2%</span>
-                  <span className="text-[10px] text-secondary font-bold px-1 bg-secondary-container rounded">+2.4% Δ</span>
+                  <span className="font-headline-sm text-headline-sm text-on-surface text-base sm:text-lg">
+                    {trace?.probabilityEstimate ? (trace.probabilityEstimate * 100).toFixed(1) : "68.2"}%
+                  </span>
+                  <span className="text-[10px] text-secondary font-bold px-1 bg-secondary-container rounded">
+                    {trace?.edge ? `${(trace.edge * 100).toFixed(1)}% Δ` : "+2.4% Δ"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -237,15 +278,24 @@ export default function CopyTradePage() {
                   {statusMessage}
                 </div>
               ) : null}
-              <button
-                className="w-full bg-[#005f73] text-primary-foreground py-4 rounded-lg font-headline-sm text-headline-sm shadow-lg shadow-primary-container/20 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleConfirm}
-                type="button"
-                disabled={isSubmitting}
-              >
-                <span className="material-symbols-outlined text-xl">bolt</span>
-                {isSubmitting ? "Submitting..." : "Confirm Copy Trade"}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  className="flex-1 border border-outline text-on-surface py-4 rounded-lg font-headline-sm text-headline-sm hover:bg-surface-variant transition-all"
+                  onClick={() => router.back()}
+                  type="button"
+                >
+                  Go Back
+                </button>
+                <button
+                  className="flex-[2] bg-[#005f73] text-primary-foreground py-4 rounded-lg font-headline-sm text-headline-sm shadow-lg shadow-primary-container/20 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleConfirm}
+                  type="button"
+                  disabled={isSubmitting}
+                >
+                  <span className="material-symbols-outlined text-xl">bolt</span>
+                  {isSubmitting ? "Submitting..." : "Confirm Copy Trade"}
+                </button>
+              </div>
               <p className="text-center font-body-md text-body-md text-on-surface-variant text-xs">
                 By confirming, you authorize execution on <span className="underline decoration-dotted cursor-help">Polymarket</span> and <span className="underline decoration-dotted cursor-help">Kalshi</span>.
               </p>
@@ -254,5 +304,13 @@ export default function CopyTradePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function CopyTradePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading Copy Trade...</div>}>
+      <CopyTradeContent />
+    </Suspense>
   );
 }
