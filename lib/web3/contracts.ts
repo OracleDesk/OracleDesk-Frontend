@@ -1,5 +1,5 @@
 import { arcTestnet, polygonAmoy } from "./chains";
-import ABIS from "../../contracts/oracledesk-contracts/artifacts/abis/index.json";
+import ABIS from "./abis.json";
 
 // ─── Polymarket Configuration ───────────────────────────────────────────────
 
