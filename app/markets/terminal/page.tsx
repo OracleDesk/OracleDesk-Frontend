@@ -5,11 +5,11 @@ import Link from "next/link";
 
 const TerminalStream = () => {
   const [logs, setLogs] = useState([
-    { time: "09:12:44", text: "ORDER FILL: $4.2K YES (FED_R)", color: "text-secondary-fixed-dim" },
-    { time: "09:12:31", text: "PRICE_TICK: 0.64 -> 0.65", color: "text-primary-fixed-dim" },
-    { time: "09:12:15", text: "LIQUIDITY REMOVED: -10.5K", color: "text-tertiary-fixed-dim" },
-    { time: "09:11:58", text: "NEW_POSITION: 0.5 ETH YES", color: "text-secondary-fixed-dim" },
-    { time: "09:11:42", text: "SYSTEM: CALIBRATING FEED...", color: "text-surface-variant" },
+    { time: "09:12:44", text: "ORDER FILL: $4.2K YES (FED_R)", color: "text-secondary" },
+    { time: "09:12:31", text: "PRICE_TICK: 0.64 -> 0.65", color: "text-primary" },
+    { time: "09:12:15", text: "LIQUIDITY REMOVED: -10.5K", color: "text-destructive" },
+    { time: "09:11:58", text: "NEW_POSITION: 0.5 ETH YES", color: "text-secondary" },
+    { time: "09:11:42", text: "SYSTEM: CALIBRATING FEED...", color: "text-on-surface-variant" },
   ]);
 
   const logEntries = [
@@ -25,7 +25,7 @@ const TerminalStream = () => {
     const interval = setInterval(() => {
       const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
       const randomEntry = logEntries[Math.floor(Math.random() * logEntries.length)];
-      const colors = ["text-secondary-fixed-dim", "text-primary-fixed-dim", "text-tertiary-fixed-dim", "text-surface-variant"];
+      const colors = ["text-secondary", "text-primary", "text-destructive", "text-on-surface-variant"];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
       
       setLogs(prev => [
@@ -38,21 +38,18 @@ const TerminalStream = () => {
   }, []);
 
   return (
-    <div className="bg-on-background p-6 rounded-lg text-primary-fixed flex flex-col gap-2 overflow-hidden h-full">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="w-2 h-2 rounded-full bg-secondary-fixed animate-pulse"></span>
-        <span className="font-label-caps text-label-caps text-surface-variant uppercase">Real-time Stream</span>
+    <div className="bg-surface-container-high border border-outline-variant rounded-lg p-4 h-full font-data-mono text-[10px] space-y-2 overflow-hidden shadow-inner">
+      <div className="flex items-center gap-2 mb-3 border-b border-outline-variant pb-2">
+        <div className="w-2 h-2 rounded-full bg-secondary animate-pulse"></div>
+        <span className="font-bold tracking-widest text-on-surface-variant">REAL-TIME DATA STREAM</span>
       </div>
-      <div className="font-data-mono text-[11px] space-y-1 opacity-80 flex-grow">
+      <div className="space-y-2">
         {logs.map((log, i) => (
-          <p key={i} className="transition-all duration-300">
-            <span className={log.color}>{log.time}</span> {log.text}
-          </p>
+          <div key={i} className="flex gap-3 animate-in fade-in slide-in-from-left duration-500">
+            <span className="text-on-surface-variant opacity-50">[{log.time}]</span>
+            <span className={log.color}>{log.text}</span>
+          </div>
         ))}
-      </div>
-      <div className="pt-4 border-t border-outline flex justify-between items-center">
-        <span className="font-label-caps text-label-caps text-surface-variant text-[10px]">LATENCY: 12ms</span>
-        <span className="material-symbols-outlined text-surface-variant text-[16px]">terminal</span>
       </div>
     </div>
   );

@@ -3,18 +3,16 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useWallet } from "@/lib/contexts/WalletContext";
+import WalletDropdown from "./WalletDropdown";
 
-export const Navbar = () => {
+const Navbar = () => {
   const pathname = usePathname();
-  const { isConnected, address, openModal, disconnect } = useWallet();
 
   const navLinks = [
     { 
       name: "Markets", 
       href: "/markets",
       dropdown: [
-        // { name: "Market Overview", href: "/markets" },
         { name: "Live Terminal", href: "/markets/terminal" },
         { name: "Active Market Detail", href: "/market" },
       ]
@@ -61,13 +59,12 @@ export const Navbar = () => {
                     </button>
                     <div
                       role="menu"
-                      className="absolute top-full left-0 mt-0 w-48 bg-white border border-outline-variant shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-all duration-200 py-2 z-50"
+                      className="absolute top-full left-0 mt-0 w-48 bg-white border border-outline-variant shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 py-2 z-50"
                     >
                       {link.dropdown.map((subItem) => (
                         <Link
                           key={subItem.name}
                           href={subItem.href}
-                          role="menuitem"
                           className={`block px-4 py-2 hover:bg-surface-container text-body-md ${
                             pathname === subItem.href ? "text-primary font-bold" : "text-on-surface-variant"
                           }`}
@@ -101,26 +98,14 @@ export const Navbar = () => {
             href="/notifications"
             className={`material-symbols-outlined ${
               pathname === "/notifications" ? "text-primary" : "text-on-surface-variant"
-            } hover:text-primary transition-colors cursor-pointer relative`}
+            } hover:text-primary transition-colors cursor-pointer relative pt-1`}
           >
             notifications
             <span className="absolute top-0 right-0 w-2 h-2 bg-tertiary rounded-full border border-white"></span>
           </Link>
-          {isConnected ? (
-            <button 
-              onClick={disconnect}
-              className="bg-primary-container text-on-primary-container border border-primary px-4 py-2 font-data-mono text-[13px] rounded-lg hover:bg-primary-container/80 transition-all cursor-pointer"
-            >
-              {address}
-            </button>
-          ) : (
-            <button 
-              onClick={openModal}
-              className="bg-primary text-primary-foreground px-4 py-2 font-label-caps text-label-caps rounded-lg hover:opacity-90 active:opacity-80 transition-all cursor-pointer"
-            >
-              Connect Wallet
-            </button>
-          )}
+          
+          <WalletDropdown />
+
           <button className="material-symbols-outlined text-on-surface-variant cursor-pointer">
             expand_more
           </button>
@@ -129,3 +114,5 @@ export const Navbar = () => {
     </header>
   );
 };
+
+export default Navbar;

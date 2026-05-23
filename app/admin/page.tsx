@@ -125,18 +125,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-on-background text-primary-fixed-dim p-6 rounded-xl border border-primary shadow-inner space-y-4">
-            <div className="flex items-center gap-2 text-secondary-fixed">
-              <span className="material-symbols-outlined text-[20px]">terminal</span>
-              <h3 className="font-label-caps text-label-caps">ADMIN_LOG_STREAM</h3>
-            </div>
-            <div className="font-data-mono text-[11px] space-y-2 opacity-80">
-              <p>&gt; Connection secure: TLS 1.3</p>
-              <p>&gt; Authenticated as Admin_0x42</p>
-              <p>&gt; Fetching latest market events...</p>
-              <p className="text-secondary-fixed">&gt; 12 new trades since last login</p>
-            </div>
-          </div>
         </div>
       </div>
     </main>

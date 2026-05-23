@@ -141,12 +141,12 @@ const ProtocolReliability = () => {
 
 const LiveTerminal = () => {
   const [logs, setLogs] = useState([
-    { time: "14:22:01", type: "INFO", message: "New swap sequence initiated by node 0x7E...42", typeColor: "text-primary-fixed-dim" },
-    { time: "14:22:02", type: "INFO", message: "Copy trade executed: 2.4 ETH @ $2,421.10", typeColor: "text-primary-fixed-dim" },
-    { time: "14:22:05", type: "EVENT", message: "Block 19,420,112 validated in 1.1s", typeColor: "text-secondary-fixed" },
-    { time: "14:22:09", type: "INFO", message: "Oracle price sync complete (BTC/USD: $42,104.20)", typeColor: "text-primary-fixed-dim" },
-    { time: "14:22:11", type: "WARN", message: "Slight latency increase in Region: EU-WEST", typeColor: "text-tertiary-fixed-dim" },
-    { time: "14:22:14", type: "INFO", message: "Fee distribution cycle triggered: $12,402 to builders", typeColor: "text-primary-fixed-dim" },
+    { time: "14:22:01", type: "INFO", message: "New swap sequence initiated by node 0x7E...42", typeColor: "text-primary" },
+    { time: "14:22:02", type: "INFO", message: "Copy trade executed: 2.4 ETH @ $2,421.10", typeColor: "text-primary" },
+    { time: "14:22:05", type: "EVENT", message: "Block 19,420,112 validated in 1.1s", typeColor: "text-secondary" },
+    { time: "14:22:09", type: "INFO", message: "Oracle price sync complete (BTC/USD: $42,104.20)", typeColor: "text-primary" },
+    { time: "14:22:11", type: "WARN", message: "Slight latency increase in Region: EU-WEST", typeColor: "text-destructive" },
+    { time: "14:22:14", type: "INFO", message: "Fee distribution cycle triggered: $12,402 to builders", typeColor: "text-primary" },
   ]);
 
   useEffect(() => {
@@ -157,9 +157,9 @@ const LiveTerminal = () => {
                    now.getSeconds().toString().padStart(2, '0');
       
       const newLogs = [
-        { time, type: "INFO", message: `Node 0x${Math.random().toString(16).slice(2, 6)} synchronized successfully`, typeColor: "text-primary-fixed-dim" },
-        { time, type: "EVENT", message: `New consensus reached on block ${Math.floor(Math.random() * 20000000)}`, typeColor: "text-secondary-fixed" },
-        { time, type: "INFO", message: `Transaction verified: ${ (Math.random() * 10).toFixed(2) } ETH`, typeColor: "text-primary-fixed-dim" }
+        { time, type: "INFO", message: `Node 0x${Math.random().toString(16).slice(2, 6)} synchronized successfully`, typeColor: "text-primary" },
+        { time, type: "EVENT", message: `New consensus reached on block ${Math.floor(Math.random() * 20000000)}`, typeColor: "text-secondary" },
+        { time, type: "INFO", message: `Transaction verified: ${ (Math.random() * 10).toFixed(2) } ETH`, typeColor: "text-primary" }
       ];
       
       setLogs(prev => [...prev.slice(-6), newLogs[Math.floor(Math.random() * newLogs.length)]]);
@@ -168,19 +168,23 @@ const LiveTerminal = () => {
   }, []);
 
   return (
-    <div className="bg-on-background rounded-lg p-4 font-data-mono text-[12px] flex flex-col h-full min-h-[200px]">
-      <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
-        <span className="text-secondary-fixed">LIVE EVENT STREAM</span>
-        <span className="text-outline text-[10px]">REAL-TIME LOGS</span>
+    <div className="bg-on-background text-primary p-6 rounded-lg font-data-mono text-[11px] h-[320px] overflow-hidden flex flex-col shadow-2xl">
+      <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+          <span className="text-white/70 font-bold uppercase tracking-widest text-[10px]">Real-time Network Trace</span>
+        </div>
+        <span className="text-white/30 text-[9px]">v4.2.1-STABLE</span>
       </div>
-      <div className="space-y-1 text-white/70 overflow-hidden">
+      <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-2">
         {logs.map((log, i) => (
-          <p key={i}>
-            <span className="text-outline">[{log.time}]</span>{" "}
-            <span className={log.typeColor}>{log.type}:</span> {log.message}
-          </p>
+          <div key={i} className="flex gap-3 animate-in fade-in slide-in-from-left duration-500">
+            <span className="text-white/20 whitespace-nowrap">[{log.time}]</span>
+            <span className={`font-bold whitespace-nowrap ${log.typeColor}`}>{log.type}</span>
+            <span className="text-white/80">{log.message}</span>
+          </div>
         ))}
-        <p className="animate-pulse"><span className="text-outline">[{new Date().toLocaleTimeString('en-GB', { hour12: false })}]</span> <span className="text-secondary-fixed">SYNCING...</span></p>
+        <div className="text-white/50 animate-pulse">_</div>
       </div>
     </div>
   );

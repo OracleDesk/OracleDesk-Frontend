@@ -18,7 +18,7 @@ const TerminalLogSidebar = () => {
     { text: "> [08:24:12] Fetching market data: ID_882", color: "" },
     { text: "> [08:24:13] Running inference model V4.2", color: "" },
     { text: "> [08:24:15] Source verified via Oracles", color: "" },
-    { text: "> [08:24:16] NEW REASONING COMMITTED", color: "text-secondary-fixed" },
+    { text: "> [08:24:16] NEW REASONING COMMITTED", color: "text-secondary" },
     { text: "> [08:25:01] Re-weighting sentiment nodes", color: "" },
     { text: "> [08:25:05] Liquidity check: $4.2M depth", color: "" },
     { text: "> [08:25:09] Polling news aggregators...", color: "" },
@@ -26,7 +26,7 @@ const TerminalLogSidebar = () => {
     { text: "> [08:25:14] Model divergence: < 0.2%", color: "" },
     { text: "> [08:26:01] Node heartbeat: ACTIVE", color: "" },
     { text: "> [08:26:10] Syncing global state", color: "" },
-    { text: "> [08:26:12] TRACE_ID: 0x9f...a23 GENERATED", color: "text-secondary-fixed" },
+    { text: "> [08:26:12] TRACE_ID: 0x9f...a23 GENERATED", color: "text-secondary" },
   ]);
 
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -35,7 +35,7 @@ const TerminalLogSidebar = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       const nextLog = extraLogs[logIndex.current % extraLogs.length];
-      setLogs((prev) => [...prev.slice(-49), { text: nextLog, color: nextLog.includes("SUCCESS") || nextLog.includes("COMMIT") ? "text-secondary-fixed" : "" }]);
+      setLogs((prev) => [...prev.slice(-49), { text: nextLog, color: nextLog.includes("SUCCESS") || nextLog.includes("COMMIT") ? "text-secondary" : "" }]);
       logIndex.current++;
     }, 4000);
 
@@ -49,26 +49,23 @@ const TerminalLogSidebar = () => {
   }, [logs]);
 
   return (
-    <div className="hidden lg:block lg:col-span-3 h-fit sticky top-24">
-      <div className="bg-on-background rounded p-4 text-primary-fixed-dim font-data-mono text-[11px] leading-relaxed overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between mb-3 border-b border-primary-container pb-2">
-          <span className="uppercase tracking-tighter opacity-70">Event Stream</span>
-          <span className="material-symbols-outlined text-[14px]">terminal</span>
+    <div className="lg:col-span-3 hidden lg:block">
+      <div className="bg-surface-container-high border border-outline-variant rounded-lg overflow-hidden h-[calc(100vh-14rem)] sticky top-28 flex flex-col shadow-inner">
+        <div className="px-4 py-3 border-b border-outline-variant bg-surface-container flex items-center justify-between">
+          <span className="font-label-caps text-[10px] text-on-surface-variant font-bold tracking-widest uppercase">Inference Logs</span>
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-outline-variant"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-outline-variant"></div>
+          </div>
         </div>
         <div 
           ref={terminalRef}
-          className="terminal-scroll max-h-[600px] overflow-y-auto space-y-2 opacity-80 scroll-smooth"
+          className="flex-1 p-4 font-data-mono text-[10px] leading-relaxed overflow-y-auto terminal-scroll space-y-1"
         >
           {logs.map((log, i) => (
-            <motion.p 
-              key={i} 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className={log.color}
-            >
-              {log.text}
-            </motion.p>
+            <div key={i} className={log.color}>{log.text}</div>
           ))}
+          <div className="animate-pulse">_</div>
         </div>
       </div>
     </div>

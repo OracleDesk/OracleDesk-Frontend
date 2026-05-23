@@ -1,9 +1,12 @@
 "use client";
 
 import React, { createContext, useMemo, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider, cookieToInitialState, type Config } from "wagmi";
+import { WagmiProvider, cookieToInitialState, useAccountEffect, type Config } from "wagmi";
 import { createAppKit } from '@reown/appkit/react'
+import { clearAuthSession } from "@/lib/api/client";
+import { connectWalletToBackend } from "@/lib/api/auth";
 import { wagmiAdapter, projectId, networks } from "./wagmi.config";
 
 // Setup metadata
@@ -34,6 +37,29 @@ interface Web3ModalContextValue {
 export const Web3ModalContext = createContext<Web3ModalContextValue | undefined>(
   undefined
 );
+
+const WalletConnectionRedirect = () => {
+  const router = useRouter();
+
+  useAccountEffect({
+    onConnect({ address, isReconnected }) {
+      connectWalletToBackend(address)
+        .catch((error) => {
+          console.error("Backend wallet auth failed", error);
+        })
+        .finally(() => {
+          if (!isReconnected) {
+            router.push("/markets");
+          }
+        });
+    },
+    onDisconnect() {
+      clearAuthSession();
+    },
+  });
+
+  return null;
+};
 
 export const Web3Provider = ({ 
   children, 
@@ -71,6 +97,7 @@ export const Web3Provider = ({
       initialState={initialState}
     >
       <QueryClientProvider client={queryClient}>
+        <WalletConnectionRedirect />
         <Web3ModalContext.Provider
           value={{ isModalOpen: false, openModal, closeModal }}
         >

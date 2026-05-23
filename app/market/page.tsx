@@ -2,17 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { useSignTypedData } from "wagmi";
-import { useWallet } from "@/lib/contexts/WalletContext";
-import {
-  buildPolymarketOrderPayload,
-  submitPolymarketOrder,
-  POLYMARKET_EIP712_DOMAIN,
-  POLYMARKET_ORDER_TYPES,
-} from "@/lib/web3/polymarket";
-
-const MARKET_BUILDER_CODE = "ORACLE_DESK";
-const MARKET_TOKEN_ID = "1";
+import Navbar from "@/components/layout/Navbar";
 
 const MarketHeader = () => {
   return (
@@ -59,7 +49,7 @@ const ProbabilityChart = () => {
             <button
               key={period}
               className={`px-3 py-1 rounded text-label-caps font-medium ${
-                period === "1D" ? "bg-primary text-primary-foreground" : "bg-surface-container"
+                period === "1D" ? "bg-primary text-on-primary" : "bg-surface-container"
               }`}
             >
               {period}
@@ -183,71 +173,7 @@ const RecentActivity = () => {
 };
 
 const TradeExecution = () => {
-  const { address, isConnected, chainId, openModal } = useWallet();
-  const { signTypedDataAsync } = useSignTypedData();
   const [amount, setAmount] = useState(1000);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-
-  const submitOrder = async (side: "BUY" | "SELL", price: number, builderCode: string) => {
-    if (!isConnected || !address) {
-      setStatusMessage("Connect your wallet to place an order.");
-      openModal();
-      return;
-    }
-
-    if (chainId && chainId !== 137) {
-      setStatusMessage("Switch your wallet to Polygon mainnet to submit orders.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setStatusMessage(null);
-
-    try {
-      const payload = buildPolymarketOrderPayload(
-        {
-          tokenId: MARKET_TOKEN_ID,
-          usdcAmount: amount,
-          price,
-          side,
-          builderCode,
-        },
-        address
-      );
-
-      const typedOrder = {
-        ...payload.order,
-        salt: BigInt(payload.order.salt),
-        maker: payload.order.maker as `0x${string}`,
-        signer: payload.order.signer as `0x${string}`,
-        taker: payload.order.taker as `0x${string}`,
-        tokenId: BigInt(payload.order.tokenId),
-        makerAmount: BigInt(payload.order.makerAmount),
-        takerAmount: BigInt(payload.order.takerAmount),
-        expiration: BigInt(payload.order.expiration),
-        nonce: BigInt(payload.order.nonce),
-        feeRateBps: BigInt(payload.order.feeRateBps),
-      };
-
-      const signature = await signTypedDataAsync({
-        domain: POLYMARKET_EIP712_DOMAIN,
-        types: POLYMARKET_ORDER_TYPES,
-        primaryType: "Order",
-        message: typedOrder,
-      });
-
-      const result = await submitPolymarketOrder({ ...payload, signature });
-
-      setStatusMessage(`Order submitted successfully. Order ID: ${result.orderId || "unknown"}`);
-    } catch (error) {
-      setStatusMessage(
-        error instanceof Error ? `Order failed: ${error.message}` : "Order failed. Please try again."
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <div className="bg-surface-container-lowest border border-outline-variant p-6 rounded shadow-sm">
@@ -260,10 +186,9 @@ const TradeExecution = () => {
         <div>
           <label className="font-label-caps text-[10px] text-on-surface-variant mb-1 block">INVESTMENT (USDC)</label>
           <div className="relative">
-            <input
-              className="w-full bg-surface-container border-outline-variant focus:ring-primary focus:border-primary rounded px-4 py-3 font-data-mono text-lg outline-none"
-              type="number"
-              min={1}
+            <input 
+              className="w-full bg-surface-container border-outline-variant focus:ring-primary focus:border-primary rounded px-4 py-3 font-data-mono text-lg outline-none" 
+              type="number" 
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
             />
@@ -271,11 +196,11 @@ const TradeExecution = () => {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <button className="py-4 border-2 border-secondary bg-secondary-container/10 rounded flex flex-col items-center hover:bg-secondary-container/20 transition-all disabled:cursor-not-allowed" type="button">
+          <button className="py-4 border-2 border-secondary bg-secondary-container/10 rounded flex flex-col items-center hover:bg-secondary-container/20 transition-all cursor-pointer">
             <span className="text-secondary font-black font-headline-sm">YES</span>
             <span className="text-on-surface-variant text-label-caps">$0.642</span>
           </button>
-          <button className="py-4 border-2 border-tertiary bg-tertiary-container/5 rounded flex flex-col items-center hover:bg-tertiary-container/10 transition-all disabled:cursor-not-allowed" type="button">
+          <button className="py-4 border-2 border-tertiary bg-tertiary-container/5 rounded flex flex-col items-center hover:bg-tertiary-container/10 transition-all cursor-pointer">
             <span className="text-tertiary font-black font-headline-sm">NO</span>
             <span className="text-on-surface-variant text-label-caps">$0.358</span>
           </button>
@@ -291,28 +216,11 @@ const TradeExecution = () => {
           <span className="text-on-surface">${(amount * 0.0025).toFixed(2)}</span>
         </div>
       </div>
-      {statusMessage ? (
-        <div className="mb-4 rounded-2xl border border-outline-variant bg-surface p-4 text-sm text-on-surface-variant">
-          {statusMessage}
-        </div>
-      ) : null}
       <div className="space-y-3">
-        <button
-          type="button"
-          disabled={isSubmitting}
-          onClick={() => submitOrder("BUY", 0.642, MARKET_BUILDER_CODE)}
-          className="w-full bg-primary text-primary-foreground py-4 rounded-xl font-headline-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? "Submitting..." : "BUY YES"}
-        </button>
-        <button
-          type="button"
-          disabled={isSubmitting}
-          onClick={() => submitOrder("BUY", 0.642, `${MARKET_BUILDER_CODE}_COPY_AI`)}
-          className="w-full bg-primary-container text-on-primary-container py-3 rounded-xl font-label-caps text-label-caps flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        <button className="w-full bg-primary text-on-primary py-4 rounded-xl font-headline-sm hover:opacity-90 transition-opacity">BUY YES</button>
+        <button className="w-full bg-primary-container text-on-primary-container py-3 rounded-xl font-label-caps text-label-caps flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
           <span className="material-symbols-outlined text-[18px]">content_copy</span>
-          {isSubmitting ? "Confirming..." : "COPY AI TRADE"}
+          COPY AI TRADE
         </button>
       </div>
     </div>
@@ -408,9 +316,27 @@ const TerminalLogs = () => {
   );
 };
 
+const Footer = () => {
+  return (
+    <footer className="bg-surface-container-low border-t border-outline-variant mt-12">
+      <div className="flex flex-col md:flex-row justify-between items-center w-full py-8 px-gutter max-w-container-max-width mx-auto gap-4">
+        <span className="font-label-caps text-label-caps font-black text-on-surface-variant">OracleDesk</span>
+        <div className="flex flex-wrap justify-center gap-8">
+          <a className="text-on-surface-variant font-medium hover:text-primary transition-colors text-body-md" href="#">System Status</a>
+          <a className="text-on-surface-variant font-medium hover:text-primary transition-colors text-body-md" href="#">API Docs</a>
+          <a className="text-on-surface-variant font-medium hover:text-primary transition-colors text-body-md" href="#">Legal</a>
+          <a className="text-on-surface-variant font-medium hover:text-primary transition-colors text-body-md" href="#">Privacy Policy</a>
+        </div>
+        <p className="font-body-md text-body-md text-on-surface-variant opacity-60">© 2024 OracleDesk Institutional. All rights reserved.</p>
+      </div>
+    </footer>
+  );
+};
+
 export default function MarketDetail() {
   return (
     <div className="min-h-screen bg-surface">
+      <Navbar />
       <main className="max-w-container-max-width mx-auto px-gutter py-6">
         <MarketHeader />
         
@@ -435,6 +361,7 @@ export default function MarketDetail() {
           </div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

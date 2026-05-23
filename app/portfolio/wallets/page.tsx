@@ -206,23 +206,6 @@ export default function WalletsPage() {
             <button className="material-symbols-outlined text-on-surface-variant hover:text-primary cursor-pointer">chevron_right</button>
           </div>
         </div>
-
-        {/* Terminal Logs */}
-        <div className="col-span-12 bg-on-background rounded-lg p-4 text-primary-fixed-dim font-data-mono text-[12px] h-40 overflow-y-auto terminal-scroll border border-outline shadow-inner">
-          <div className="opacity-50 mb-2 border-b border-outline/30 pb-1 flex justify-between items-center text-[10px] uppercase tracking-widest">
-            <span>SYSTEM_LOG: TRANSACTION_STREAM_V4</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-secondary rounded-full animate-pulse"></span> LIVE</span>
-          </div>
-          <div className="space-y-1">
-            {terminalLogs.map((log, i) => (
-              <p key={i}>
-                <span className="text-outline/50">[{log.time}]</span>{" "}
-                <span className={log.type === 'success' ? 'text-secondary-fixed' : ''}>{log.msg}</span>
-              </p>
-            ))}
-            <p className="animate-pulse opacity-40 italic">... monitoring transaction mempools ...</p>
-          </div>
-        </div>
       </div>
     </main>
   );

@@ -255,19 +255,6 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
-
-          {/* Terminal Log View */}
-          <div className="bg-on-background text-primary-fixed-dim p-4 rounded-lg font-data-mono text-[12px] h-32 overflow-y-auto space-y-1 border border-primary-container shadow-inner custom-scrollbar">
-            <p className="text-secondary-fixed">&gt;&gt; INITIALIZING_DEPLOYMENT_MODULE...</p>
-            <p className="opacity-70">&gt; Wallet Address: 0x82...f92a connected.</p>
-            <p className="opacity-70">&gt; Awaiting market parameters...</p>
-            <p className="opacity-70">&gt; Security handshake: VALID</p>
-            {terminalLogs.map((log, i) => (
-              <p key={i} className="text-primary-fixed-dim opacity-70">
-                &gt; {log}
-              </p>
-            ))}
-          </div>
         </div>
       </div>
     </main>
