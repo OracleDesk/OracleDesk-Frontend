@@ -5,7 +5,7 @@ import { defineChain } from "viem";
 // reasoning trace hashing, nanopayments, and agent wallets.
 // TODO: Replace RPC_URL and chainId with the exact values from Circle/Agora docs.
 export const arcTestnet = defineChain({
-  id: 655476, // TODO: confirm Arc testnet chain ID from Agora docs
+  id: 5042002, // Arc testnet chain ID
   name: "Arc Testnet",
   nativeCurrency: {
     decimals: 18,

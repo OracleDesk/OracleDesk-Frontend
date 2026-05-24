@@ -33,7 +33,7 @@ const WalletDropdown = () => {
     return (
       <button
         onClick={() => open()}
-        className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-caps text-label-caps uppercase tracking-wider hover:opacity-90 transition-all active:scale-95"
+        className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-label-caps text-label-caps uppercase tracking-wider hover:opacity-90 transition-all active:scale-95"
       >
         Connect Wallet
       </button>

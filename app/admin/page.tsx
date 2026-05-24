@@ -4,6 +4,13 @@ import React from "react";
 import Link from "next/link";
 import { useWallet } from "@/lib/contexts/WalletContext";
 
+const AUTHORIZED_ADDRESSES = [
+  process.env.NEXT_PUBLIC_TEAM_MEMBER_1_ADDRESS?.toLowerCase(),
+  process.env.NEXT_PUBLIC_TEAM_MEMBER_2_ADDRESS?.toLowerCase(),
+  process.env.NEXT_PUBLIC_TEAM_MEMBER_3_ADDRESS?.toLowerCase(),
+  process.env.NEXT_PUBLIC_AGENT_WALLET_ADDRESS?.toLowerCase(),
+].filter(Boolean);
+
 const AdminStat = ({ label, value, change }: { label: string, value: string, change: string }) => (
   <div className="bg-white p-6 border border-outline-variant rounded-lg flex flex-col justify-between hover:shadow-md transition-all">
     <span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">{label}</span>
@@ -33,7 +40,7 @@ const MarketItem = ({ title, status, volume }: { title: string, status: string, 
 );
 
 export default function AdminDashboard() {
-  const { isConnected, openModal } = useWallet();
+  const { isConnected, address, openModal } = useWallet();
 
   if (!isConnected) {
     return (
@@ -54,6 +61,36 @@ export default function AdminDashboard() {
           >
             <span className="material-symbols-outlined">account_balance_wallet</span>
             CONNECT WALLET TO ACCESS
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const isAuthorized = address && AUTHORIZED_ADDRESSES.includes(address.toLowerCase());
+
+  if (!isAuthorized) {
+    return (
+      <main className="flex-grow flex items-center justify-center p-gutter">
+        <div className="max-w-md w-full text-center space-y-6 bg-white p-10 rounded-xl border border-outline-variant shadow-sm">
+          <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+            <span className="material-symbols-outlined text-4xl">block</span>
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-headline-md text-headline-md">Access Denied</h2>
+            <p className="text-on-surface-variant">
+              Your wallet address is not authorized to access the Admin Control Center. This page is restricted to authorized team members only.
+            </p>
+            <p className="text-on-surface-variant text-sm mt-4 font-data-mono break-all">
+              {address}
+            </p>
+          </div>
+          <button
+            onClick={openModal}
+            className="w-full bg-outline text-on-outline py-4 rounded-lg font-label-caps text-label-caps hover:brightness-90 transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+          >
+            <span className="material-symbols-outlined">swap_horiz</span>
+            SWITCH WALLET
           </button>
         </div>
       </main>
