@@ -33,7 +33,7 @@ export default function UnlockPremiumTracePage() {
           <div className="col-span-12 lg:col-span-8 bg-white border border-outline-variant p-6 md:p-8 rounded-xl shadow-sm">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
               <div>
-                <h1 className="font-headline-md text-headline-md mb-2">2024 Election: Pennsylvania Electoral Votes</h1>
+                <h1 className="font-headline-md text-headline-md mb-2">2029 Election: Pennsylvania Electoral Votes</h1>
                 <div className="flex flex-wrap items-center gap-3 text-on-surface-variant text-sm">
                   <div className="flex items-center gap-1 font-data-mono">
                     <span className="material-symbols-outlined text-[18px]">monitoring</span>
@@ -42,7 +42,7 @@ export default function UnlockPremiumTracePage() {
                   <span className="hidden md:inline text-outline-variant">•</span>
                   <div className="flex items-center gap-1 font-data-mono">
                     <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-                    EXPIRY: NOV 5, 2024
+                    EXPIRY: NOV 5, 2029
                   </div>
                 </div>
               </div>

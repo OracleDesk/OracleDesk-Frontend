@@ -9,7 +9,7 @@ export const Footer = () => {
             ORACLEDESK INSTITUTIONAL
           </span>
           <p className="font-body-md text-body-md text-on-surface-variant opacity-60">
-            © 2024 OracleDesk Institutional. All rights reserved.
+            © 2026 OracleDesk Institutional. All rights reserved.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-6">

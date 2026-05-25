@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useWallet } from "@/lib/contexts/WalletContext";
+import { useBalance } from "wagmi";
+import { CONTRACTS } from "@/lib/web3/contracts";
+import { arcTestnet, polygonAmoy } from "@/lib/web3/chains";
 
 const WalletCard = ({ name, address, balance, active }: { name: string, address: string, balance: string, active?: boolean }) => (
   <div className={`bg-white border ${active ? 'border-primary' : 'border-outline-variant'} rounded p-4 flex items-center justify-between group hover:border-primary transition-colors cursor-pointer`}>
@@ -47,14 +50,37 @@ const TransactionRow = ({ type, icon, iconColor, asset, amount, amountColor, sta
 );
 
 export default function WalletsPage() {
-  const { openModal } = useWallet();
+  const { address, isConnected, chainId, openModal, providerName } = useWallet();
+  
+  // Determine USDC token address based on current chain
+  const usdcTokenAddress = useMemo(() => {
+    if (chainId === arcTestnet.id) return CONTRACTS.arc.usdc;
+    if (chainId === polygonAmoy.id || chainId === 137) return CONTRACTS.polygon.usdc;
+    return undefined;
+  }, [chainId]);
+
+  // Fetch USDC balance
+  const { data: balanceData } = useBalance({
+    address: address as `0x${string}`,
+    token: usdcTokenAddress && usdcTokenAddress !== "0x0000000000000000000000000000000000000000" 
+      ? usdcTokenAddress 
+      : undefined,
+  });
+
+  const formattedBalance = useMemo(() => {
+    if (!balanceData) return "0.00";
+    return Number(balanceData.formatted).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }, [balanceData]);
+
   const [terminalLogs, setTerminalLogs] = useState([
     { time: "14:42:01", msg: "PING: Connection to Solana Mainnet verified via Phantom_Ext.", type: "default" },
     { time: "14:41:55", msg: "VALIDATE: USDC Balance sync initiated for 0x71C...4242", type: "default" },
     { time: "14:40:12", msg: "MEMPOOL: Transaction 0x82...a1f found in block #294,102,593", type: "default" },
     { time: "14:38:44", msg: "SUCCESS: Settlement of OracleDesk_Vault_02 finalized. Amount: 150,000.00 USDC", type: "success" },
     { time: "14:35:10", msg: "AUTH: Session token refreshed. Expiry in 43,200s.", type: "default" },
-    { time: "14:32:00", msg: "ALERT: Volatility spike detected in Market: Election_2024_Main.", type: "default" },
   ]);
 
   useEffect(() => {
@@ -71,6 +97,11 @@ export default function WalletsPage() {
     }, 8000);
     return () => clearInterval(interval);
   }, []);
+
+  const truncateAddress = (addr: string) => {
+    if (!addr) return "";
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
 
   return (
     <main className="flex-grow pt-8 pb-12 max-w-container-max-width mx-auto px-gutter w-full">
@@ -108,11 +139,11 @@ export default function WalletsPage() {
               </span>
             </div>
             <div className="font-display-lg text-display-lg text-on-surface tracking-tight text-4xl">
-              $1,248,392.<span className="text-on-surface-variant opacity-50">45</span>
+              ${formattedBalance}
             </div>
             <div className="mt-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-secondary"></span>
-              <span className="text-on-surface-variant font-body-md">1,248,392.45 USDC</span>
+              <span className="text-on-surface-variant font-body-md">{formattedBalance} USDC</span>
             </div>
           </div>
           <div className="flex gap-2 mt-4">
@@ -152,8 +183,25 @@ export default function WalletsPage() {
         {/* Wallet Connections */}
         <div className="col-span-12 lg:col-span-4 space-y-4">
           <h3 className="font-headline-sm text-headline-sm text-on-surface">Connected Wallets</h3>
-          <WalletCard name="MetaMask" address="0x71C...4242" balance="$842,000.00" active />
-          <WalletCard name="Phantom" address="D5rX...kP9z" balance="$406,392.45" />
+          {isConnected && address ? (
+            <WalletCard 
+              name={providerName || "Connected Wallet"} 
+              address={truncateAddress(address)} 
+              balance={`$${formattedBalance}`} 
+              active 
+            />
+          ) : (
+            <div className="bg-surface-container-low border border-outline-variant rounded p-4 text-center">
+              <p className="text-on-surface-variant font-body-sm mb-3">No wallet connected</p>
+              <button 
+                className="w-full py-2 bg-primary text-primary-foreground rounded font-label-caps text-label-caps hover:brightness-110 transition-all"
+                onClick={() => openModal()}
+              >
+                CONNECT WALLET
+              </button>
+            </div>
+          )}
+          
           <button 
             className="w-full py-3 border-2 border-dashed border-outline-variant rounded text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2"
             onClick={() => openModal()}

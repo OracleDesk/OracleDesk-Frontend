@@ -62,7 +62,6 @@ export default function MarketTerminal() {
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-12">
         <div className="lg:col-span-8 flex flex-col justify-center space-y-6">
           <div className="space-y-2">
-            <span className="font-label-caps text-label-caps text-primary tracking-widest bg-primary-container/10 px-2 py-1 rounded inline-block">VERSION 4.0 LIGHT MODE</span>
             <h1 className="font-display-lg text-display-lg text-on-background max-w-2xl text-4xl md:text-5xl lg:text-6xl">
               The Institutional Terminal for <span className="text-primary-container">Prediction Markets.</span>
             </h1>

@@ -130,7 +130,6 @@ export default function AdminDashboard() {
             </div>
             <div className="divide-y divide-outline-variant">
               <MarketItem title="Will ETH exceed $5,000 by year end?" status="Active" volume="$14.2M" />
-              <MarketItem title="US Election 2024: Winner" status="Active" volume="$89.4M" />
               <MarketItem title="BTC Spot ETF Approval by Q1" status="Active" volume="$12.4M" />
               <MarketItem title="UK General Election Date" status="Active" volume="$4.2M" />
             </div>

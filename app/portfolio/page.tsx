@@ -6,11 +6,10 @@ import { usePortfolio, usePositions } from "@/lib/hooks/usePortfolio";
 
 const TerminalLog = () => {
   const [logs, setLogs] = useState([
-    { text: "[2024-05-14 09:32:11] INITIALIZING ORACLE PROTOCOL...", color: "opacity-50" },
-    { text: "[SUCCESS] Market Resolution Detected: ETH_PRICE_JUN_24 -> YES (100.00%)", color: "text-secondary-fixed" },
+    { text: "[2026-05-14 09:32:11] INITIALIZING ORACLE PROTOCOL...", color: "opacity-50" },
+    { text: "[SUCCESS] Market Resolution Detected: ETH_PRICE_MAY_26 -> YES (100.00%)", color: "text-secondary-fixed" },
     { text: "[INFO] Wallet 0x8a1...f3e claimed 820.00 USDC in rewards.", color: "" },
-    { text: "[ALERT] High Volatility detected in 'US_ELECTION_2024'. Slippage settings adjusted.", color: "text-tertiary-fixed-dim" },
-    { text: "[TRADE] Order Executed: SELL 500 'NO' Contracts on 'SpaceX_Mars_2025' at $0.42.", color: "" },
+    { text: "[TRADE] Order Executed: SELL 500 'NO' Contracts on 'SpaceX_Mars_2026' at $0.42.", color: "" },
     { text: "[PNL] Portfolio unrealized profit increased by 1.2% in last 60 minutes.", color: "" },
     { text: "[SYSTEM] Syncing with Polymarket API... Node latency 14ms.", color: "text-surface-dim opacity-70" },
     { text: "[SUCCESS] Limit order filled: 10,000 YES contracts @ $0.62.", color: "text-secondary-fixed" },

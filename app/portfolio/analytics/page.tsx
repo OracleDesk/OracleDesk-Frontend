@@ -68,7 +68,6 @@ const ExposureBar = ({ label, percentage, color }: any) => (
 
 const ActivityTable = () => {
   const activities = [
-    { name: "US Presidential Election 2024", icon: "account_balance", pos: "YES", posColor: "bg-secondary-container text-on-secondary-container", stake: "$5,000.00", entry: "48.2¢", prob: 52, return: "+$420.50", retColor: "text-secondary" },
     { name: "SpaceX Mars Landing by 2029", icon: "rocket_launch", pos: "NO", posColor: "bg-tertiary-container text-on-tertiary-container", stake: "$1,200.00", entry: "65.0¢", prob: 70, return: "-$112.20", retColor: "text-error" },
     { name: "GPT-5 Release Announcement", icon: "computer", pos: "YES", posColor: "bg-secondary-container text-on-secondary-container", stake: "$3,450.00", entry: "12.5¢", prob: 18, return: "+$1,120.00", retColor: "text-secondary" },
   ];

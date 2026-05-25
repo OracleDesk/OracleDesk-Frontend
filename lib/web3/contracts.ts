@@ -31,7 +31,7 @@ export const CONTRACTS = {
 
     /** USDC on Arc */
     usdc: (process.env.NEXT_PUBLIC_USDC_ADDRESS ??
-      "0x0000000000000000000000000000000000000000") as `0x${string}`,
+      "0x3600000000000000000000000000000000000000") as `0x${string}`,
 
     /** EURC on Arc (internal treasury accounting only) */
     eurc: (process.env.NEXT_PUBLIC_EURC_ADDRESS ??

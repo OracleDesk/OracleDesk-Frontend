@@ -178,7 +178,7 @@ export default function TransactionFailedPage() {
             <Link className="text-on-surface-variant hover:text-primary transition-colors font-label-caps text-[10px]" href="#">Legal</Link>
             <Link className="text-on-surface-variant hover:text-primary transition-colors font-label-caps text-[10px]" href="#">Privacy Policy</Link>
           </div>
-          <p className="font-body-md text-[11px] text-on-surface-variant opacity-70">© 2024 OracleDesk Institutional. All rights reserved.</p>
+          <p className="font-body-md text-[11px] text-on-surface-variant opacity-70">© 2026 OracleDesk Institutional. All rights reserved.</p>
         </div>
       </footer>
     </div>

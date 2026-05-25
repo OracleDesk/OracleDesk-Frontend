@@ -80,7 +80,7 @@ export default function TransactionSuccessPage() {
               <div className="bg-surface-container-low border border-outline-variant rounded-xl p-4 sm:p-5 mb-6">
                 <div className="flex justify-between items-center mb-4">
                   <span className="font-label-caps text-label-caps text-on-surface-variant text-[10px]">MARKET</span>
-                  <span className="font-body-md font-semibold text-primary text-xs sm:text-sm">US Presidential Election 2024</span>
+                  <span className="font-body-md font-semibold text-primary text-xs sm:text-sm">US Presidential Election 2029</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
