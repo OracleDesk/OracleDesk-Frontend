@@ -49,7 +49,7 @@ const notificationsData: NotificationItem[] = [
     id: "3",
     type: "trading",
     title: "Trade Confirmed",
-    message: "Purchased 5,000 shares of NO on \"Will BTC hit $100k in 2024\" at avg price $0.34.",
+    message: "Purchased 5,000 shares of NO on \"Will BTC hit $100k in 2026\" at avg price $0.34.",
     time: "42m ago",
     txHash: "0x4f...8a2b",
     icon: "check_circle",
@@ -138,7 +138,7 @@ export default function NotificationsPage() {
               <span className="font-label-caps text-label-caps text-primary">ORACLE INSIGHT</span>
             </div>
             <p className="text-body-md text-on-surface-variant leading-relaxed italic">
-              High volatility detected in the 2024 Election Prediction Market. AI reasoning suggests a 12% probability shift in the next 4 hours.
+              High volatility detected in the 2026 Election Prediction Market. AI reasoning suggests a 12% probability shift in the next 4 hours.
             </p>
           </div>
         </div>

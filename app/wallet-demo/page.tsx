@@ -189,7 +189,7 @@ export default function WalletDemoPage() {
             <Link className="text-on-surface-variant dark:text-surface-variant font-body-md text-body-md hover:text-primary transition-colors" href="#">System Status</Link>
             <Link className="text-on-surface-variant dark:text-surface-variant font-body-md text-body-md hover:text-primary transition-colors" href="#">Legal</Link>
           </div>
-          <span className="text-on-surface-variant dark:text-surface-variant font-body-md text-body-md hidden sm:inline">© 2024 OracleDesk Institutional.</span>
+          <span className="text-on-surface-variant dark:text-surface-variant font-body-md text-body-md hidden sm:inline">© 2026 OracleDesk Institutional.</span>
         </div>
       </footer>
     </div>

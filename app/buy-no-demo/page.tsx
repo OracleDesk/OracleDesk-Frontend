@@ -159,7 +159,7 @@ export default function BuyNoDemoPage() {
             <Link className="font-body-md text-body-md text-on-surface-variant dark:text-surface-variant hover:text-primary transition-colors" href="#">API Docs</Link>
             <Link className="font-body-md text-body-md text-on-surface-variant dark:text-surface-variant hover:text-primary transition-colors" href="#">Legal</Link>
           </div>
-          <span className="font-body-md text-body-md text-on-surface-variant text-[12px]">© 2024 OracleDesk Institutional.</span>
+          <span className="font-body-md text-body-md text-on-surface-variant text-[12px]">© 2026 OracleDesk Institutional.</span>
         </div>
       </footer>
     </div>

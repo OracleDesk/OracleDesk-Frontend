@@ -64,7 +64,7 @@ export default function MarketQuickViewPage() {
                 {/* Market Question */}
                 <div>
                   <h2 className="font-headline-sm text-headline-sm text-on-surface leading-tight">
-                    Will the Federal Reserve announce a rate cut of 50bps or more by the end of Q3 2024?
+                    Will the Federal Reserve announce a rate cut of 50bps or more by the end of Q3 2026?
                   </h2>
                 </div>
 

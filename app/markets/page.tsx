@@ -120,9 +120,9 @@ const MarketCard = ({ category, aiSignal, aiStatus, expiry, title, yesProb, liqu
 
 const TradingFeed = () => {
   const [feed, setFeed] = useState([
-    { time: "12:45:12", market: "US Elections 2024", size: "$50,000", bet: "YES", prob: "51% → 51.2%", color: "text-secondary" },
+    { time: "12:45:12", market: "US Elections 2029", size: "$50,000", bet: "YES", prob: "51% → 51.2%", color: "text-secondary" },
     { time: "12:44:58", market: "Fed Rate Cut Sept", size: "$12,400", bet: "YES", prob: "63.8% → 64%", color: "text-secondary" },
-    { time: "12:44:20", market: "ETH ATH 2024", size: "$8,200", bet: "NO", prob: "22.4% → 22%", color: "text-tertiary" },
+    { time: "12:44:20", market: "ETH ATH 2026", size: "$8,200", bet: "NO", prob: "22.4% → 22%", color: "text-tertiary" },
     { time: "12:43:55", market: "SpaceX Tower Catch", size: "$100,000", bet: "YES", prob: "72% → 74%", color: "text-secondary" },
   ]);
 
@@ -203,6 +203,12 @@ export default function Markets() {
   const { data, isLoading, error } = useMarkets();
   const marketsData = data?.markets ?? [];
 
+  useEffect(() => {
+    if (error) {
+      console.error("Market data fetch error:", error);
+    }
+  }, [error]);
+
   return (
     <div className="min-h-screen bg-surface">
       <main className="pt-24 pb-12 px-gutter max-w-container-max-width mx-auto">
@@ -217,23 +223,38 @@ export default function Markets() {
         ) : error ? (
           <div className="text-center py-12 bg-surface-container-low rounded-xl border border-error/20">
             <span className="material-symbols-outlined text-error text-4xl mb-4">error</span>
-            <p className="text-on-surface-variant font-medium">Failed to load markets. Please check if the backend is running.</p>
+            <p className="text-on-surface-variant font-medium">Failed to load markets.</p>
+            <p className="text-on-surface-variant/70 text-sm mt-2">
+              {error instanceof Error ? error.message : "Please check if the backend is running and accessible."}
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="mt-6 px-4 py-2 bg-primary text-white rounded-lg font-label-caps text-label-caps"
+            >
+              Retry Connection
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {marketsData.map((m) => (
-              <MarketCard 
-                key={m.id} 
-                category={m.category}
-                aiSignal="SIGNAL"
-                aiStatus="BULLISH"
-                expiry={new Date(m.expiryTimestamp).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase()}
-                title={m.question}
-                yesProb={m.currentYesProb ?? m.initialYesProb}
-                liquidity={`$${(m.totalLiquidity / 1000000).toLocaleString()}M`}
-                volume24h="+$0.0K"
-              />
-            ))}
+            {marketsData.map((m) => {
+              const rawProb = m.currentYesProb ?? m.initialYesProb;
+              // Backend returns 0-1, UI expects 0-100
+              const yesProb = Math.round(rawProb <= 1 ? rawProb * 100 : rawProb);
+              
+              return (
+                <MarketCard 
+                  key={m.id} 
+                  category={m.category}
+                  aiSignal="SIGNAL"
+                  aiStatus="BULLISH"
+                  expiry={new Date(m.expiryTimestamp).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase()}
+                  title={m.question}
+                  yesProb={yesProb}
+                  liquidity={`$${(m.totalLiquidity).toLocaleString()}`}
+                  volume24h="+$0.0K"
+                />
+              );
+            })}
           </div>
         )}
 

@@ -79,7 +79,7 @@ export default function BuyYesDemoPage() {
                     <span className="bg-secondary-container text-on-secondary-container text-[10px] px-1.5 py-0.5 font-bold rounded uppercase tracking-wider">Active Market</span>
                     <span className="text-on-surface-variant font-data-mono text-[12px]">ID: OD-US-FED-249</span>
                   </div>
-                  <h2 className="font-headline-sm text-headline-sm text-on-background lg:text-xl">US GDP Growth exceeds 3.0% in Q4 2024?</h2>
+                  <h2 className="font-headline-sm text-headline-sm text-on-background lg:text-xl">US GDP Growth exceeds 3.0% in Q4 2026?</h2>
                 </div>
                 <button 
                   onClick={() => setIsModalOpen(false)}
@@ -201,7 +201,7 @@ export default function BuyYesDemoPage() {
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <span className="font-label-caps text-label-caps font-black text-on-surface-variant">OracleDesk Institutional</span>
             <span className="hidden sm:inline text-on-surface-variant font-body-md opacity-30">|</span>
-            <span className="text-on-surface-variant font-body-md text-[12px] opacity-70">© 2024. All rights reserved.</span>
+            <span className="text-on-surface-variant font-body-md text-[12px] opacity-70">© 2026. All rights reserved.</span>
           </div>
           <div className="flex flex-wrap justify-center gap-6">
             <Link className="text-on-surface-variant dark:text-surface-variant hover:text-primary transition-colors font-label-caps text-label-caps text-[10px] sm:text-xs" href="#">System Status</Link>

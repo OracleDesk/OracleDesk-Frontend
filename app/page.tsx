@@ -10,7 +10,6 @@ const Ticker = () => {
     "BTC ETF APPROVAL: 92% (+2.4%)",
     "FED RATE CUT MAR: 41% (-5.1%)",
     "ETH LONDON UPGRADE: 78% (STABLE)",
-    "US ELECTION 2024: TRUMP 52% / BIDEN 48%",
     "SOLANA BREAKPOINT ANNOUNCEMENT: 65% (+12%)",
   ];
 
@@ -183,7 +182,7 @@ const MarketsGrid = () => {
           icon="currency_bitcoin" 
           category="CRYPTO" 
           change="+4.2% 1H" 
-          title="Will Bitcoin hit $100k by year-end 2024?" 
+          title="Will Bitcoin hit $100k by year-end 2026?" 
           prob={62} 
           volume="$45.2M" 
           color="primary"
@@ -192,7 +191,7 @@ const MarketsGrid = () => {
           icon="policy" 
           category="GOVERNANCE" 
           change="-1.8% 1H" 
-          title="Next UK General Election date in May 2024?" 
+          title="Next UK General Election date in May 2029?" 
           prob={15} 
           volume="$8.9M" 
           color="secondary"
