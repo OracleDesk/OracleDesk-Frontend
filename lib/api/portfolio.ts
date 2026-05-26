@@ -53,3 +53,8 @@ export async function getPositions(params: ListPositionsParams = {}) {
   const { data, meta } = await apiClient.get<Position[]>("/portfolio/positions", { ...params });
   return { positions: data, meta };
 }
+
+export async function getPlatformStats() {
+  const { data } = await apiClient.get<any>("/portfolio/stats");
+  return data;
+}

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  getPlatformStats,
   getPortfolio,
   getPositions,
   type ListPositionsParams,
@@ -21,5 +22,14 @@ export function usePositions(params: ListPositionsParams = {}) {
     queryKey: ["positions", params],
     queryFn: () => getPositions(params),
     staleTime: 15_000,
+  });
+}
+
+export function usePlatformStats() {
+  return useQuery({
+    queryKey: ["platform-stats"],
+    queryFn: getPlatformStats,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }

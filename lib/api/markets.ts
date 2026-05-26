@@ -62,13 +62,17 @@ export async function getMarket(id: string) {
   return data;
 }
 
-export async function triggerMarketGeneration() {
+export async function triggerMarketGeneration(params: {
+  question: string;
+  category: string;
+  expiry: string;
+}) {
   const { data } = await apiClient.post<{
     jobId: string;
     message: string;
     statusUrl: string;
     hint: string;
-  }>("/markets/generate");
+  }>("/markets/generate", params);
 
   return data;
 }

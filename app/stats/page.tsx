@@ -1,12 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { usePlatformStats } from "@/lib/hooks/usePortfolio";
 
 const KPIStats = () => {
+  const { data: statsData, isLoading } = usePlatformStats();
+  
   const stats = [
-    { label: "Subscriber Count", value: "12,842", change: "12%", trend: "up" },
-    { label: "Total Copy Volume", value: "$142.8M", change: "8.4%", trend: "up" },
-    { label: "Builder Fees", value: "$2.14M", change: "5.2%", trend: "up" },
+    { label: "Subscriber Count", value: isLoading ? "..." : statsData?.subscriberCount?.toLocaleString(), change: "12%", trend: "up" },
+    { label: "Total Copy Volume", value: isLoading ? "..." : `$${(statsData?.totalCopyVolume / 1000).toFixed(1)}k`, change: "8.4%", trend: "up" },
+    { label: "Builder Fees", value: isLoading ? "..." : `$${(statsData?.builderFees / 1000).toFixed(1)}k`, change: "5.2%", trend: "up" },
     { label: "Avg. Latency", value: "14ms", status: "Stable", trend: "stable" },
   ];
 

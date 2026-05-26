@@ -23,11 +23,11 @@ export const CONTRACTS = {
   arc: {
     /** Emits ReasoningPublished events; stores IPFS CID + SHA256 hash per trace */
     reasoningHasher: (process.env.NEXT_PUBLIC_REASONING_REGISTRY_ADDRESS ??
-      "0x0000000000000000000000000000000000000001") as `0x${string}`,
+      "0xE3188B3b4E14d74E6110137FF91f12B981A82257") as `0x${string}`,
 
     /** OracleDesk Arc-native prediction market factory */
     marketFactory: (process.env.NEXT_PUBLIC_MARKET_FACTORY_ADDRESS ??
-      "0x0000000000000000000000000000000000000002") as `0x${string}`,
+      "0xA24BB6956D722Ed0dc67D2Bd9f0b67C3A02A838a") as `0x${string}`,
 
     /** USDC on Arc */
     usdc: (process.env.NEXT_PUBLIC_USDC_ADDRESS ??
@@ -35,15 +35,15 @@ export const CONTRACTS = {
 
     /** EURC on Arc (internal treasury accounting only) */
     eurc: (process.env.NEXT_PUBLIC_EURC_ADDRESS ??
-      "0x0000000000000000000000000000000000000004") as `0x${string}`,
+      "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a") as `0x${string}`,
       
     /** Treasury Manager contract address */
     treasuryManager: (process.env.NEXT_PUBLIC_TREASURY_MANAGER_ADDRESS ??
-      "0x0000000000000000000000000000000000000005") as `0x${string}`,
+      "0xb326E280D2e115B6BEC25154142970a90074e7F8") as `0x${string}`,
 
     /** Position Ledger contract address */
     positionLedger: (process.env.NEXT_PUBLIC_POSITION_LEDGER_ADDRESS ??
-      "0x0000000000000000000000000000000000000006") as `0x${string}`,
+      "0x4ac9c8A1F68c6d8979343746825Df09DD1907b44") as `0x${string}`,
   },
 
   polygon: {
@@ -67,7 +67,7 @@ export const CONTRACTS = {
 // TODO: Replace with your registered builder address from Polymarket.
 export const ORACLEDESK_BUILDER_CODE = (
   process.env.NEXT_PUBLIC_POLYMARKET_BUILDER_CODE ??
-  "0x0000000000000000000000000000000000000000"
+  "0xe4e1b060c21d4ce37c7902805345601e43acbbf976b7024a9a0b004277c6a1f3"
 ) as `0x${string}`;
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────

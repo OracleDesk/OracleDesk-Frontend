@@ -404,7 +404,7 @@ const TradeExecution = () => {
         </div>
         <div className="space-y-3">
           <button 
-            className="w-full bg-primary text-primary-foreground py-4 rounded-xl font-headline-sm hover:opacity-90 transition-opacity"
+            className="w-full bg-primary text-white py-4 rounded-xl font-headline-sm hover:opacity-90 transition-opacity"
             onClick={() => setIsTerminalOpen(true)}
           >
             BUY YES

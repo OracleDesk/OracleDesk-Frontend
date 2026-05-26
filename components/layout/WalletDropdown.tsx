@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppKit, useAppKitAccount, useAppKitNetwork } from "@reown/appkit/react";
-import { useDisconnect, useBalance } from "wagmi";
+import { useDisconnect, useBalance, useChainId } from "wagmi";
+import { CONTRACTS } from "@/lib/web3/contracts";
+import { arcTestnet, polygonAmoy } from "@/lib/web3/chains";
 
 const WalletDropdown = () => {
   const { open } = useAppKit();
@@ -12,10 +14,21 @@ const WalletDropdown = () => {
   const { disconnect } = useDisconnect();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const chainId = useChainId();
 
-  // Fetch native balance
+  // Determine USDC token address based on current chain
+  const usdcTokenAddress = useMemo(() => {
+    if (chainId === arcTestnet.id) return CONTRACTS.arc.usdc;
+    if (chainId === polygonAmoy.id || chainId === 137) return CONTRACTS.polygon.usdc;
+    return undefined;
+  }, [chainId]);
+
+  // Fetch USDC balance
   const { data: balance } = useBalance({
     address: address as `0x${string}`,
+    token: usdcTokenAddress && usdcTokenAddress !== "0x0000000000000000000000000000000000000000" 
+      ? usdcTokenAddress 
+      : undefined,
   });
 
   // Close dropdown when clicking outside

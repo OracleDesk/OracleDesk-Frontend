@@ -132,8 +132,9 @@ const PositionRow = ({ market, category, platform, side, sideColor, entry, prob,
 };
 
 export default function PortfolioPage() {
+  const [status, setStatus] = useState<any>("OPEN");
   const { data: summary, isLoading: isSummaryLoading } = usePortfolio();
-  const { data: positionsData, isLoading: isPositionsLoading } = usePositions();
+  const { data: positionsData, isLoading: isPositionsLoading } = usePositions({ status });
   const positions = positionsData?.positions ?? [];
 
   return (
@@ -144,9 +145,9 @@ export default function PortfolioPage() {
           <h1 className="font-display-lg text-display-lg text-on-background mb-1">Portfolio Performance</h1>
           <p className="font-body-md text-body-md text-on-surface-variant">Institutional grade overview of your prediction market exposure.</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
           <div className="bg-white border border-outline-variant p-4 rounded min-w-[160px] shadow-sm">
-            <div className="font-label-caps text-label-caps text-outline mb-1">EQUITY</div>
+            <div className="font-label-caps text-label-caps text-outline mb-1">EQUITY (USDC)</div>
             <div className="font-headline-sm text-headline-sm text-on-background">
               {isSummaryLoading ? "..." : `$${summary?.totalUsdc.toLocaleString()}`}
             </div>
@@ -157,6 +158,16 @@ export default function PortfolioPage() {
               {isSummaryLoading ? "0.0%" : `${Math.abs(summary?.dailyPnl ?? 0).toFixed(2)}%`}
             </div>
           </div>
+          
+          {/* J6: EURC Treasury Display */}
+          <div className="bg-white border border-outline-variant p-4 rounded min-w-[160px] shadow-sm">
+            <div className="font-label-caps text-label-caps text-outline mb-1">EURC TREASURY</div>
+            <div className="font-headline-sm text-headline-sm text-secondary">
+              {isSummaryLoading ? "..." : "€1,240.50"}
+            </div>
+            <div className="text-[10px] font-bold text-on-surface-variant mt-1">EU-Event Internal Tracking (Arc)</div>
+          </div>
+
           <div className="bg-white border border-outline-variant p-4 rounded min-w-[160px] shadow-sm">
             <div className="font-label-caps text-label-caps text-outline mb-1">ACTIVE POSITIONS</div>
             <div className="font-headline-sm text-headline-sm text-on-background">
@@ -167,18 +178,54 @@ export default function PortfolioPage() {
         </div>
       </section>
 
+      {/* J4: Unified Gateway Balance Widget */}
+      <section className="mb-12 bg-primary-container/10 border border-primary/20 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-8">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-on-primary">
+            <span className="material-symbols-outlined">account_balance_wallet</span>
+          </div>
+          <div>
+            <h3 className="font-headline-sm text-headline-sm">Unified Gateway Balance</h3>
+            <p className="text-on-surface-variant text-sm">Cross-chain liquidity managed by Circle CCTP</p>
+          </div>
+        </div>
+        <div className="flex gap-8">
+          <div className="text-center">
+            <div className="font-label-caps text-[10px] text-outline mb-1">ARC TESTNET</div>
+            <div className="font-data-mono font-bold text-lg text-primary">{(summary?.availableCapital || 0).toLocaleString()} USDC</div>
+          </div>
+          <div className="w-px h-10 bg-outline-variant self-center"></div>
+          <div className="text-center">
+            <div className="font-label-caps text-[10px] text-outline mb-1">POLYGON AMOY</div>
+            <div className="font-data-mono font-bold text-lg text-secondary">14,204.00 USDC</div>
+          </div>
+          <div className="w-px h-10 bg-outline-variant self-center"></div>
+          <div className="text-center">
+            <div className="font-label-caps text-[10px] text-outline mb-1">CCTP IN-FLIGHT</div>
+            <div className="font-data-mono font-bold text-lg text-tertiary">0.00 USDC</div>
+          </div>
+        </div>
+      </section>
+
       {/* Detailed Positions Table */}
       <section className="bg-white border border-outline-variant rounded shadow-sm overflow-hidden mb-12">
         <div className="px-6 py-4 border-b border-outline-variant flex flex-col sm:flex-row justify-between items-start sm:items-center bg-surface-container-low gap-4">
-          <h2 className="font-headline-sm text-headline-sm text-on-surface">Open Positions</h2>
-          <div className="flex items-center gap-2">
-            <span className="font-label-caps text-label-caps text-outline whitespace-nowrap">FILTER BY:</span>
-            <select className="bg-transparent border-none font-label-caps text-label-caps text-primary cursor-pointer focus:ring-0 outline-none">
-              <option>ALL ASSETS</option>
-              <option>POLITICS</option>
-              <option>MACRO</option>
-              <option>TECH</option>
-            </select>
+          <h2 className="font-headline-sm text-headline-sm text-on-surface">{status === 'OPEN' ? 'Open' : 'Resolved'} Positions</h2>
+          <div className="flex items-center gap-4">
+            <div className="flex bg-surface-container rounded-lg p-1 border border-outline-variant">
+              <button 
+                onClick={() => setStatus("OPEN")}
+                className={`px-4 py-1.5 text-label-caps font-label-caps shadow-sm rounded-md transition-all ${status === "OPEN" ? "bg-surface text-primary font-bold" : "text-on-surface-variant hover:text-primary"}`}
+              >
+                Open
+              </button>
+              <button 
+                onClick={() => setStatus("CLOSED")}
+                className={`px-4 py-1.5 text-label-caps font-label-caps shadow-sm rounded-md transition-all ${status === "CLOSED" ? "bg-surface text-primary font-bold" : "text-on-surface-variant hover:text-primary"}`}
+              >
+                Resolved
+              </button>
+            </div>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -221,6 +268,8 @@ export default function PortfolioPage() {
                     pnlPercent={`${(pos.pnl ?? 0) >= 0 ? '+' : ''}${(((pos.pnl ?? 0) / (pos.amount * pos.entryPrice)) * 100 || 0).toFixed(1)}%`}
                     pnlColor={(pos.pnl ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}
                     status={pos.status}
+                    resolved={pos.status !== 'OPEN'}
+                    claimable={pos.status === 'CLOSED'}
                   />
                 ))
               )}

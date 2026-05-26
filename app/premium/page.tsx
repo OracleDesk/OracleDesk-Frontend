@@ -3,9 +3,16 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { useWallet } from "@/lib/contexts/WalletContext";
+import { useWriteContract, usePublicClient } from "wagmi";
+import { CONTRACTS, ERC20_ABI, parseUsdc } from "@/lib/web3/contracts";
+import { arcTestnet } from "@/lib/web3/chains";
+import { unlockTrace } from "@/lib/api/traces";
+
 interface Tier {
   name: string;
-  price: string;
+  price: number;
+  priceStr: string;
   description: string;
   features: { text: string; included: boolean }[];
   buttonText: string;
@@ -15,7 +22,8 @@ interface Tier {
 const tiers: Tier[] = [
   {
     name: "Free",
-    price: "$0",
+    price: 0,
+    priceStr: "$0",
     description: "Standard market access for retail observers.",
     buttonText: "CURRENT PLAN",
     features: [
@@ -27,7 +35,8 @@ const tiers: Tier[] = [
   },
   {
     name: "Pro",
-    price: "$199",
+    price: 20,
+    priceStr: "$20",
     description: "Enhanced tools for professional day traders.",
     buttonText: "UPGRADE TO PRO",
     featured: true,
@@ -40,7 +49,8 @@ const tiers: Tier[] = [
   },
   {
     name: "Institutional",
-    price: "$999",
+    price: 50,
+    priceStr: "$50",
     description: "The terminal for firms and high-volume funds.",
     buttonText: "GET ENTERPRISE",
     features: [
@@ -60,12 +70,78 @@ const features = [
 ];
 
 export default function PremiumPage() {
+  const { address, isConnected, chainId, openModal } = useWallet();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+  
   const [selectedTier, setSelectedTier] = useState<Tier | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"usdc" | "card">("usdc");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const openCheckout = (tier: Tier) => {
     if (tier.name === "Free") return;
+    if (!isConnected) {
+      openModal();
+      return;
+    }
     setSelectedTier(tier);
+  };
+
+  const handlePayment = async () => {
+    if (!selectedTier) return;
+    
+    if (paymentMethod === 'card') {
+      alert("Credit card processing is currently disabled. Please use USDC for the hackathon demo.");
+      return;
+    }
+
+    if (chainId !== arcTestnet.id) {
+      setStatusMessage(`Please switch your wallet to ${arcTestnet.name} to complete the purchase.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatusMessage("Initiating institutional clearing...");
+
+    try {
+      const amountRaw = parseUsdc(selectedTier.price);
+      
+      setStatusMessage(`Requesting USDC transfer of ${selectedTier.price} to OracleDesk Treasury...`);
+      
+      const txHash = await writeContractAsync({
+        address: CONTRACTS.arc.usdc,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [CONTRACTS.arc.treasuryManager, amountRaw],
+      });
+
+      setStatusMessage("Waiting for block confirmation...");
+      
+      if (publicClient) {
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+      }
+
+      setStatusMessage("Provisioning access on OracleDesk Backend...");
+      
+      // Use a special ID or a first-trace fetch to register the subscription.
+      // Since DAILY_PASS on the backend ignores traceId for the subscription itself, 
+      // but requires a valid-looking UUID for the route, we use a constant.
+      await unlockTrace(
+        "00000000-0000-0000-0000-000000000000", 
+        txHash, 
+        selectedTier.price, 
+        "DAILY_PASS"
+      );
+
+      setStatusMessage("Upgrade Successful! Your account is now provisioned.");
+      setTimeout(() => setSelectedTier(null), 3000);
+    } catch (error) {
+      console.error("Payment failed:", error);
+      setStatusMessage(error instanceof Error ? `Payment failed: ${error.message}` : "Payment failed. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -103,7 +179,7 @@ export default function PremiumPage() {
               <div className="mb-8">
                 <h3 className="font-headline-sm text-headline-sm mb-2">{tier.name}</h3>
                 <div className="flex items-baseline gap-1 mb-4">
-                  <span className="font-display-lg text-display-lg text-4xl">{tier.price}</span>
+                  <span className="font-display-lg text-display-lg text-4xl">{tier.priceStr}</span>
                   <span className="text-on-surface-variant font-body-md">/month</span>
                 </div>
                 <p className="text-on-surface-variant font-body-md h-12">{tier.description}</p>
@@ -295,10 +371,21 @@ export default function PremiumPage() {
                   </div>
                   <div className="flex justify-between font-headline-sm text-headline-sm pt-4 border-t border-outline-variant">
                     <span>Total Due</span>
-                    <span className="text-primary">{selectedTier.price}.00</span>
+                    <span className="text-primary">${selectedTier.price}.00</span>
                   </div>
-                  <button className="w-full py-4 bg-primary text-on-primary font-headline-sm text-headline-sm rounded-xl mt-4 hover:shadow-lg active:scale-[0.98] transition-all cursor-pointer">
-                    {paymentMethod === 'usdc' ? "Pay with Wallet" : "Proceed to Payment"}
+                  
+                  {statusMessage && (
+                    <div className="p-3 bg-primary-container/10 border border-primary/20 rounded text-primary text-xs font-bold animate-pulse">
+                      {statusMessage}
+                    </div>
+                  )}
+
+                  <button 
+                    className="w-full py-4 bg-primary text-on-primary font-headline-sm text-headline-sm rounded-xl mt-4 hover:shadow-lg active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+                    onClick={handlePayment}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Processing..." : paymentMethod === 'usdc' ? "Pay with Wallet" : "Proceed to Payment"}
                   </button>
                   <p className="text-center text-[10px] text-on-surface-variant uppercase tracking-widest mt-4">
                     Secured by OracleDesk Institutional Clearing

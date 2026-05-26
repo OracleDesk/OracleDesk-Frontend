@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { io } from "socket.io-client";
+import { usePositions } from "@/lib/hooks/usePortfolio";
 
 type NotificationType = "all" | "critical" | "trading" | "ai";
 
@@ -11,6 +13,7 @@ interface NotificationItem {
   title: string;
   message: string;
   time: string;
+  timestamp: number;
   payout?: string;
   txHash?: string;
   probability?: number;
@@ -20,79 +23,74 @@ interface NotificationItem {
   borderColor: string;
 }
 
-const notificationsData: NotificationItem[] = [
-  {
-    id: "1",
-    type: "critical",
-    title: "Market Resolution Critical",
-    message: "The \"Fed Rate Cut Sept\" market has been resolved to YES. Total payout of 1,240.50 USDC has been distributed to your wallet.",
-    time: "2m ago",
-    payout: "1,240.50 USDC",
-    icon: "gavel",
-    iconBg: "bg-tertiary-fixed",
-    iconColor: "text-tertiary",
-    borderColor: "border-l-tertiary",
-  },
-  {
-    id: "2",
-    type: "ai",
-    title: "Bullish AI Reasoning",
-    message: "Oracle Reasoner detects institutional accumulation on \"Layer 2 Adoption\" markets. Probability climbing from 42% to 58%.",
-    time: "15m ago",
-    probability: 58,
-    icon: "insights",
-    iconBg: "bg-primary-fixed",
-    iconColor: "text-primary",
-    borderColor: "border-l-primary",
-  },
-  {
-    id: "3",
-    type: "trading",
-    title: "Trade Confirmed",
-    message: "Purchased 5,000 shares of NO on \"Will BTC hit $100k in 2026\" at avg price $0.34.",
-    time: "42m ago",
-    txHash: "0x4f...8a2b",
-    icon: "check_circle",
-    iconBg: "bg-secondary-fixed",
-    iconColor: "text-secondary",
-    borderColor: "border-l-secondary",
-  },
-  {
-    id: "4",
-    type: "ai",
-    title: "Price Movement Alert",
-    message: "Significant volatility in \"ETH Staking Reward Rate\" market. Up +8.4% in the last 15 minutes.",
-    time: "1h ago",
-    icon: "trending_up",
-    iconBg: "bg-primary-fixed",
-    iconColor: "text-primary",
-    borderColor: "border-l-primary",
-  },
-  {
-    id: "5",
-    type: "trading",
-    title: "Limit Order Filled",
-    message: "Your limit order for \"Mars Landing by 2030\" has been fully filled at $0.08.",
-    time: "3h ago",
-    icon: "history",
-    iconBg: "bg-secondary-fixed",
-    iconColor: "text-secondary",
-    borderColor: "border-l-secondary",
-  },
-];
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
 
 export default function NotificationsPage() {
   const [filter, setFilter] = useState<NotificationType>("all");
+  const [localNotifications, setLocalNotifications] = useState<NotificationItem[]>([]);
+  const { data: positionsData } = usePositions({ limit: 10 });
 
-  const filteredNotifications = notificationsData.filter(
+  // Map positions to notification items
+  useEffect(() => {
+    if (positionsData?.positions) {
+      const positionNotifications: NotificationItem[] = positionsData.positions.map(pos => ({
+        id: `pos-${pos.id}`,
+        type: "trading",
+        title: "Trade Confirmed",
+        message: `${pos.status === 'CLOSED' ? 'Closed' : 'Opened'} ${pos.direction} position on "${pos.market.question}" for ${pos.amount.toLocaleString()} USDC.`,
+        time: new Date(pos.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: new Date(pos.createdAt).getTime(),
+        txHash: pos.trade?.txHash || undefined,
+        icon: pos.status === 'CLOSED' ? "history" : "check_circle",
+        iconBg: "bg-secondary-fixed",
+        iconColor: "text-secondary",
+        borderColor: "border-l-secondary",
+      }));
+
+      setLocalNotifications(prev => {
+        const existingIds = new Set(prev.map(n => n.id));
+        const newItems = positionNotifications.filter(n => !existingIds.has(n.id));
+        return [...prev, ...newItems].sort((a, b) => b.timestamp - a.timestamp);
+      });
+    }
+  }, [positionsData]);
+
+  // Socket listener for real-time trades
+  useEffect(() => {
+    const socket = io(API_URL.replace("/api/v1", ""));
+
+    socket.on("TRADE_EXECUTED", (data: any) => {
+      console.log("Real-time trade detected:", data);
+      const newNotif: NotificationItem = {
+        id: `socket-${Date.now()}`,
+        type: "trading",
+        title: "New Trade Executed",
+        message: `Oracle agent executed ${data.side} trade on Market ${data.marketId.substring(0,8)}... for ${data.amount} USDC.`,
+        time: "Just now",
+        timestamp: Date.now(),
+        txHash: data.txHash,
+        icon: "bolt",
+        iconBg: "bg-secondary-fixed",
+        iconColor: "text-secondary",
+        borderColor: "border-l-secondary",
+      };
+      setLocalNotifications(prev => [newNotif, ...prev]);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const filteredNotifications = localNotifications.filter(
     (item) => filter === "all" || item.type === filter
   );
 
   const filterButtons = [
-    { label: "All Notifications", type: "all" as const, icon: "dashboard", count: 24 },
-    { label: "Critical", type: "critical" as const, icon: "warning", count: 2 },
-    { label: "Trading", type: "trading" as const, icon: "payments", count: 12 },
-    { label: "AI Signals", type: "ai" as const, icon: "psychology", count: 10 },
+    { label: "All Notifications", type: "all" as const, icon: "dashboard", count: localNotifications.length },
+    { label: "Critical", type: "critical" as const, icon: "warning", count: localNotifications.filter(n => n.type === 'critical').length },
+    { label: "Trading", type: "trading" as const, icon: "payments", count: localNotifications.filter(n => n.type === 'trading').length },
+    { label: "AI Signals", type: "ai" as const, icon: "psychology", count: localNotifications.filter(n => n.type === 'ai').length },
   ];
 
   return (
@@ -138,7 +136,7 @@ export default function NotificationsPage() {
               <span className="font-label-caps text-label-caps text-primary">ORACLE INSIGHT</span>
             </div>
             <p className="text-body-md text-on-surface-variant leading-relaxed italic">
-              High volatility detected in the 2026 Election Prediction Market. AI reasoning suggests a 12% probability shift in the next 4 hours.
+              Real-time feed connected to Arc Testnet. Monitoring institutional flows and AI reasoning traces.
             </p>
           </div>
         </div>
@@ -147,8 +145,11 @@ export default function NotificationsPage() {
         <div className="col-span-12 lg:col-span-9 space-y-4">
           <div className="flex justify-between items-center mb-2">
             <h1 className="font-headline-md text-headline-md">Alert Center</h1>
-            <button className="text-primary font-label-caps text-label-caps hover:underline cursor-pointer">
-              Mark all as read
+            <button 
+              onClick={() => setLocalNotifications([])}
+              className="text-primary font-label-caps text-label-caps hover:underline cursor-pointer"
+            >
+              Clear all
             </button>
           </div>
 
@@ -176,14 +177,6 @@ export default function NotificationsPage() {
                     {item.message}
                   </p>
                   
-                  {item.payout && (
-                    <div className="mt-3 flex gap-2">
-                      <button className="px-3 py-1 bg-surface-container-high text-on-surface text-label-caps font-label-caps rounded hover:bg-surface-variant transition-colors">
-                        View Payout
-                      </button>
-                    </div>
-                  )}
-
                   {item.probability !== undefined && (
                     <div className="mt-3">
                       <div className="w-full bg-surface-container h-1 rounded overflow-hidden">
@@ -196,14 +189,19 @@ export default function NotificationsPage() {
                   )}
 
                   {item.txHash && (
-                    <div className="mt-2 flex items-center gap-2">
+                    <a 
+                      href={`https://explorer.testnet.arc.circle.com/tx/${item.txHash}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-2 hover:opacity-80 transition-opacity"
+                    >
                       <span className="text-xs font-data-mono bg-surface-container px-2 py-0.5 rounded text-on-surface-variant">
-                        TX: {item.txHash}
+                        TX: {item.txHash.substring(0, 10)}...
                       </span>
                       <span className="material-symbols-outlined text-xs text-primary">
                         open_in_new
                       </span>
-                    </div>
+                    </a>
                   )}
                 </div>
               </div>
@@ -211,15 +209,9 @@ export default function NotificationsPage() {
             
             {filteredNotifications.length === 0 && (
               <div className="text-center py-12 bg-white border border-dashed border-outline-variant rounded-lg">
-                <p className="text-on-surface-variant">No notifications found for this category.</p>
+                <p className="text-on-surface-variant">No active alerts. Monitoring the network...</p>
               </div>
             )}
-          </div>
-
-          <div className="flex justify-center py-6">
-            <button className="px-6 py-2 border border-outline-variant font-label-caps text-label-caps rounded hover:bg-surface-container transition-colors cursor-pointer text-[12px]">
-              Load Older Notifications
-            </button>
           </div>
         </div>
       </div>

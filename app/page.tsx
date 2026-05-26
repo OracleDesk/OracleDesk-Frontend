@@ -3,15 +3,127 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { io } from "socket.io-client";
 import { useWallet } from "@/lib/contexts/WalletContext";
+import { useMarkets } from "@/lib/hooks/useMarkets";
 
-const Ticker = () => {
-  const tickerItems = [
-    "BTC ETF APPROVAL: 92% (+2.4%)",
-    "FED RATE CUT MAR: 41% (-5.1%)",
-    "ETH LONDON UPGRADE: 78% (STABLE)",
-    "SOLANA BREAKPOINT ANNOUNCEMENT: 65% (+12%)",
+const AgentActivityFeed = () => {
+  const [feed, setFeed] = useState([
+    { time: "12:45:12", agent: "Alpha-Centauri", action: "DEPLOY_MARKET", details: "US CPI Nov 2026", chain: "Arc", color: "text-primary" },
+    { time: "12:44:58", agent: "Kelly-Bot-01", action: "OPEN_POSITION", details: "YES 5,000 USDC @ $0.64", chain: "Polygon", color: "text-secondary" },
+    { time: "12:44:20", agent: "Reasoning-Node-7", action: "PUBLISH_TRACE", details: "Trace ID: 0x77AF...42", chain: "Arc", color: "text-primary-fixed" },
+    { time: "12:43:55", agent: "Circle-Messenger", action: "CCTP_BURN", details: "20,000 USDC (Polygon)", chain: "Polygon", color: "text-on-primary-fixed-variant" },
+  ]);
+
+  useEffect(() => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://oracledesk-backend.onrender.com";
+    const socket = io(API_URL.replace("/api/v1", ""));
+
+    socket.on("TRADE_EXECUTED", (data: any) => {
+      const now = new Date();
+      const time = now.toLocaleTimeString('en-GB', { hour12: false });
+      setFeed(prev => [{
+        time,
+        agent: "Autonomous-Agent",
+        action: "EXECUTE_TRADE",
+        details: `${data.direction} ${data.amount.toLocaleString()} USDC @ ${data.price || "---"}`,
+        chain: "Polygon",
+        color: "text-secondary"
+      }, ...prev.slice(0, 5)]);
+    });
+
+    socket.on("REASONING_PUBLISHED", (data: any) => {
+      const now = new Date();
+      const time = now.toLocaleTimeString('en-GB', { hour12: false });
+      setFeed(prev => [{
+        time,
+        agent: "Oracle-Reasoner",
+        action: "PUBLISH_TRACE",
+        details: `Trace ID: ${data.traceId?.substring(0, 10)}...`,
+        chain: "Arc",
+        color: "text-primary-fixed"
+      }, ...prev.slice(0, 5)]);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="bg-on-background rounded-xl overflow-hidden shadow-2xl border border-outline border-opacity-30">
+      <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+        <div className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-secondary animate-pulse">monitoring</span>
+          <h3 className="font-headline-sm text-headline-sm text-white uppercase tracking-widest text-xs">Live Agent Activity</h3>
+        </div>
+        <span className="text-white/30 text-[9px] font-data-mono uppercase">Streaming Mainnet Trace</span>
+      </div>
+      <div className="p-6 h-[320px] overflow-y-auto font-data-mono text-[11px] space-y-3 custom-scrollbar">
+        {feed.map((item, i) => (
+          <div key={i} className="flex gap-4 border-l border-white/10 pl-4 py-1 hover:bg-white/5 transition-colors group">
+            <span className="text-white/20 whitespace-nowrap">[{item.time}]</span>
+            <span className="text-primary font-bold whitespace-nowrap">{item.agent}</span>
+            <span className={`font-black ${item.color} whitespace-nowrap`}>{item.action}</span>
+            <span className="text-white/70 truncate flex-grow">{item.details}</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded border ${item.chain === 'Arc' ? 'border-primary/50 text-primary' : 'border-secondary/50 text-secondary'} font-bold`}>{item.chain}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ProtocolActivity = () => {
+  const activity = [
+    { type: "NANOPAYMENT", detail: "USDC 0.10 -> Trace Unlock", status: "CONFIRMED", chain: "Arc", color: "text-secondary" },
+    { type: "CCTP_BRIDGE", detail: "Arc -> Polygon Settlement", status: "PENDING", chain: "Cross-Chain", color: "text-primary" },
+    { type: "PAYMASTER", detail: "Gas Sponsored: market_deploy", status: "SUCCESS", chain: "Arc", color: "text-secondary" },
   ];
+
+  return (
+    <div className="bg-surface-container-low border border-outline-variant rounded-xl p-6 shadow-sm flex flex-col h-full">
+      <div className="flex items-center gap-2 mb-6 text-on-surface">
+        <span className="material-symbols-outlined text-primary">hub</span>
+        <h3 className="font-headline-sm text-headline-sm uppercase tracking-tight text-sm">Circle Protocol Activity</h3>
+      </div>
+      <div className="space-y-4 flex-grow">
+        {activity.map((item, i) => (
+          <div key={i} className="flex flex-col gap-1 border-b border-outline-variant/30 pb-3 last:border-0">
+            <div className="flex justify-between items-center">
+              <span className={`font-label-caps text-[10px] font-black ${item.color}`}>{item.type}</span>
+              <span className="text-[9px] font-data-mono text-on-surface-variant">{item.chain}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-body-md text-on-surface">{item.detail}</span>
+              <span className="text-[9px] bg-surface-container-highest px-1.5 py-0.5 rounded font-bold text-secondary-fixed">{item.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="pt-4 mt-auto border-t border-outline-variant flex items-center justify-between">
+        <span className="text-[10px] text-on-surface-variant font-data-mono uppercase">Arc Gas Status</span>
+        <span className="text-[10px] text-secondary font-bold">FREE (SPONSORED)</span>
+      </div>
+    </div>
+  );
+};
+
+const Hero = () => {
+  const { data: markets = [] } = useMarkets({ limit: 6 });
+  
+  const tickerItems = markets.length > 0 
+    ? markets.map(m => {
+        const prob = Math.round((m.currentYesProb ?? m.initialYesProb) * 100);
+        const change = "+0.0%"; // Placeholder for real 1h change if available
+        return `${m.question.substring(0, 30).toUpperCase()}: ${prob}% (${change})`;
+      })
+    : [
+        "BTC ETF APPROVAL: 92% (+2.4%)",
+        "FED RATE CUT MAR: 41% (-5.1%)",
+        "ETH LONDON UPGRADE: 78% (STABLE)",
+        "SOLANA BREAKPOINT ANNOUNCEMENT: 65% (+12%)",
+      ];
 
   return (
     <div className="bg-on-background text-primary-fixed-dim py-2 border-b border-outline overflow-hidden">
@@ -133,17 +245,26 @@ const Hero = () => {
   );
 };
 
-const MarketCard = ({ icon, category, change, title, prob, volume, color = "secondary" }: any) => {
+const MarketCard = ({ id, icon, category, platform, change, title, prob, volume, color = "secondary" }: any) => {
   return (
-    <a href="/market" className="bg-white border border-outline-variant p-6 rounded-lg hover:shadow-md transition-all group cursor-pointer block">
+    <div className="bg-white border border-outline-variant p-6 rounded-lg hover:shadow-md transition-all group cursor-pointer block">
       <div className="flex justify-between items-start mb-4">
-        <div className="flex items-center gap-2">
-          <span className={`material-symbols-outlined text-${color}`}>{icon}</span>
-          <span className="font-label-caps text-on-surface-variant">{category}</span>
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg bg-${color}/10 flex items-center justify-center text-${color}`}>
+            <span className="material-symbols-outlined">{icon}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className={`text-[9px] font-bold uppercase tracking-tighter ${platform === 'ARC' ? 'text-primary' : 'text-secondary'}`}>
+              {platform === 'ARC' ? 'Arc Native' : 'Polygon/Poly'}
+            </span>
+            <span className="font-label-caps text-on-surface-variant">{category}</span>
+          </div>
         </div>
         <span className={`font-data-mono text-[12px] ${change.startsWith('+') ? 'text-secondary' : change.startsWith('-') ? 'text-tertiary' : 'text-on-surface-variant'}`}>{change}</span>
       </div>
-      <h3 className="font-headline-sm mb-4">{title}</h3>
+      <Link href={id ? `/markets/quick-view?marketId=${id}` : "/markets"} className="block">
+        <h3 className="font-headline-sm mb-4 group-hover:text-primary transition-colors">{title}</h3>
+      </Link>
       <div className="flex items-center gap-4 mb-6">
         <div className="flex-1">
           <div className="h-2 w-full bg-surface-container rounded-full overflow-hidden">
@@ -154,13 +275,21 @@ const MarketCard = ({ icon, category, change, title, prob, volume, color = "seco
       </div>
       <div className="flex justify-between items-center">
         <div className="text-label-caps text-on-surface-variant">Vol: {volume}</div>
-        <button className="bg-primary text-primary-foreground px-4 py-2 rounded font-label-caps text-[10px] uppercase group-hover:bg-primary-container">Trade Now</button>
+        <Link 
+          href={id ? `/markets/quick-view?marketId=${id}` : "/markets"} 
+          className="bg-primary text-primary-foreground px-4 py-2 rounded font-label-caps text-[10px] uppercase group-hover:bg-primary-container"
+        >
+          Trade Now
+        </Link>
       </div>
-    </a>
+    </div>
   );
 };
 
 const MarketsGrid = () => {
+  const { data, isLoading } = useMarkets({ limit: 3 });
+  const markets = data?.markets ?? [];
+
   return (
     <section className="py-20 max-w-container-max-width mx-auto px-gutter">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-4">
@@ -169,42 +298,60 @@ const MarketsGrid = () => {
           <p className="text-on-surface-variant">Real-time betting on global outcomes verified by OracleDesk AI.</p>
         </div>
         <div className="flex gap-2">
-          <button className="p-2 border border-outline-variant rounded hover:bg-white transition-colors">
-            <span className="material-symbols-outlined">filter_list</span>
-          </button>
-          <button className="p-2 border border-outline-variant rounded hover:bg-white transition-colors">
-            <span className="material-symbols-outlined">sort</span>
-          </button>
+          <Link href="/markets" className="p-2 border border-outline-variant rounded hover:bg-white transition-colors flex items-center gap-2 font-label-caps text-label-caps">
+            VIEW ALL <span className="material-symbols-outlined">arrow_forward</span>
+          </Link>
         </div>
       </div>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <MarketCard 
-          icon="currency_bitcoin" 
-          category="CRYPTO" 
-          change="+4.2% 1H" 
-          title="Will Bitcoin hit $100k by year-end 2026?" 
-          prob={62} 
-          volume="$45.2M" 
-          color="primary"
-        />
-        <MarketCard 
-          icon="policy" 
-          category="GOVERNANCE" 
-          change="-1.8% 1H" 
-          title="Next UK General Election date in May 2029?" 
-          prob={15} 
-          volume="$8.9M" 
-          color="secondary"
-        />
-        <MarketCard 
-          icon="eco" 
-          category="SCIENCE" 
-          change="0.0% 1H" 
-          title="LK-99 Room Temp Superconductor Replication?" 
-          prob={3} 
-          volume="$1.2M" 
-          color="secondary"
-        />
+        {isLoading ? (
+          [...Array(3)].map((_, i) => (
+            <div key={i} className="h-64 bg-surface-container-low animate-pulse rounded-lg border border-outline-variant"></div>
+          ))
+        ) : markets.length > 0 ? (
+          markets.map((m) => {
+            let icon = 'policy';
+            let color = 'secondary';
+            
+            if (m.category === 'CRYPTO') {
+              icon = 'currency_bitcoin';
+              color = 'primary';
+            } else if (m.category === 'FED' || m.category === 'ECB' || m.category === 'MACRO') {
+              icon = 'account_balance';
+              color = 'secondary';
+            } else if (m.category === 'ELECTION' || m.category === 'POLITICS') {
+              icon = 'policy';
+              color = 'secondary';
+            } else if (m.category === 'SPORTS') {
+              icon = 'sports_basketball';
+              color = 'tertiary';
+            } else if (m.category === 'GEOPOLITICAL') {
+              icon = 'public';
+              color = 'secondary';
+            }
+
+            return (
+              <MarketCard 
+                key={m.id}
+                id={m.id}
+                icon={icon}
+                category={m.category}
+                platform={m.marketUrl ? 'POLYMARKET' : 'ARC'}
+                change="+0.0% 24H"
+                title={m.question}
+                prob={Math.round((m.currentYesProb ?? m.initialYesProb) * 100)}
+                volume={`$${(m.totalLiquidity / 1000).toFixed(1)}K`}
+                color={color}
+              />
+            );
+          })
+        ) : (
+          <div className="col-span-full py-12 text-center bg-surface-container-low rounded-xl border border-outline-variant">
+            <span className="material-symbols-outlined text-outline text-4xl mb-4">search_off</span>
+            <p className="text-on-surface-variant font-medium">No live markets found.</p>
+            <p className="text-on-surface-variant/70 text-sm mt-2">Check back later or deploy a new market from the admin terminal.</p>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -248,7 +395,7 @@ const ReasoningSection = () => {
             </li>
             <li className="flex items-start gap-4">
               <div className="bg-secondary-fixed p-2 rounded">
-                <span className="material-symbols-outlined text-secondary">hub</span>
+                <span className="material-symbols-outlined text-primary">hub</span>
               </div>
               <div>
                 <h4 className="font-headline-sm">Multi-Model Consensus</h4>
@@ -361,6 +508,19 @@ export default function Home() {
       <main className="pt-16">
         <Ticker />
         <Hero />
+        
+        {/* J1 & J3: Agent Activity & Protocol Showcasing */}
+        <section className="bg-white py-12 border-b border-outline-variant">
+          <div className="max-w-container-max-width mx-auto px-gutter grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <AgentActivityFeed />
+            </div>
+            <div>
+              <ProtocolActivity />
+            </div>
+          </div>
+        </section>
+
         <MarketsGrid />
         <ReasoningSection />
         <PortfolioAnalytics />

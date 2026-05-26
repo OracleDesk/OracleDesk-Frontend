@@ -138,7 +138,7 @@ export default function BuyNoDemoPage() {
               </div>
 
               {/* Action Button */}
-              <button className="w-full bg-tertiary text-on-tertiary py-3 sm:py-4 rounded-lg font-headline-sm text-lg sm:text-headline-sm hover:bg-tertiary-container active:scale-[0.98] transition-all shadow-lg shadow-tertiary/20 flex items-center justify-center gap-2">
+              <button className="w-full bg-tertiary text-white py-3 sm:py-4 rounded-lg font-headline-sm text-lg sm:text-headline-sm hover:bg-tertiary-container active:scale-[0.98] transition-all shadow-lg shadow-tertiary/20 flex items-center justify-center gap-2">
                 <span>BUY NO</span>
                 <span className="material-symbols-outlined text-xl">trending_down</span>
               </button>

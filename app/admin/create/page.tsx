@@ -2,11 +2,14 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useWallet } from "@/lib/contexts/WalletContext";
+import { useGenerateMarket } from "@/lib/hooks/useMarkets";
 
 export default function AdminPage() {
   const { isConnected, connect } = useWallet();
+  const generateMarket = useGenerateMarket();
+
   const [question, setQuestion] = useState("");
-  const [category, setCategory] = useState("Crypto");
+  const [category, setCategory] = useState("CRYPTO");
   const [expiry, setExpiry] = useState("");
   const [liquidity, setLiquidity] = useState("");
   const [aiEnabled, setAiEnabled] = useState(true);
@@ -46,7 +49,30 @@ export default function AdminPage() {
   };
 
   const handleDeployHover = () => {
-    addLog("AWAITING_DEPLOY_COMMAND...");
+    if (!generateMarket.isPending) {
+      addLog("AWAITING_DEPLOY_COMMAND...");
+    }
+  };
+
+  const handleDeploy = async () => {
+    if (!question || !expiry) {
+      addLog("ERROR: MISSING_REQUIRED_PARAMS");
+      return;
+    }
+
+    addLog("INITIATING_GEN_AI_ORACLE...");
+    try {
+      const result = await generateMarket.mutateAsync({
+        question,
+        category,
+        expiry
+      });
+      addLog(`SUCCESS: JOB_${result.jobId.substring(0,8)}`);
+      setQuestion("");
+    } catch (err) {
+      console.error("Market generation failed:", err);
+      addLog("ERROR: DEPLOYMENT_FAILED");
+    }
   };
 
   if (!isConnected) {
@@ -113,10 +139,15 @@ export default function AdminPage() {
                   value={category}
                   onChange={handleCategoryChange}
                 >
-                  <option value="Crypto">Crypto</option>
-                  <option value="Macro">Macro</option>
-                  <option value="Politics">Politics</option>
-                  <option value="Tech">Tech</option>
+                  <option value="CRYPTO">Crypto</option>
+                  <option value="MACRO">Macro</option>
+                  <option value="ELECTION">Election</option>
+                  <option value="FED">Fed</option>
+                  <option value="ECB">ECB</option>
+                  <option value="GEOPOLITICAL">Geopolitical</option>
+                  <option value="POLITICS">Politics</option>
+                  <option value="SPORTS">Sports</option>
+                  <option value="ENTERTAINMENT">Entertainment</option>
                 </select>
               </div>
               
@@ -177,12 +208,14 @@ export default function AdminPage() {
             </div>
 
             <button
-              className="w-full py-4 bg-primary text-primary-foreground font-label-caps text-label-caps rounded-lg hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+              className="w-full py-4 bg-primary text-primary-foreground font-label-caps text-label-caps rounded-lg hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50"
               type="button"
               onMouseEnter={handleDeployHover}
+              onClick={handleDeploy}
+              disabled={generateMarket.isPending}
             >
               <span className="material-symbols-outlined">rocket_launch</span>
-              DEPLOY INSTITUTIONAL MARKET
+              {generateMarket.isPending ? "GENERATING..." : "DEPLOY INSTITUTIONAL MARKET"}
             </button>
           </form>
         </div>

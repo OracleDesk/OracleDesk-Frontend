@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useTraces } from "@/lib/hooks/useTraces";
 
 const extraLogs = [
   "> [08:27:01] Processing L3 cross-chain events...",
@@ -74,48 +75,44 @@ const TerminalLogSidebar = () => {
 
 interface ReasoningCardProps {
   id: string;
-  status: "Verified" | "Unverified";
+  marketId: string;
+  verified: boolean;
   title: string;
   description: string;
   confidence: number;
-  edge: string;
+  edge: number;
   synthesis: string;
-  matchFound?: string;
-  probShift?: string;
   sourceWeighting: { name: string; value: number }[];
   yesProb: number;
   noProb: number;
-  unverified?: boolean;
 }
 
 const ReasoningCard = ({ 
   id, 
-  status, 
+  marketId,
+  verified, 
   title, 
   description, 
   confidence, 
   edge, 
   synthesis, 
-  matchFound, 
-  probShift, 
   sourceWeighting, 
   yesProb, 
   noProb,
-  unverified 
 }: ReasoningCardProps) => {
-  const [isExpanded, setIsExpanded] = useState(!unverified);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   return (
-    <div className={`reasoning-card rounded-lg overflow-hidden flex flex-col ${unverified ? 'opacity-90 grayscale-[0.2]' : ''}`}>
+    <div className={`reasoning-card rounded-lg overflow-hidden flex flex-col ${!verified ? 'opacity-90 grayscale-[0.2]' : ''}`}>
       <div className="p-6 border-b border-outline-variant flex flex-col md:flex-row justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-2">
-            <span className="bg-surface-container-high px-2 py-0.5 rounded font-label-caps text-[10px] text-primary">ID: {id}</span>
-            <div className={`flex items-center gap-1 ${status === 'Verified' ? 'text-secondary' : 'text-on-surface-variant'} font-bold`}>
-              <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: status === 'Verified' ? "'FILL' 1" : "" }}>
-                {status === 'Verified' ? 'verified' : 'pending'}
+            <span className="bg-surface-container-high px-2 py-0.5 rounded font-label-caps text-[10px] text-primary">ID: {id.substring(0, 8).toUpperCase()}</span>
+            <div className={`flex items-center gap-1 ${verified ? 'text-secondary' : 'text-on-surface-variant'} font-bold`}>
+              <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: verified ? "'FILL' 1" : "" }}>
+                {verified ? 'verified' : 'pending'}
               </span>
-              <span className="font-label-caps text-label-caps">{status}</span>
+              <span className="font-label-caps text-label-caps">{verified ? 'Verified' : 'Pending'}</span>
             </div>
           </div>
           <h2 className="font-headline-sm text-headline-sm text-on-surface mb-1 uppercase tracking-tight">{title}</h2>
@@ -128,99 +125,80 @@ const ReasoningCard = ({
           </div>
           <div className="text-center">
             <div className="font-label-caps text-[10px] text-outline uppercase mb-1">Edge</div>
-            <div className="font-data-mono text-headline-sm text-secondary">{edge}</div>
+            <div className="font-data-mono text-headline-sm text-secondary">+{Math.round(edge * 100)}%</div>
           </div>
         </div>
       </div>
 
-      {unverified && !isExpanded && (
-        <div className="p-6 bg-surface-container-low flex justify-center border-t border-outline-variant">
-          <button 
-            className="text-primary font-label-caps text-label-caps flex items-center gap-2 hover:underline"
-            onClick={() => setIsExpanded(true)}
-          >
-            <span className="material-symbols-outlined">expand_more</span>
-            Show Analysis Details
-          </button>
+      <motion.div 
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: "auto" }}
+        className="ai-tint p-6"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div>
+            <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined">analytics</span> Reasoning Synthesis
+            </h3>
+            <div className="space-y-3 font-body-md text-on-surface leading-relaxed">
+              <p>{synthesis}</p>
+            </div>
+          </div>
+          <div>
+            <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined">balance</span> Source Weighting
+            </h3>
+            <div className="space-y-2">
+              {sourceWeighting.map((source, i) => (
+                <div key={i}>
+                  <div className="flex items-center justify-between text-xs font-label-caps mt-3 first:mt-0">
+                    <span>{source.name}</span>
+                    <span className="font-data-mono">{source.value}%</span>
+                  </div>
+                  <div className="h-1 bg-surface-container rounded-full overflow-hidden">
+                    <div className="h-full bg-primary" style={{ width: `${source.value}%` }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      )}
+        
+        <div className="mt-8">
+          <div className="flex justify-between mb-2">
+            <span className="font-label-caps text-label-caps text-secondary uppercase">Yes: {yesProb}%</span>
+            <span className="font-label-caps text-label-caps text-tertiary uppercase">No: {noProb}%</span>
+          </div>
+          <div className="h-4 w-full flex rounded-full overflow-hidden bg-surface-container">
+            <div className="probability-yes h-full" style={{ width: `${yesProb}%` }}></div>
+            <div className="probability-no h-full" style={{ width: `${noProb}%` }}></div>
+          </div>
+        </div>
+      </motion.div>
 
-      {isExpanded && (
-        <motion.div 
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="ai-tint p-6"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div>
-              <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined">analytics</span> Reasoning Synthesis
-              </h3>
-              <div className="space-y-3 font-body-md text-on-surface leading-relaxed">
-                <p>{synthesis}</p>
-                {(matchFound || probShift) && (
-                  <div className="p-3 bg-surface rounded border border-outline-variant text-[13px] font-data-mono">
-                    {matchFound && <div dangerouslySetInnerHTML={{ __html: matchFound }} />}
-                    {probShift && <div>{probShift}</div>}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div>
-              <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined">balance</span> Source Weighting
-              </h3>
-              <div className="space-y-2">
-                {sourceWeighting.map((source, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between text-xs font-label-caps mt-3 first:mt-0">
-                      <span>{source.name}</span>
-                      <span className="font-data-mono">{source.value}%</span>
-                    </div>
-                    <div className="h-1 bg-surface-container rounded-full overflow-hidden">
-                      <div className="h-full bg-primary" style={{ width: `${source.value}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          
-          <div className="mt-8">
-            <div className="flex justify-between mb-2">
-              <span className="font-label-caps text-label-caps text-secondary uppercase">Yes: {yesProb}%</span>
-              <span className="font-label-caps text-label-caps text-tertiary uppercase">No: {noProb}%</span>
-            </div>
-            <div className="h-4 w-full flex rounded-full overflow-hidden bg-surface-container">
-              <div className="probability-yes h-full" style={{ width: `${yesProb}%` }}></div>
-              <div className="probability-no h-full" style={{ width: `${noProb}%` }}></div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {isExpanded && (
-        <div className="p-6 bg-surface border-t border-outline-variant flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex gap-2">
-            <Link href="/reasoning/verify" className="px-4 py-2 bg-surface-container-low border border-outline text-on-surface rounded font-label-caps text-label-caps hover:bg-surface-variant transition-all">Verify</Link>
-            <Link 
-              href={`/copy-trade?traceId=${id}&marketId=${id.split('-')[0]}`} 
-              className="px-4 py-2 bg-primary-container text-white rounded font-label-caps text-label-caps hover:opacity-90 active:opacity-80 transition-all"
-            >
-              Copy Trade
-            </Link>
-          </div>
-          <Link href="/premium/trace" className="flex items-center gap-2 text-primary font-bold font-label-caps text-label-caps border border-primary px-4 py-2 rounded hover:bg-primary-fixed-dim/10">
-            <span className="material-symbols-outlined">lock_open</span>
-            Unlock Premium Trace
+      <div className="p-6 bg-surface border-t border-outline-variant flex flex-wrap gap-4 items-center justify-between">
+        <div className="flex gap-2">
+          <Link href={`/reasoning/verify?traceId=${id}`} className="px-4 py-2 bg-surface-container-low border border-outline text-on-surface rounded font-label-caps text-label-caps hover:bg-surface-variant transition-all">Verify</Link>
+          <Link 
+            href={`/copy-trade?traceId=${id}&marketId=${marketId}`} 
+            className="px-4 py-2 bg-primary-container text-white rounded font-label-caps text-label-caps hover:opacity-90 active:opacity-80 transition-all"
+          >
+            Copy Trade
           </Link>
         </div>
-      )}
+        <Link href="/premium/trace" className="flex items-center gap-2 text-primary font-bold font-label-caps text-label-caps border border-primary px-4 py-2 rounded hover:bg-primary-fixed-dim/10">
+          <span className="material-symbols-outlined">lock_open</span>
+          Unlock Premium Trace
+        </Link>
+      </div>
     </div>
   );
 };
 
 export default function ReasoningFeedPage() {
+  const { data, isLoading, error } = useTraces();
+  const traces = data?.traces ?? [];
+
   return (
     <main className="pt-24 pb-12 px-gutter max-w-container-max-width mx-auto">
       {/* Header Section */}
@@ -246,58 +224,44 @@ export default function ReasoningFeedPage() {
 
         {/* Main Feed Content */}
         <div className="lg:col-span-9 space-y-6">
-          <ReasoningCard 
-            id="8944-TX"
-            status="Verified"
-            title="Fed Funds Rate: 50bps Cut in September?"
-            description="Macro sentiment shifting toward aggressive easing following latest payroll divergence."
-            confidence={84}
-            edge="+12.4%"
-            synthesis="Primary driver is the sustained cooling in core inflation metrics paired with a softening labor market. Historical precedence for 50bps cuts occurs when unemployment exceeds the natural rate by >0.4% in a single quarter."
-            matchFound="MATCH_FOUND: [1998_EASING, 2007_EASING, 2020_EASING]<br/>PROBABILITY_SHIFT: YES (+4.2%)"
-            sourceWeighting={[
-              { name: "CPI Forecast Aggregates", value: 42 },
-              { name: "Futures Market Implieds", value: 35 },
-              { name: "Institutional Flow Data", value: 23 }
-            ]}
-            yesProb={68}
-            noProb={32}
-          />
-
-          <ReasoningCard 
-            id="9021-TX"
-            status="Unverified"
-            unverified
-            title="Ethereum Layer 2 TVL to exceed $50B?"
-            description="Consolidation phases in Arbitrum/Optimism suggest imminent breakout volume."
-            confidence={52}
-            edge="+2.1%"
-            synthesis="Inference models suggest a delayed reaction to EIP-4844 throughput capacity. Current growth rate projects a $50B milestone by Q1 2025 if transaction costs remain below $0.01."
-            yesProb={45}
-            noProb={55}
-            sourceWeighting={[
-              { name: "L2 Throughput Stats", value: 55 },
-              { name: "DeFiLlama TVL Aggregates", value: 30 },
-              { name: "Network Fee Projections", value: 15 }
-            ]}
-          />
-
-          <ReasoningCard 
-            id="9110-TX"
-            status="Verified"
-            title="Brent Crude: Above $90 by Year End?"
-            description="Supply constraints in Middle East offset by increasing US production output."
-            confidence={71}
-            edge="+7.8%"
-            synthesis="Geopolitical risk premiums are undervalued by 15% according to regional volatility clustering algorithms. Market assumes 'Status Quo' but inference indicates a 22% chance of localized supply shock."
-            sourceWeighting={[
-              { name: "Satellite Tanker Count", value: 45 },
-              { name: "EIA Inventory Reports", value: 40 },
-              { name: "Sentiment Parsing (X/News)", value: 15 }
-            ]}
-            yesProb={32}
-            noProb={68}
-          />
+          {isLoading ? (
+            [...Array(3)].map((_, i) => (
+              <div key={i} className="h-64 bg-surface-container-low animate-pulse rounded-lg border border-outline-variant"></div>
+            ))
+          ) : error ? (
+            <div className="p-12 text-center bg-surface-container-low rounded-xl border border-error/20">
+              <span className="material-symbols-outlined text-error text-4xl mb-4">error</span>
+              <p>Failed to load reasoning traces.</p>
+            </div>
+          ) : traces.length > 0 ? (
+            traces.map((t) => {
+              const yesProb = Math.round(t.probabilityEstimate * 100);
+              return (
+                <ReasoningCard 
+                  key={t.id}
+                  id={t.id}
+                  marketId={t.marketId}
+                  verified={t.verified}
+                  title={t.market?.question ?? "Market Analysis"}
+                  description={t.decisionType}
+                  confidence={Math.round(t.probabilityEstimate * 100)}
+                  edge={t.edge}
+                  synthesis={t.previewSources?.[0]?.signal ?? "Inference models suggest a significant edge based on current market data and multi-model consensus."}
+                  yesProb={yesProb}
+                  noProb={100 - yesProb}
+                  sourceWeighting={t.previewSources?.map(s => ({ name: s.source, value: Math.round(s.weight * 100) })) ?? [
+                    { name: "Market Liquidity", value: 40 },
+                    { name: "Social Sentiment", value: 35 },
+                    { name: "Historical Correlation", value: 25 }
+                  ]}
+                />
+              );
+            })
+          ) : (
+            <div className="p-12 text-center bg-surface-container-low rounded-xl">
+              <p>No reasoning traces available yet.</p>
+            </div>
+          )}
         </div>
       </div>
     </main>

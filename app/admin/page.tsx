@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useWallet } from "@/lib/contexts/WalletContext";
+import { useMarkets } from "@/lib/hooks/useMarkets";
 
 const AUTHORIZED_ADDRESSES = [
   process.env.NEXT_PUBLIC_TEAM_MEMBER_1_ADDRESS?.toLowerCase(),
@@ -41,6 +42,7 @@ const MarketItem = ({ title, status, volume }: { title: string, status: string, 
 
 export default function AdminDashboard() {
   const { isConnected, address, openModal } = useWallet();
+  const { data: markets = [], isLoading } = useMarkets({ limit: 10 });
 
   if (!isConnected) {
     return (
@@ -129,9 +131,20 @@ export default function AdminDashboard() {
               <button className="text-primary font-label-caps text-label-caps hover:underline">View All</button>
             </div>
             <div className="divide-y divide-outline-variant">
-              <MarketItem title="Will ETH exceed $5,000 by year end?" status="Active" volume="$14.2M" />
-              <MarketItem title="BTC Spot ETF Approval by Q1" status="Active" volume="$12.4M" />
-              <MarketItem title="UK General Election Date" status="Active" volume="$4.2M" />
+              {isLoading ? (
+                <div className="p-8 text-center text-on-surface-variant animate-pulse">Loading markets...</div>
+              ) : markets.length > 0 ? (
+                markets.map((m) => (
+                  <MarketItem 
+                    key={m.id}
+                    title={m.question} 
+                    status={m.status === 'ACTIVE' ? 'Active' : 'Pending'} 
+                    volume={`$${(m.totalLiquidity).toLocaleString()}`} 
+                  />
+                ))
+              ) : (
+                <div className="p-8 text-center text-on-surface-variant italic">No markets found. Deploy one to get started.</div>
+              )}
             </div>
           </div>
         </div>

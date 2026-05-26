@@ -7,7 +7,17 @@ import { io } from "socket.io-client";
 import { useMarkets } from "@/lib/hooks/useMarkets";
 import { formatUsdc } from "@/lib/web3/contracts";
 
-const FilterBar = () => {
+const FilterBar = ({ 
+  status, 
+  setStatus, 
+  category, 
+  setCategory 
+}: { 
+  status: string; 
+  setStatus: (s: string) => void;
+  category: string;
+  setCategory: (c: string) => void;
+}) => {
   return (
     <section className="mb-8 bg-surface-container-low p-4 rounded-xl border border-outline-variant">
       <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
@@ -20,24 +30,37 @@ const FilterBar = () => {
               type="text"
             />
           </div>
-          <select className="bg-surface border border-outline-variant rounded-lg px-4 py-2 text-label-caps font-label-caps outline-none focus:ring-2 focus:ring-primary">
-            <option>All Categories</option>
-            <option>Crypto</option>
-            <option>Economics</option>
-            <option>Geopolitics</option>
-            <option>Tech</option>
-          </select>
-          <select className="bg-surface border border-outline-variant rounded-lg px-4 py-2 text-label-caps font-label-caps outline-none focus:ring-2 focus:ring-primary">
-            <option>Sort: Liquidity</option>
-            <option>Sort: Expiry</option>
-            <option>Sort: Probability</option>
-            <option>Sort: Volume</option>
+          <select 
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="bg-surface border border-outline-variant rounded-lg px-4 py-2 text-label-caps font-label-caps outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+          >
+            <option value="">All Categories</option>
+            <option value="CRYPTO">Crypto</option>
+            <option value="MACRO">Macro</option>
+            <option value="ELECTION">Election</option>
+            <option value="FED">Fed</option>
+            <option value="ECB">ECB</option>
+            <option value="GEOPOLITICAL">Geopolitical</option>
+            <option value="POLITICS">Politics</option>
+            <option value="SPORTS">Sports</option>
+            <option value="ENTERTAINMENT">Entertainment</option>
           </select>
         </div>
         <div className="flex items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
           <div className="flex bg-surface-container rounded-lg p-1 border border-outline-variant">
-            <button className="px-4 py-1.5 text-label-caps font-label-caps bg-surface shadow-sm rounded-md text-primary font-bold">Live</button>
-            <button className="px-4 py-1.5 text-label-caps font-label-caps text-on-surface-variant hover:text-primary transition-colors">Resolved</button>
+            <button 
+              onClick={() => setStatus("ACTIVE")}
+              className={`px-4 py-1.5 text-label-caps font-label-caps shadow-sm rounded-md transition-all ${status === "ACTIVE" ? "bg-surface text-primary font-bold" : "text-on-surface-variant hover:text-primary"}`}
+            >
+              Live
+            </button>
+            <button 
+              onClick={() => setStatus("RESOLVED")}
+              className={`px-4 py-1.5 text-label-caps font-label-caps shadow-sm rounded-md transition-all ${status === "RESOLVED" ? "bg-surface text-primary font-bold" : "text-on-surface-variant hover:text-primary"}`}
+            >
+              Resolved
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
@@ -49,8 +72,11 @@ const FilterBar = () => {
   );
 };
 
-const MarketCard = ({ category, aiSignal, aiStatus, expiry, title, yesProb, liquidity, volume24h }: any) => {
+const MarketCard = ({ id, category, platform, reasoningTraces, expiry, title, yesProb, liquidity, volume24h }: any) => {
   const noProb = 100 - yesProb;
+  const latestTrace = reasoningTraces?.[0];
+  const aiSignal = latestTrace ? (latestTrace.edge > 0.05 ? "BULLISH" : latestTrace.edge < -0.05 ? "BEARISH" : "NEUTRAL") : "ANALYZING";
+  const aiStatus = latestTrace ? `${Math.abs(latestTrace.edge * 100).toFixed(1)}% EDGE` : "STABLE";
   
   return (
     <motion.div 
@@ -59,20 +85,23 @@ const MarketCard = ({ category, aiSignal, aiStatus, expiry, title, yesProb, liqu
     >
       <div className="p-5 flex-grow">
         <div className="flex justify-between items-start mb-4">
-          <div className="flex gap-2">
-            <span className="bg-primary-container/10 text-primary-container px-2 py-1 rounded text-label-caps font-bold uppercase tracking-wider">{category}</span>
-            <div className={`flex items-center gap-1 px-2 py-1 rounded ${aiSignal === 'NEUTRAL' ? 'bg-surface-container-highest' : 'bg-tertiary-fixed/30'}`}>
+          <div className="flex gap-2 flex-wrap">
+            <span className={`px-2 py-1 rounded text-label-caps font-bold uppercase tracking-wider ${platform === 'ARC' ? 'bg-primary-container text-on-primary-container border border-primary/20' : 'bg-secondary-container text-on-secondary-container'}`}>
+              {platform === 'ARC' ? 'Arc Native' : 'Polygon/Poly'}
+            </span>
+            <span className="bg-surface-container-highest text-on-surface-variant px-2 py-1 rounded text-label-caps font-bold uppercase tracking-wider">{category}</span>
+            <div className={`flex items-center gap-1 px-2 py-1 rounded ${aiSignal === 'NEUTRAL' || aiSignal === 'ANALYZING' ? 'bg-surface-container-highest' : aiSignal === 'BEARISH' ? 'bg-tertiary-fixed/30' : 'bg-secondary-fixed/30'}`}>
               <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                {aiSignal === 'VOLATILE' ? 'warning' : aiSignal === 'NEUTRAL' ? 'psychology' : 'bolt'}
+                {aiSignal === 'ANALYZING' ? 'sync' : aiSignal === 'NEUTRAL' ? 'psychology' : aiSignal === 'BULLISH' ? 'trending_up' : 'trending_down'}
               </span>
-              <span className={`${aiSignal === 'NEUTRAL' ? 'text-on-surface-variant' : 'text-tertiary'} text-label-caps font-bold uppercase`}>
+              <span className={`${aiSignal === 'NEUTRAL' || aiSignal === 'ANALYZING' ? 'text-on-surface-variant' : aiSignal === 'BEARISH' ? 'text-tertiary' : 'text-secondary'} text-label-caps font-bold uppercase`}>
                 AI {aiSignal}: {aiStatus}
               </span>
             </div>
           </div>
           <span className="font-data-mono text-label-caps text-on-surface-variant">EXP: {expiry}</span>
         </div>
-        <Link href="/markets/quick-view" className="block">
+        <Link href={`/markets/quick-view?marketId=${id}`} className="block">
           <h3 className="font-headline-sm text-headline-sm text-on-surface mb-6 group-hover:text-primary transition-colors line-clamp-3">
             {title}
           </h3>
@@ -111,10 +140,9 @@ const MarketCard = ({ category, aiSignal, aiStatus, expiry, title, yesProb, liqu
         </div>
       </div>
       <div className="p-3 grid grid-cols-2 gap-2 bg-surface-container-low border-t border-outline-variant">
-        <Link href="/markets/quick-view" className="bg-secondary text-on-secondary py-2.5 rounded-lg font-label-caps text-label-caps font-bold hover:brightness-110 active:opacity-80 transition-all uppercase text-center">Bet Yes</Link>
-        <Link href="/markets/quick-view" className="bg-tertiary text-on-tertiary py-2.5 rounded-lg font-label-caps text-label-caps font-bold hover:brightness-110 active:opacity-80 transition-all uppercase text-center">Bet No</Link>
-      </div>
-    </motion.div>
+        <Link href={`/markets/quick-view?marketId=${id}&side=YES`} className="bg-secondary text-primary-foreground py-2.5 rounded-lg font-label-caps text-label-caps font-bold hover:brightness-110 active:opacity-80 transition-all uppercase text-center">Bet Yes</Link>
+        <Link href={`/markets/quick-view?marketId=${id}&side=NO`} className="bg-tertiary text-primary-foreground py-2.5 rounded-lg font-label-caps text-label-caps font-bold hover:brightness-110 active:opacity-80 transition-all uppercase text-center">Bet No</Link>
+      </div>    </motion.div>
   );
 };
 
@@ -134,7 +162,7 @@ const TradingFeed = () => {
       console.log("Connected to Trading Feed socket");
     });
 
-    socket.on("TRADE_EXECUTED", (data) => {
+    socket.on("TRADE_EXECUTED", (data: any) => {
       const now = new Date();
       const time = now.toLocaleTimeString('en-GB', { hour12: false });
       
@@ -200,7 +228,12 @@ const TradingFeed = () => {
 };
 
 export default function Markets() {
-  const { data, isLoading, error } = useMarkets();
+  const [status, setStatus] = useState<any>("ACTIVE");
+  const [category, setCategory] = useState<string>("");
+  const { data, isLoading, error } = useMarkets({ 
+    status, 
+    category: category as any || undefined 
+  });
   const marketsData = data?.markets ?? [];
 
   useEffect(() => {
@@ -212,7 +245,12 @@ export default function Markets() {
   return (
     <div className="min-h-screen bg-surface">
       <main className="pt-24 pb-12 px-gutter max-w-container-max-width mx-auto">
-        <FilterBar />
+        <FilterBar 
+          status={status} 
+          setStatus={setStatus} 
+          category={category} 
+          setCategory={setCategory} 
+        />
         
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -244,9 +282,10 @@ export default function Markets() {
               return (
                 <MarketCard 
                   key={m.id} 
+                  id={m.id}
                   category={m.category}
-                  aiSignal="SIGNAL"
-                  aiStatus="BULLISH"
+                  platform={m.marketUrl ? 'POLYMARKET' : 'ARC'}
+                  reasoningTraces={m.reasoningTraces}
                   expiry={new Date(m.expiryTimestamp).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase()}
                   title={m.question}
                   yesProb={yesProb}
