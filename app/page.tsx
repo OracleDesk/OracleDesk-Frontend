@@ -110,7 +110,8 @@ const ProtocolActivity = () => {
 };
 
 const Ticker = () => {
-  const { data: markets = [] } = useMarkets({ limit: 6 });
+  const { data: marketsData } = useMarkets({ limit: 6 });
+  const markets = marketsData?.markets ?? [];
   
   const tickerItems = markets.length > 0 
     ? markets.map(m => {

@@ -42,7 +42,8 @@ const MarketItem = ({ title, status, volume }: { title: string, status: string, 
 
 export default function AdminDashboard() {
   const { isConnected, address, openModal } = useWallet();
-  const { data: markets = [], isLoading } = useMarkets({ limit: 10 });
+  const { data: marketsData, isLoading } = useMarkets({ limit: 10 });
+  const markets = marketsData?.markets ?? [];
 
   if (!isConnected) {
     return (
