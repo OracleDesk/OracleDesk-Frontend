@@ -1,6 +1,6 @@
 import { apiClient } from "./client";
 
-export type MarketCategory = "FED" | "ECB" | "ELECTION" | "GEOPOLITICAL" | "CRYPTO" | "MACRO";
+export type MarketCategory = "FED" | "ECB" | "ELECTION" | "GEOPOLITICAL" | "CRYPTO" | "MACRO" | "SPORTS" | "ENTERTAINMENT" | "POLITICS";
 export type MarketStatus = "PENDING" | "ACTIVE" | "RESOLVING" | "RESOLVED" | "CANCELLED";
 export type SettlementCurrency = "USDC" | "EURC";
 
@@ -24,6 +24,8 @@ export interface Market {
   expiryTimestamp: string;
   onChainAddress: string | null;
   createdAt: string;
+  marketUrl?: string | null;
+  reasoningTraces?: MarketTracePreview[];
   _count?: {
     trades?: number;
     reasoningTraces?: number;
