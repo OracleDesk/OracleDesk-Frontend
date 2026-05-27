@@ -109,7 +109,7 @@ const ProtocolActivity = () => {
   );
 };
 
-const Hero = () => {
+const Ticker = () => {
   const { data: markets = [] } = useMarkets({ limit: 6 });
   
   const tickerItems = markets.length > 0 
