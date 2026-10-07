@@ -121,7 +121,7 @@ export default function WalletDemoPage() {
                     <div className="w-6 h-6 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0">
                       <span className="material-symbols-outlined text-primary text-[16px]">diamond</span>
                     </div>
-                    <span className="font-medium text-on-surface">ETH</span>
+                    <span className="font-medium text-on-surface">XLM</span>
                   </div>
                   <div className="text-right">
                     <div className="font-data-mono text-on-surface text-sm sm:text-base">4.284</div>

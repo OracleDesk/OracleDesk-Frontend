@@ -149,7 +149,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div>
-                <label className="font-label-caps text-label-caps text-on-primary-container block mb-2">Gas Priority Level</label>
+                <label className="font-label-caps text-label-caps text-on-primary-container block mb-2">Fee Priority Level</label>
                 <div className="relative">
                   <select className="w-full bg-primary border border-on-primary-container rounded py-3 px-4 text-body-md focus:ring-1 focus:ring-white focus:outline-none appearance-none cursor-pointer">
                     <option>Normal (Optimized Cost)</option>
@@ -195,7 +195,7 @@ export default function SettingsPage() {
           <div className="bg-[#f0f9fa] p-4 rounded border border-primary/20 flex gap-4 items-start shadow-sm">
             <span className="material-symbols-outlined text-primary mt-1">psychology</span>
             <p className="text-body-md italic text-on-primary-container">
-              "OracleDesk AI suggests your slippage is 0.2% higher than similar institutional profiles. Adjusting to 0.3% could save ~1.4 ETH in monthly overhead."
+              &quot;OracleDesk AI suggests your slippage is 0.2% higher than similar institutional profiles. Adjusting to 0.3% could lower your trading costs.&quot;
             </p>
           </div>
         </div>

@@ -2,59 +2,73 @@
 
 import React, { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useSignTypedData, useWriteContract, usePublicClient } from "wagmi";
 import { useWallet } from "@/lib/contexts/WalletContext";
-import { buildPolymarketOrderPayload, submitPolymarketOrder, POLYMARKET_EIP712_DOMAIN, POLYMARKET_ORDER_TYPES } from "@/lib/web3/polymarket";
 import { getTrace, ReasoningTrace } from "@/lib/api/traces";
+import { confirmCopyTrade, initiateCopyTrade } from "@/lib/api/trade";
+import { ApiError } from "@/lib/api/client";
 import { useMarket } from "@/lib/hooks/useMarkets";
-import { CONTRACTS, PREDICTION_MARKET_ABI, ERC20_ABI, parseUsdc } from "@/lib/web3/contracts";
-import { arcTestnet } from "@/lib/web3/chains";
+import { useBuy, useQuoteBuy, useUsdcBalance } from "@/lib/hooks/useStellar";
+import { explorerTx } from "@/lib/stellar/config";
+import { formatUsdc, minOut, shareOf } from "@/lib/stellar/units";
 
-const COPY_TRADE_BUILDER_CODE = "ORACLE_COPY_AI";
-const COPY_TRADE_TOKEN_ID = "1";
+/** Wait this long after the slider stops before asking for a new quote. */
+const QUOTE_DEBOUNCE_MS = 400;
+
+function useDebounced<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
+}
 
 function CopyTradeContent() {
-  const { address, isConnected, chainId, openModal } = useWallet();
-  const { signTypedDataAsync } = useSignTypedData();
-  const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const { address, isConnected, isWrongNetwork, openModal, ensureSession } = useWallet();
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   const traceId = searchParams.get("traceId");
-  const marketId = searchParams.get("marketId");
+  const marketIdParam = searchParams.get("marketId");
 
   const [trace, setTrace] = useState<ReasoningTrace | null>(null);
-  const { data: market } = useMarket(marketId ?? trace?.marketId ?? undefined);
+  const [traceError, setTraceError] = useState<string | null>(null);
+  const { data: market } = useMarket(marketIdParam ?? trace?.marketId ?? undefined);
+  const onChainMarketId = market?.onChainMarketId ?? null;
 
-  const [allocation, setAllocation] = useState(12.5);
-  const [isMevProtected, setIsMevProtected] = useState(true);
+  const balance = useUsdcBalance(address);
+  const buy = useBuy();
+
+  // Allocation as a share of the wallet's USDC balance, in basis points.
+  const [allocationBps, setAllocationBps] = useState(1250);
   const [slippage, setSlippage] = useState(1.0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (traceId) {
-      getTrace(traceId)
-        .then(setTrace)
-        .catch(err => {
-          console.error("Failed to fetch trace:", err);
-          setStatusMessage("Note: Using simulated data. Trace ID not found on server.");
-        });
-    }
+    if (!traceId) return;
+    getTrace(traceId)
+      .then(setTrace)
+      .catch(() => setTraceError("We couldn't load this reasoning trace."));
   }, [traceId]);
 
-  const totalBankroll = 42000; // Example total bankroll
-  const allocatedAmount = (totalBankroll * allocation) / 100;
-  const usdcAmount = Math.max(1, Math.round(allocatedAmount));
+  // Side comes from the trace's edge. No trace or zero edge means no trade.
+  const side: "Yes" | "No" | null = trace && trace.edge !== 0 ? (trace.edge > 0 ? "Yes" : "No") : null;
+  const allocation = allocationBps / 100;
+  const amountRaw = balance.data !== undefined ? shareOf(balance.data, allocationBps) : null;
+  const slippageBps = Math.round(slippage * 100);
+
+  const debouncedAmount = useDebounced(amountRaw, QUOTE_DEBOUNCE_MS);
+  const quote = useQuoteBuy(onChainMarketId, side ?? "Yes", side ? debouncedAmount : null);
+  const minShares = quote.data !== undefined ? minOut(quote.data, slippageBps) : null;
 
   const handleSliderInteraction = (clientX: number) => {
     if (!sliderRef.current) return;
     const rect = sliderRef.current.getBoundingClientRect();
     const x = clientX - rect.left;
     const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
-    setAllocation(percentage);
+    setAllocationBps(Math.round(percentage * 100));
   };
 
   const onMouseDown = (e: React.MouseEvent) => {
@@ -72,66 +86,74 @@ function CopyTradeContent() {
     handleSliderInteraction(e.touches[0].clientX);
   };
 
+  const onSliderKey = (e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 1000 : 100;
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") setAllocationBps((v) => Math.min(10_000, v + step));
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") setAllocationBps((v) => Math.max(0, v - step));
+  };
+
   const handleConfirm = async () => {
     if (!isConnected || !address) {
       setStatusMessage("Connect your wallet to confirm the copy trade.");
-      openModal();
+      void openModal();
       return;
     }
-
-    if (chainId && chainId !== arcTestnet.id) {
-      setStatusMessage(`Switch your wallet to ${arcTestnet.name} to execute this trade.`);
+    if (isWrongNetwork) {
+      setStatusMessage("Switch your wallet to Stellar Testnet to place this trade.");
       return;
     }
-
-    const onChainAddress = market?.onChainAddress;
-    if (!onChainAddress) {
-      setStatusMessage("This market is not available for on-chain execution yet.");
+    if (!trace || !side) {
+      setStatusMessage(
+        !trace
+          ? "There's no reasoning trace to copy, so there's no side to take."
+          : "This trace shows no edge, so there's no trade to copy.",
+      );
+      return;
+    }
+    if (!onChainMarketId || !market) {
+      setStatusMessage("This market isn't on-chain yet, so it can't be traded.");
+      return;
+    }
+    if (!amountRaw || amountRaw <= 0n) {
+      setStatusMessage("Choose an allocation greater than zero. You may need USDC in your wallet first.");
       return;
     }
 
     setIsSubmitting(true);
-    setStatusMessage("Preparing transaction...");
-
     try {
-      const isYes = trace?.edge ? trace.edge >= 0 : true;
-      const amountRaw = parseUsdc(usdcAmount);
-
-      // 1. Approve USDC if needed
-      setStatusMessage("Approving USDC on Arc Testnet...");
-      const approveHash = await writeContractAsync({
-        address: CONTRACTS.arc.usdc,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [onChainAddress as `0x${string}`, amountRaw],
-      });
-      
-      if (publicClient) {
-        setStatusMessage("Waiting for Arc Approval (Circle Gasless)...");
-        await publicClient.waitForTransactionReceipt({ hash: approveHash });
+      setStatusMessage("Signing in to OracleDesk…");
+      if (!(await ensureSession())) {
+        setStatusMessage("You need to sign in with your wallet to copy trades.");
+        return;
       }
 
-      // 1.5 Simulated CCTP step for judge visibility
-      setStatusMessage("CCTP: Initiating Cross-Chain Liquidity Routing...");
-      await new Promise(r => setTimeout(r, 2000));
-      setStatusMessage("CCTP: Attestation Received. Liquidity Synced (Arc <-> Polygon).");
-      await new Promise(r => setTimeout(r, 1500));
-
-      // 2. Execute Buy
-      setStatusMessage(`Executing ${isYes ? 'YES' : 'NO'} trade on Arc Protocol...`);
-      const buyHash = await writeContractAsync({
-        address: onChainAddress as `0x${string}`,
-        abi: PREDICTION_MARKET_ABI,
-        functionName: "buy",
-        args: [isYes, amountRaw, 0n], // 0 minSharesOut for demo
+      setStatusMessage("Recording your copy trade…");
+      const { copyTradeId } = await initiateCopyTrade({
+        traceId: trace.id,
+        marketId: market.id,
+        amountRaw: amountRaw.toString(),
       });
 
-      setStatusMessage(`Copy trade executed! Transaction hash: ${buyHash.substring(0, 10)}...`);
-    } catch (error) {
-      console.error("Trade failed:", error);
+      setStatusMessage("Getting a fresh quote, then asking your wallet to sign…");
+      const result = await buy.mutateAsync({
+        marketId: onChainMarketId,
+        outcome: side,
+        collateralIn: amountRaw,
+        slippageBps,
+      });
+
+      if (result.txHash) await confirmCopyTrade(copyTradeId, result.txHash).catch(() => undefined);
       setStatusMessage(
-        error instanceof Error ? `Trade failed: ${error.message}` : "Trade failed. Please try again."
+        `Done. You received ${formatUsdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.` +
+          (result.txHash ? ` Transaction ${result.txHash.slice(0, 10)}…` : ""),
       );
+      if (result.txHash) window.open(explorerTx(result.txHash), "_blank", "noopener,noreferrer");
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "TRACE_LOCKED") {
+        setStatusMessage("Unlock this trace before copying it.");
+      } else {
+        setStatusMessage(error instanceof Error ? error.message : "The trade didn't go through. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -163,11 +185,12 @@ function CopyTradeContent() {
           <div className="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-white">
             <div>
               <h2 className="font-headline-md text-headline-md text-on-surface">Confirm Copy Trade</h2>
-              <p className="font-body-md text-body-md text-on-surface-variant text-sm">Execution through OracleDesk Institutional Routing</p>
+              <p className="font-body-md text-body-md text-on-surface-variant text-sm">Copy the agent&apos;s side on this market</p>
             </div>
             <button 
               className="material-symbols-outlined p-2 hover:bg-surface-container rounded-full transition-colors" 
               type="button"
+              aria-label="Close"
               onClick={() => router.back()}
             >
               close
@@ -181,13 +204,17 @@ function CopyTradeContent() {
               </div>
               <div>
                 <span className="font-label-caps text-label-caps text-primary-container mb-1 block">
-                  ORACLE INSIGHTS • {trace?.probabilityEstimate ? Math.round(trace.probabilityEstimate * 100) : 94}% CONFIDENCE
+                  ORACLE INSIGHTS{trace ? ` • ${Math.round(trace.probabilityEstimate * 100)}% ESTIMATE` : ""}
                 </span>
                 <p className="font-body-md text-body-md text-on-primary-fixed-variant leading-relaxed">
                   {trace?.market?.question ? (
-                    <>Market analysis for <span className="font-bold">{trace.market.question}</span> indicates significant edge. OracleDesk institutional signals suggest a trade opportunity.</>
+                    <>Agent analysis for <span className="font-bold">{trace.market.question}</span>.</>
+                  ) : traceError ? (
+                    <>{traceError}</>
+                  ) : traceId ? (
+                    <>Loading the reasoning trace…</>
                   ) : (
-                    <>Market sentiment for <span className="font-bold">US-CPI-NOV-24</span> shows aggressive hedging in decentralized prediction markets. Bayesian modeling suggests a 68.2% probability of &quot;Yes&quot; exceeding the 2.4% threshold, diverging from Bloomberg consensus by +14bps.</>
+                    <>Open this page from a reasoning trace to copy its trade.</>
                   )}
                 </p>
               </div>
@@ -199,9 +226,9 @@ function CopyTradeContent() {
               <div className="p-4 border border-outline-variant rounded-lg bg-white">
                 <span className="font-label-caps text-label-caps text-on-surface-variant block mb-2 uppercase text-[10px]">Proposed Side</span>
                 <div className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-full ${trace?.edge && trace.edge < 0 ? 'bg-tertiary' : 'bg-secondary'}`}></span>
-                  <span className={`font-headline-sm text-headline-sm text-base sm:text-lg ${trace?.edge && trace.edge < 0 ? 'text-tertiary' : 'text-secondary'}`}>
-                    {trace?.edge && trace.edge < 0 ? 'NO / SHORT' : 'YES / LONG'}
+                  <span className={`w-3 h-3 rounded-full ${side === 'No' ? 'bg-tertiary' : side === 'Yes' ? 'bg-secondary' : 'bg-outline-variant'}`}></span>
+                  <span className={`font-headline-sm text-headline-sm text-base sm:text-lg ${side === 'No' ? 'text-tertiary' : side === 'Yes' ? 'text-secondary' : 'text-on-surface-variant'}`}>
+                    {side === 'No' ? 'NO / SHORT' : side === 'Yes' ? 'YES / LONG' : 'No trade'}
                   </span>
                 </div>
               </div>
@@ -209,25 +236,34 @@ function CopyTradeContent() {
                 <span className="font-label-caps text-label-caps text-on-surface-variant block mb-2 uppercase text-[10px]">Probability</span>
                 <div className="flex items-center gap-2">
                   <span className="font-headline-sm text-headline-sm text-on-surface text-base sm:text-lg">
-                    {trace?.probabilityEstimate ? (trace.probabilityEstimate * 100).toFixed(1) : "68.2"}%
+                    {trace ? `${(trace.probabilityEstimate * 100).toFixed(1)}%` : "—"}
                   </span>
-                  <span className="text-[10px] text-secondary font-bold px-1 bg-secondary-container rounded">
-                    {trace?.edge ? `${(trace.edge * 100).toFixed(1)}% Δ` : "+2.4% Δ"}
-                  </span>
+                  {trace && (
+                    <span className="text-[10px] text-secondary font-bold px-1 bg-secondary-container rounded">
+                      {`${trace.edge > 0 ? "+" : ""}${(trace.edge * 100).toFixed(1)}% Δ`}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="space-y-3">
               <div className="flex justify-between items-end flex-wrap gap-2">
-                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase text-[10px]">Bankroll Allocation (%)</label>
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase text-[10px]">Share of your USDC balance (%)</label>
                 <span className="font-data-mono text-data-mono text-primary font-bold text-xs sm:text-sm">
-                  {allocation.toFixed(2)}% (${allocatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                  {allocation.toFixed(2)}% ({amountRaw !== null ? `${formatUsdc(amountRaw, { maxDecimals: 2, minDecimals: 2, grouping: true })} USDC` : isConnected ? "loading balance…" : "connect a wallet"})
                 </span>
               </div>
               <div
                 ref={sliderRef}
-                className="relative h-2 bg-surface-container rounded-full cursor-pointer touch-none"
+                className="relative h-2 bg-surface-container rounded-full cursor-pointer touch-none focus:outline-none focus:ring-2 focus:ring-primary"
+                role="slider"
+                tabIndex={0}
+                aria-label="Share of your USDC balance"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Number(allocation.toFixed(2))}
+                onKeyDown={onSliderKey}
                 onMouseDown={onMouseDown}
                 onTouchStart={(e) => handleSliderInteraction(e.touches[0].clientX)}
                 onTouchMove={onTouchMove}
@@ -266,18 +302,25 @@ function CopyTradeContent() {
                   ))}
                 </div>
               </div>
-              <div className="pt-4 border-t border-outline-variant flex justify-between items-center">
+              <div className="pt-4 border-t border-outline-variant flex justify-between items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-outline text-sm">security</span>
-                  <span className="font-label-caps text-label-caps text-on-surface-variant uppercase text-[10px]">MEV Protection</span>
+                  <span className="material-symbols-outlined text-outline text-sm">query_stats</span>
+                  <span className="font-label-caps text-label-caps text-on-surface-variant uppercase text-[10px]">Expected shares</span>
                 </div>
-                <button
-                  onClick={() => setIsMevProtected(!isMevProtected)}
-                  className="relative inline-flex items-center cursor-pointer focus:outline-none"
-                >
-                  <div className={`w-8 h-4 rounded-full transition-colors ${isMevProtected ? 'bg-secondary' : 'bg-outline-variant'}`}></div>
-                  <div className={`absolute left-[2px] top-[2px] bg-white rounded-full h-3 w-3 transition-transform ${isMevProtected ? 'translate-x-4' : 'translate-x-0'}`}></div>
-                </button>
+                <div className="text-right font-data-mono text-xs">
+                  {quote.data !== undefined && minShares !== null ? (
+                    <>
+                      <span className="text-on-surface font-bold">{formatUsdc(quote.data, { maxDecimals: 2 })}</span>
+                      <span className="block text-[10px] text-on-surface-variant">at least {formatUsdc(minShares, { maxDecimals: 2 })} after slippage</span>
+                    </>
+                  ) : quote.isFetching ? (
+                    <span className="text-on-surface-variant">Quoting…</span>
+                  ) : quote.error ? (
+                    <span className="text-error">{quote.error.message}</span>
+                  ) : (
+                    <span className="text-on-surface-variant">—</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -299,14 +342,14 @@ function CopyTradeContent() {
                   className="flex-[2] bg-[#005f73] text-primary-foreground py-4 rounded-lg font-headline-sm text-headline-sm shadow-lg shadow-primary-container/20 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleConfirm}
                   type="button"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !side}
                 >
                   <span className="material-symbols-outlined text-xl">bolt</span>
                   {isSubmitting ? "Submitting..." : "Confirm Copy Trade"}
                 </button>
               </div>
               <p className="text-center font-body-md text-body-md text-on-surface-variant text-xs">
-                By confirming, you authorize execution on <span className="underline decoration-dotted cursor-help">Polymarket</span> and <span className="underline decoration-dotted cursor-help">Kalshi</span>.
+                Your wallet signs a buy on the OracleDesk market contract on Stellar Testnet. The trade fails instead of filling below the slippage limit.
               </p>
             </div>
           </div>

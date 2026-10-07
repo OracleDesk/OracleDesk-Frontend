@@ -1,29 +1,119 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { useMarket } from "@/lib/hooks/useMarkets";
+import { getMarketByOnChainId } from "@/lib/api/markets";
+import { ApiError } from "@/lib/api/client";
+import { useBuy, useOnChainMarket, usePosition, useQuoteBuy, useUsdcBalance } from "@/lib/hooks/useStellar";
+import { useWallet } from "@/lib/contexts/WalletContext";
+import { explorerTx } from "@/lib/stellar/config";
+import { formatUsdc, minOut, tryParseUsdc } from "@/lib/stellar/units";
+
+const SLIPPAGE_BPS = 100; // 1%
+
+const SourceTag = ({ source }: { source: "chain" | "backend" }) => (
+  <span
+    title={source === "chain" ? "Read live from the market contract" : "OracleDesk backend estimate; may lag the chain"}
+    className={`ml-1 text-[9px] font-bold uppercase px-1 rounded ${source === "chain" ? "bg-secondary-container text-on-secondary-container" : "bg-surface-container-highest text-on-surface-variant"}`}
+  >
+    {source}
+  </span>
+);
+
+function useDebounced<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
+}
 
 export default function MarketQuickViewPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="relative min-h-[calc(100vh-64px)] overflow-hidden bg-surface flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </main>
+      }
+    >
+      <MarketQuickViewContent />
+    </Suspense>
+  );
+}
+
+function MarketQuickViewContent() {
   const searchParams = useSearchParams();
   const marketId = searchParams.get("marketId");
-  const side = searchParams.get("side"); // YES or NO
+  const onChainIdParam = searchParams.get("onChainId");
+  const initialSide = searchParams.get("side") === "NO" ? "No" : "Yes";
 
-  const { data: market, isLoading, error } = useMarket(marketId ?? undefined);
-  const [showModal, setShowModal] = useState(true);
+  const backendById = useMarket(marketId ?? undefined);
+  // Opened from an on-chain id: the backend may or may not know this market.
+  const backendByChainId = useQuery({
+    queryKey: ["market-by-chain-id", onChainIdParam],
+    queryFn: () => getMarketByOnChainId(onChainIdParam as string),
+    enabled: Boolean(onChainIdParam) && !marketId,
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
+  });
+  const market = backendById.data ?? backendByChainId.data ?? null;
+  const onChainMarketId = market?.onChainMarketId ?? onChainIdParam ?? null;
+  const chain = useOnChainMarket(onChainMarketId);
 
-  // Sparkline path simulation
+  const { address, isConnected, openModal } = useWallet();
+  const position = usePosition(onChainMarketId, address);
+  const balance = useUsdcBalance(address);
+  const buy = useBuy();
+
+  const [showModal] = useState(true);
+  const [side, setSide] = useState<"Yes" | "No">(initialSide);
+  const [amountInput, setAmountInput] = useState("10");
+  const [buyStatus, setBuyStatus] = useState<string | null>(null);
+  const amountRaw = tryParseUsdc(amountInput);
+  const debouncedAmount = useDebounced(amountRaw, 400);
+  const quote = useQuoteBuy(onChainMarketId, side, debouncedAmount);
+
+  // Illustrative only: there is no price history source yet.
   const sparklinePath = "M0 25 L10 22 L20 28 L30 18 L40 20 L50 15 L60 17 L70 10 L80 12 L90 5 L100 8";
 
-  const yesProb = useMemo(() => {
-    if (!market) return 50;
-    const rawProb = market.currentYesProb ?? market.initialYesProb;
-    return Math.round(rawProb <= 1 ? rawProb * 100 : rawProb);
-  }, [market]);
-
+  const view = chain.data;
+  const fromChain = Boolean(view);
+  const backendProb = market ? Math.round((market.currentYesProb ?? market.initialYesProb) * 100) : 50;
+  const yesProb = view ? Math.round(view.yesBps / 100) : backendProb;
   const noProb = 100 - yesProb;
+  const chainStatus = view?.market.status;
+  // Compare with when the market was read, not "now", to keep render pure.
+  const isOpen = chainStatus?.tag === "Open" && Number(view?.market.close_time ?? 0) * 1000 > chain.dataUpdatedAt;
+
+  const isLoading = backendById.isLoading || (backendByChainId.isLoading && !marketId) || (chain.isLoading && !market);
+  const notFound = !market && !view;
+
+  const handleBuy = async () => {
+    if (!isConnected) {
+      void openModal();
+      return;
+    }
+    if (!onChainMarketId) return;
+    if (!amountRaw || amountRaw <= 0n) {
+      setBuyStatus("Enter an amount like 10 or 2.5.");
+      return;
+    }
+    setBuyStatus("Getting a fresh quote, then asking your wallet to sign…");
+    try {
+      const result = await buy.mutateAsync({ marketId: onChainMarketId, outcome: side, collateralIn: amountRaw, slippageBps: SLIPPAGE_BPS });
+      setBuyStatus(
+        `Bought ${formatUsdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.` +
+          (result.txHash ? ` View: ${explorerTx(result.txHash)}` : ""),
+      );
+    } catch (err) {
+      setBuyStatus(err instanceof Error ? err.message : "The trade didn't go through.");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -33,7 +123,7 @@ export default function MarketQuickViewPage() {
     );
   }
 
-  if (error || !market) {
+  if (notFound) {
     return (
       <main className="relative min-h-[calc(100vh-64px)] overflow-hidden bg-surface flex flex-col items-center justify-center p-6 text-center">
         <span className="material-symbols-outlined text-error text-6xl mb-4">error</span>
@@ -46,11 +136,21 @@ export default function MarketQuickViewPage() {
     );
   }
 
+  const title = market?.question ?? `Market #${onChainMarketId} · ${view?.market.meta_uri ?? ""}`;
+  const statusLabel = chainStatus
+    ? chainStatus.tag === "Resolved" ? `RESOLVED ${chainStatus.values[0].tag.toUpperCase()}` : chainStatus.tag === "Void" ? "VOID" : isOpen ? "OPEN" : "CLOSED"
+    : market?.status ?? "";
+  const categoryLabel = market?.category ?? view?.market.category.tag ?? "";
+  const liquidityText = view
+    ? `$${formatUsdc(view.market.sets_minted, { maxDecimals: 2, grouping: true })}`
+    : market ? `$${market.totalLiquidity.toLocaleString()}` : "—";
+  const latestTrace = market?.reasoningTraces?.[0];
+
   return (
     <main className="relative min-h-[calc(100vh-64px)] overflow-hidden bg-surface">
       {/* Background decoration for terminal feel */}
       <div className="fixed bottom-4 left-4 font-data-mono text-[10px] text-outline opacity-50 z-0 pointer-events-none">
-        CONNECTED :: ORACLE_NODE_492 // LATENCY: 14ms // REAL-TIME_STREAM: ACTIVE
+        STELLAR TESTNET :: MARKET {onChainMarketId !== null ? `#${onChainMarketId}` : "NOT ON-CHAIN"}
       </div>
 
       {/* Main Content Background (Simulated/Blurred) */}
@@ -84,13 +184,15 @@ export default function MarketQuickViewPage() {
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant bg-surface-bright">
                 <div className="flex items-center gap-2">
-                  <span className={`bg-${market.status === 'ACTIVE' ? 'secondary' : 'outline'}-container text-on-${market.status === 'ACTIVE' ? 'secondary' : 'outline'}-container font-label-caps text-[10px] px-2 py-0.5 rounded-full font-bold`}>
-                    {market.status}
+                  <span className={`${isOpen ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container-highest text-on-surface-variant'} font-label-caps text-[10px] px-2 py-0.5 rounded-full font-bold`}>
+                    {statusLabel}
+                    {chainStatus && <SourceTag source="chain" />}
                   </span>
-                  <span className="font-label-caps text-label-caps text-outline uppercase font-bold tracking-wider">{market.category}</span>
+                  <span className="font-label-caps text-label-caps text-outline uppercase font-bold tracking-wider">{categoryLabel}</span>
                 </div>
                 <Link 
                   href="/markets"
+                  aria-label="Close"
                   className="text-outline hover:text-on-surface transition-colors p-1"
                 >
                   <span className="material-symbols-outlined">close</span>
@@ -102,7 +204,7 @@ export default function MarketQuickViewPage() {
                 {/* Market Question */}
                 <div>
                   <h2 className="font-headline-sm text-headline-sm text-on-surface leading-tight">
-                    {market.question}
+                    {title}
                   </h2>
                 </div>
 
@@ -111,15 +213,12 @@ export default function MarketQuickViewPage() {
                   <div className="space-y-1">
                     <div className="flex items-baseline gap-2">
                       <span className="font-display-lg text-display-lg text-on-surface text-4xl">{yesProb}%</span>
-                      <span className="text-secondary font-label-caps text-label-caps flex items-center gap-0.5 font-bold">
-                        <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
-                        0.0%
-                      </span>
+                      <SourceTag source={fromChain ? "chain" : "backend"} />
                     </div>
-                    <p className="font-label-caps text-label-caps text-outline uppercase font-bold tracking-wider">Current Probability</p>
+                    <p className="font-label-caps text-label-caps text-outline uppercase font-bold tracking-wider">YES price</p>
                   </div>
                   {/* Sparkline Simulation */}
-                  <div className="h-16 relative w-full">
+                  <div className="h-16 relative w-full" aria-hidden="true" title="Illustration; price history isn't indexed yet">
                     <svg className="w-full h-full text-secondary stroke-2 fill-none" viewBox="0 0 100 30" preserveAspectRatio="none">
                       <path 
                         d={sparklinePath} 
@@ -145,7 +244,7 @@ export default function MarketQuickViewPage() {
 
                 {/* Trading Module */}
                 <div className="grid grid-cols-2 gap-3">
-                  <button className={`group relative bg-surface-container-lowest border ${side === 'YES' ? 'border-secondary border-2' : 'border-secondary/30'} hover:border-secondary hover:bg-secondary-container/10 p-4 rounded-lg transition-all duration-200`}>
+                  <button type="button" aria-pressed={side === 'Yes'} onClick={() => setSide('Yes')} className={`group relative bg-surface-container-lowest border ${side === 'Yes' ? 'border-secondary border-2' : 'border-secondary/30'} hover:border-secondary hover:bg-secondary-container/10 p-4 rounded-lg transition-all duration-200`}>
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-label-caps text-label-caps text-secondary font-bold">YES</span>
                       <span className="font-data-mono text-data-mono text-on-surface">${(yesProb/100).toFixed(2)}</span>
@@ -154,7 +253,7 @@ export default function MarketQuickViewPage() {
                       <div className="bg-secondary h-full transition-all duration-500" style={{ width: `${yesProb}%` }}></div>
                     </div>
                   </button>
-                  <button className={`group relative bg-surface-container-lowest border ${side === 'NO' ? 'border-tertiary border-2' : 'border-tertiary/30'} hover:border-tertiary hover:bg-tertiary-container/10 p-4 rounded-lg transition-all duration-200`}>
+                  <button type="button" aria-pressed={side === 'No'} onClick={() => setSide('No')} className={`group relative bg-surface-container-lowest border ${side === 'No' ? 'border-tertiary border-2' : 'border-tertiary/30'} hover:border-tertiary hover:bg-tertiary-container/10 p-4 rounded-lg transition-all duration-200`}>
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-label-caps text-label-caps text-tertiary font-bold">NO</span>
                       <span className="font-data-mono text-data-mono text-on-surface">${(noProb/100).toFixed(2)}</span>
@@ -165,6 +264,52 @@ export default function MarketQuickViewPage() {
                   </button>
                 </div>
 
+                {/* Buy */}
+                {onChainMarketId !== null && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <label htmlFor="buy-amount" className="font-label-caps text-label-caps text-on-surface-variant uppercase text-[10px] shrink-0">
+                        Amount (USDC)
+                      </label>
+                      <input
+                        id="buy-amount"
+                        inputMode="decimal"
+                        value={amountInput}
+                        onChange={(e) => setAmountInput(e.target.value)}
+                        className="flex-1 bg-surface border border-outline-variant rounded p-2 font-data-mono text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleBuy}
+                        disabled={buy.isPending || (isConnected && !isOpen)}
+                        className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-label-caps text-label-caps font-bold disabled:opacity-50"
+                      >
+                        {!isConnected ? "Connect" : buy.isPending ? "Buying…" : `Buy ${side.toUpperCase()}`}
+                      </button>
+                    </div>
+                    <div className="flex justify-between text-[11px] font-data-mono text-on-surface-variant">
+                      <span>
+                        {amountRaw === null
+                          ? "Enter an amount like 10 or 2.5"
+                          : quote.data !== undefined
+                            ? `≈ ${formatUsdc(quote.data, { maxDecimals: 2 })} shares, at least ${formatUsdc(minOut(quote.data, SLIPPAGE_BPS), { maxDecimals: 2 })} (1% slippage)`
+                            : quote.error ? quote.error.message : quote.isFetching ? "Quoting…" : ""}
+                      </span>
+                      {balance.data !== undefined && <span>Balance {formatUsdc(balance.data, { maxDecimals: 2, grouping: true })}</span>}
+                    </div>
+                    {!isOpen && view && (
+                      <p className="text-[11px] text-on-surface-variant">This market is closed to trading.</p>
+                    )}
+                    {position.data && (position.data.yes > 0n || position.data.no > 0n) && (
+                      <p className="text-[11px] font-data-mono text-on-surface">
+                        Your position: {formatUsdc(position.data.yes, { maxDecimals: 2 })} YES · {formatUsdc(position.data.no, { maxDecimals: 2 })} NO
+                        <SourceTag source="chain" />
+                      </p>
+                    )}
+                    {buyStatus && <p className="text-xs text-on-surface-variant break-all" role="status">{buyStatus}</p>}
+                  </div>
+                )}
+
                 {/* AI Reasoning Snippet */}
                 <div className="bg-[#f0f9fa] border border-primary-container/20 p-4 rounded-lg space-y-2 relative overflow-hidden">
                   <div className="flex items-center gap-2 text-primary z-10 relative">
@@ -172,9 +317,9 @@ export default function MarketQuickViewPage() {
                     <span className="font-label-caps text-label-caps uppercase font-bold tracking-wider">Oracle AI Insights</span>
                   </div>
                   <p className="font-body-md text-body-md text-on-surface-variant italic z-10 relative leading-relaxed">
-                    {market.reasoningTraces?.[0]?.probabilityEstimate 
-                      ? `AI Reasoning suggests a ${Math.round(market.reasoningTraces[0].probabilityEstimate * 100)}% probability based on multi-model consensus. Edge detected: ${Math.round(market.reasoningTraces[0].edge * 100)}%.`
-                      : "Market sentiment analysis suggests shifting probabilities following recent data. Multi-model consensus is currently evaluating historical correlations."
+                    {latestTrace
+                      ? `The agent estimates a ${Math.round(latestTrace.probabilityEstimate * 100)}% probability. Edge: ${Math.round(latestTrace.edge * 100)}%.`
+                      : "No reasoning trace has been published for this market yet."
                     }
                   </p>
                   <div className="absolute right-0 bottom-0 opacity-5 translate-x-4 translate-y-4">
@@ -186,12 +331,16 @@ export default function MarketQuickViewPage() {
               {/* Footer Action */}
               <div className="px-6 py-4 bg-surface-container-low border-t border-outline-variant flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex flex-col items-center sm:items-start">
-                  <span className="font-data-mono text-data-mono text-on-surface font-bold">${(market.totalLiquidity / 1000).toFixed(1)}K Vol</span>
-                  <span className="text-[10px] text-outline font-label-caps uppercase font-bold tracking-wider">Total Liquidity</span>
+                  <span className="font-data-mono text-data-mono text-on-surface font-bold">{liquidityText}<SourceTag source={fromChain ? "chain" : "backend"} /></span>
+                  <span className="text-[10px] text-outline font-label-caps uppercase font-bold tracking-wider">Collateral locked</span>
                 </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <Link href={`/markets/terminal?marketId=${market.id}`} className="flex-1 sm:flex-none font-label-caps text-label-caps text-primary hover:underline px-4 transition-all font-bold text-center">View Full Terminal</Link>
-                  <Link href={`/execution-terminal?marketId=${market.id}&side=${side || 'YES'}`} className="flex-1 sm:flex-none bg-primary text-primary-foreground px-6 py-2.5 rounded-lg font-label-caps text-label-caps hover:bg-primary-container active:scale-95 transition-all shadow-sm font-bold uppercase text-center">Trade Now</Link>
+                  {market && (
+                    <Link href={`/markets/terminal?marketId=${market.id}`} className="flex-1 sm:flex-none font-label-caps text-label-caps text-primary hover:underline px-4 transition-all font-bold text-center">View Full Terminal</Link>
+                  )}
+                  {market && latestTrace && (
+                    <Link href={`/copy-trade?marketId=${market.id}&traceId=${latestTrace.id}`} className="flex-1 sm:flex-none bg-primary text-primary-foreground px-6 py-2.5 rounded-lg font-label-caps text-label-caps hover:bg-primary-container active:scale-95 transition-all shadow-sm font-bold uppercase text-center">Copy Agent</Link>
+                  )}
                 </div>
               </div>
             </motion.div>

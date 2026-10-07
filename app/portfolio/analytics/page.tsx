@@ -24,7 +24,16 @@ const data = [
   { time: "12:00 AM", value: 248592 },
 ];
 
-const KPIItem = ({ label, value, icon, trend, subtext, color = "primary" }: any) => (
+interface KPIItemProps {
+  label: string;
+  value: string;
+  icon: string;
+  trend?: React.ReactNode;
+  subtext?: React.ReactNode;
+  color?: string;
+}
+
+const KPIItem = ({ label, value, icon, trend, subtext, color = "primary" }: KPIItemProps) => (
   <motion.div 
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -49,7 +58,7 @@ const KPIItem = ({ label, value, icon, trend, subtext, color = "primary" }: any)
   </motion.div>
 );
 
-const ExposureBar = ({ label, percentage, color }: any) => (
+const ExposureBar = ({ label, percentage, color }: { label: string; percentage: number; color: string }) => (
   <div className="mb-6 last:mb-0">
     <div className="flex justify-between font-label-caps text-label-caps text-on-surface-variant mb-2">
       <span>{label}</span>

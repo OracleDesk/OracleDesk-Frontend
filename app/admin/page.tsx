@@ -4,22 +4,17 @@ import React from "react";
 import Link from "next/link";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useMarkets } from "@/lib/hooks/useMarkets";
+import { usePlatformStats } from "@/lib/hooks/usePortfolio";
+import { isAdminAddress } from "@/lib/stellar/config";
 
-const AUTHORIZED_ADDRESSES = [
-  process.env.NEXT_PUBLIC_TEAM_MEMBER_1_ADDRESS?.toLowerCase(),
-  process.env.NEXT_PUBLIC_TEAM_MEMBER_2_ADDRESS?.toLowerCase(),
-  process.env.NEXT_PUBLIC_TEAM_MEMBER_3_ADDRESS?.toLowerCase(),
-  process.env.NEXT_PUBLIC_AGENT_WALLET_ADDRESS?.toLowerCase(),
-].filter(Boolean);
-
-const AdminStat = ({ label, value, change }: { label: string, value: string, change: string }) => (
+const AdminStat = ({ label, value, change }: { label: string, value: string, change?: string }) => (
   <div className="bg-white p-6 border border-outline-variant rounded-lg flex flex-col justify-between hover:shadow-md transition-all">
     <span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">{label}</span>
     <div className="flex items-baseline gap-2 mt-2">
       <span className="font-headline-md text-headline-md">{value}</span>
-      <span className="text-secondary font-label-caps text-label-caps flex items-center">
-        <span className="material-symbols-outlined text-[14px]">arrow_upward</span> {change}
-      </span>
+      {change && (
+        <span className="text-on-surface-variant font-label-caps text-label-caps flex items-center">{change}</span>
+      )}
     </div>
   </div>
 );
@@ -35,7 +30,7 @@ const MarketItem = ({ title, status, volume }: { title: string, status: string, 
     </div>
     <div className="text-right">
       <p className="font-data-mono text-data-mono text-on-surface">{volume}</p>
-      <p className="text-[11px] text-on-surface-variant uppercase font-label-caps text-[10px]">Volume</p>
+      <p className="text-[11px] text-on-surface-variant uppercase font-label-caps text-[10px]">Liquidity</p>
     </div>
   </div>
 );
@@ -43,6 +38,7 @@ const MarketItem = ({ title, status, volume }: { title: string, status: string, 
 export default function AdminDashboard() {
   const { isConnected, address, openModal } = useWallet();
   const { data: marketsData, isLoading } = useMarkets({ limit: 10 });
+  const { data: stats } = usePlatformStats();
   const markets = marketsData?.markets ?? [];
 
   if (!isConnected) {
@@ -70,7 +66,9 @@ export default function AdminDashboard() {
     );
   }
 
-  const isAuthorized = address && AUTHORIZED_ADDRESSES.includes(address.toLowerCase());
+  // UI gate only. The backend checks ADMIN_ADDRESSES itself on every admin
+  // request; hiding this page does not protect anything.
+  const isAuthorized = isAdminAddress(address);
 
   if (!isAuthorized) {
     return (
@@ -119,9 +117,9 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <AdminStat label="Total Volume" value="$248.2M" change="14.2%" />
-        <AdminStat label="Active Markets" value="124" change="4.1%" />
-        <AdminStat label="Total Users" value="12.8k" change="8.4%" />
+        <AdminStat label="Copy-trade volume" value={stats ? `$${stats.totalCopyVolume.toLocaleString()}` : "—"} />
+        <AdminStat label="Markets" value={stats ? String(stats.marketCount) : "—"} change={stats ? `${stats.onChainMarketCount} on-chain` : undefined} />
+        <AdminStat label="Users" value={stats ? String(stats.subscriberCount) : "—"} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -139,7 +137,7 @@ export default function AdminDashboard() {
                   <MarketItem 
                     key={m.id}
                     title={m.question} 
-                    status={m.status === 'ACTIVE' ? 'Active' : 'Pending'} 
+                    status={m.status === 'ACTIVE' ? 'Active' : m.status.charAt(0) + m.status.slice(1).toLowerCase()} 
                     volume={`$${(m.totalLiquidity).toLocaleString()}`} 
                   />
                 ))
@@ -152,7 +150,7 @@ export default function AdminDashboard() {
 
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-surface-container-highest border border-outline-variant p-6 rounded-xl space-y-4">
-            <h3 className="font-headline-sm text-headline-sm">System Health</h3>
+            <h3 className="font-headline-sm text-headline-sm flex items-center gap-2">System Health <span className="text-[10px] font-label-caps uppercase px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">Demo data</span></h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="font-label-caps text-label-caps text-on-surface-variant">Oracle Latency</span>

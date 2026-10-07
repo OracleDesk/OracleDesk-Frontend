@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Navbar from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { WalletProvider } from "@/lib/contexts/WalletContext";
-import { headers } from "next/headers";
 import "./globals.css";
 
 const geistSans = {
@@ -23,14 +22,11 @@ export const metadata: Metadata = {
   description: "The world's most accurate AI-driven prediction terminal.",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const headersList = await headers();
-  const cookies = headersList.get("cookie");
-
   return (
     <html
       lang="en"
@@ -43,7 +39,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-body-md text-on-surface">
-        <WalletProvider cookies={cookies}>
+        <WalletProvider>
           <Navbar />
           {children}
           <Footer />

@@ -10,6 +10,17 @@ export interface PortfolioSummary {
   dailyPnl: number;
   builderFeesEarned: number;
   correlationRisk: unknown;
+  /** treasury.available_capital() read live; null if the read failed. */
+  availableCapitalRaw: string | null;
+}
+
+export interface PlatformStats {
+  subscriberCount: number;
+  totalCopyVolume: number;
+  builderFees: number;
+  marketCount: number;
+  onChainMarketCount: number;
+  traceCount: number;
 }
 
 export interface Position {
@@ -18,7 +29,8 @@ export interface Position {
   tradeId: string | null;
   status: "OPEN" | "CLOSED" | "STOP_LOSS" | "HEDGED";
   direction: "YES" | "NO";
-  amount: number;
+  /** Position size in USDC (display). The backend field is `size`. */
+  size: number;
   entryPrice: number;
   currentPrice: number | null;
   pnl: number | null;
@@ -28,6 +40,7 @@ export interface Position {
     category: MarketCategory;
     settlementCurrency: SettlementCurrency;
     expiryTimestamp: string;
+    onChainMarketId: string | null;
   };
   trade?: {
     direction: "YES" | "NO";
@@ -55,6 +68,6 @@ export async function getPositions(params: ListPositionsParams = {}) {
 }
 
 export async function getPlatformStats() {
-  const { data } = await apiClient.get<any>("/portfolio/stats");
+  const { data } = await apiClient.get<PlatformStats>("/portfolio/stats");
   return data;
 }

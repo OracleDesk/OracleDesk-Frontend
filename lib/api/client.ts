@@ -32,9 +32,10 @@ export interface ApiResponse<T> {
   meta?: unknown;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://oracledesk-backend.onrender.com/api/v1";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://oracledesk-backend.onrender.com/api/v1";
 const TOKEN_KEY = "oracledesk_token";
 const USER_ID_KEY = "oracledesk_user_id";
+const WALLET_KEY = "oracledesk_wallet";
 
 function getBrowserStorage() {
   return typeof window === "undefined" ? null : window.localStorage;
@@ -58,16 +59,24 @@ export function getStoredToken() {
   return getBrowserStorage()?.getItem(TOKEN_KEY) ?? null;
 }
 
-export function storeAuthSession(session: { token: string; userId: string }) {
+export function storeAuthSession(session: { token: string; userId: string; walletAddress: string }) {
   const storage = getBrowserStorage();
   storage?.setItem(TOKEN_KEY, session.token);
   storage?.setItem(USER_ID_KEY, session.userId);
+  storage?.setItem(WALLET_KEY, session.walletAddress);
+}
+
+/** Wallet address the stored session belongs to, if any. */
+export function getStoredSessionWallet() {
+  const storage = getBrowserStorage();
+  return storage?.getItem(TOKEN_KEY) ? storage.getItem(WALLET_KEY) : null;
 }
 
 export function clearAuthSession() {
   const storage = getBrowserStorage();
   storage?.removeItem(TOKEN_KEY);
   storage?.removeItem(USER_ID_KEY);
+  storage?.removeItem(WALLET_KEY);
 }
 
 async function request<T>(

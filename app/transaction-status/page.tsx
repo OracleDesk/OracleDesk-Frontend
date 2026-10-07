@@ -191,7 +191,7 @@ export default function TransactionStatusPage() {
             <span className="opacity-50">v2.4.1</span>
           </div>
           <p className="opacity-70">[14:22:10] Connection established: RPC_NODE_04</p>
-          <p className="opacity-70">[14:22:11] Market: "BTC_PROB_75K_EOY" price feed synced</p>
+          <p className="opacity-70">[14:22:11] Market: &quot;BTC_PROB_75K_EOY&quot; price feed synced</p>
           <p className="text-secondary-fixed">[14:23:45] Pending Transaction Detected: User_ID:0x...a1</p>
           <p className="animate-pulse">_</p>
         </div>

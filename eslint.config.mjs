@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Submodule and generated code are not ours to lint.
+    "contracts/**",
+    "lib/stellar/generated/**",
   ]),
 ]);
 

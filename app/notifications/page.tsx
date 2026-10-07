@@ -4,6 +4,9 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { io } from "socket.io-client";
 import { usePositions } from "@/lib/hooks/usePortfolio";
+import { API_URL } from "@/lib/api/client";
+import { explorerTx } from "@/lib/stellar/config";
+import { formatUsdc } from "@/lib/stellar/units";
 
 type NotificationType = "all" | "critical" | "trading" | "ai";
 
@@ -23,21 +26,20 @@ interface NotificationItem {
   borderColor: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
 
 export default function NotificationsPage() {
   const [filter, setFilter] = useState<NotificationType>("all");
-  const [localNotifications, setLocalNotifications] = useState<NotificationItem[]>([]);
+  const [liveNotifications, setLiveNotifications] = useState<NotificationItem[]>([]);
+  const [clearedBefore, setClearedBefore] = useState(0);
   const { data: positionsData } = usePositions({ limit: 10 });
 
-  // Map positions to notification items
-  useEffect(() => {
-    if (positionsData?.positions) {
-      const positionNotifications: NotificationItem[] = positionsData.positions.map(pos => ({
+  // Positions become notifications; live socket events are added on top.
+  const localNotifications = useMemo(() => {
+      const positionNotifications: NotificationItem[] = (positionsData?.positions ?? []).map(pos => ({
         id: `pos-${pos.id}`,
         type: "trading",
         title: "Trade Confirmed",
-        message: `${pos.status === 'CLOSED' ? 'Closed' : 'Opened'} ${pos.direction} position on "${pos.market.question}" for ${pos.amount.toLocaleString()} USDC.`,
+        message: `${pos.status === 'CLOSED' ? 'Closed' : 'Opened'} ${pos.direction} position on "${pos.market.question}" for ${pos.size.toLocaleString()} USDC.`,
         time: new Date(pos.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         timestamp: new Date(pos.createdAt).getTime(),
         txHash: pos.trade?.txHash || undefined,
@@ -47,25 +49,22 @@ export default function NotificationsPage() {
         borderColor: "border-l-secondary",
       }));
 
-      setLocalNotifications(prev => {
-        const existingIds = new Set(prev.map(n => n.id));
-        const newItems = positionNotifications.filter(n => !existingIds.has(n.id));
-        return [...prev, ...newItems].sort((a, b) => b.timestamp - a.timestamp);
-      });
-    }
-  }, [positionsData]);
+      return [...liveNotifications, ...positionNotifications]
+        .filter(n => n.timestamp > clearedBefore)
+        .sort((a, b) => b.timestamp - a.timestamp);
+  }, [positionsData, liveNotifications, clearedBefore]);
 
   // Socket listener for real-time trades
   useEffect(() => {
-    const socket = io(API_URL.replace("/api/v1", ""));
+    const socket = io(API_URL.replace(/\/api\/v1\/?$/, ""));
 
-    socket.on("TRADE_EXECUTED", (data: any) => {
-      console.log("Real-time trade detected:", data);
+    // Payload documented in docs/api.md (Realtime).
+    socket.on("TRADE_EXECUTED", (data: { eventId: string; direction: string; isBuy: boolean; onChainMarketId: string; marketQuestion: string | null; collateralRaw: string; txHash: string }) => {
       const newNotif: NotificationItem = {
-        id: `socket-${Date.now()}`,
+        id: `socket-${data.eventId}`,
         type: "trading",
         title: "New Trade Executed",
-        message: `Oracle agent executed ${data.side} trade on Market ${data.marketId.substring(0,8)}... for ${data.amount} USDC.`,
+        message: `${data.isBuy ? "Bought" : "Sold"} ${data.direction} on ${data.marketQuestion ? `"${data.marketQuestion}"` : `market #${data.onChainMarketId}`} for ${formatUsdc(BigInt(data.collateralRaw), { maxDecimals: 2, grouping: true })} USDC.`,
         time: "Just now",
         timestamp: Date.now(),
         txHash: data.txHash,
@@ -74,7 +73,7 @@ export default function NotificationsPage() {
         iconColor: "text-secondary",
         borderColor: "border-l-secondary",
       };
-      setLocalNotifications(prev => [newNotif, ...prev]);
+      setLiveNotifications(prev => [newNotif, ...prev]);
     });
 
     return () => {
@@ -136,7 +135,7 @@ export default function NotificationsPage() {
               <span className="font-label-caps text-label-caps text-primary">ORACLE INSIGHT</span>
             </div>
             <p className="text-body-md text-on-surface-variant leading-relaxed italic">
-              Real-time feed connected to Arc Testnet. Monitoring institutional flows and AI reasoning traces.
+              Live trades from the OracleDesk contracts on Stellar Testnet, plus agent positions.
             </p>
           </div>
         </div>
@@ -146,7 +145,7 @@ export default function NotificationsPage() {
           <div className="flex justify-between items-center mb-2">
             <h1 className="font-headline-md text-headline-md">Alert Center</h1>
             <button 
-              onClick={() => setLocalNotifications([])}
+              onClick={() => { setLiveNotifications([]); setClearedBefore(Date.now()); }}
               className="text-primary font-label-caps text-label-caps hover:underline cursor-pointer"
             >
               Clear all
@@ -190,7 +189,7 @@ export default function NotificationsPage() {
 
                   {item.txHash && (
                     <a 
-                      href={`https://explorer.testnet.arc.circle.com/tx/${item.txHash}`} 
+                      href={explorerTx(item.txHash)} 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="mt-2 inline-flex items-center gap-2 hover:opacity-80 transition-opacity"

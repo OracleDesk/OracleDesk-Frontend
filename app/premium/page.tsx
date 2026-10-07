@@ -4,15 +4,27 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { useWallet } from "@/lib/contexts/WalletContext";
-import { useWriteContract, usePublicClient } from "wagmi";
-import { CONTRACTS, ERC20_ABI, parseUsdc } from "@/lib/web3/contracts";
-import { arcTestnet } from "@/lib/web3/chains";
-import { unlockTrace } from "@/lib/api/traces";
+import { useUsdcTransfer } from "@/lib/hooks/useStellar";
+import { useUnlockTrace } from "@/lib/hooks/useTraces";
+import { PAYMENTS_RECIPIENT, explorerTx } from "@/lib/stellar/config";
+import { formatUsdc, parseUsdc } from "@/lib/stellar/units";
+
+/**
+ * Price of the backend's daily pass (its DAILY_PASS_PRICE_RAW). The backend
+ * verifies the transfer on-chain and rejects anything below its own price,
+ * so this must not be lower than the backend's value.
+ */
+const DAILY_PASS_PRICE_RAW = parseUsdc(process.env.NEXT_PUBLIC_DAILY_PASS_PRICE_USDC || "0.5");
+
+/** The backend unlock route needs a trace id in the path; a daily pass covers every trace. */
+const DAILY_PASS_TRACE_PLACEHOLDER = "00000000-0000-0000-0000-000000000000";
 
 interface Tier {
   name: string;
-  price: number;
+  /** null: not purchasable yet. */
+  priceRaw: bigint | null;
   priceStr: string;
+  period: string;
   description: string;
   features: { text: string; included: boolean }[];
   buttonText: string;
@@ -22,8 +34,9 @@ interface Tier {
 const tiers: Tier[] = [
   {
     name: "Free",
-    price: 0,
+    priceRaw: 0n,
     priceStr: "$0",
+    period: "",
     description: "Standard market access for retail observers.",
     buttonText: "CURRENT PLAN",
     features: [
@@ -35,10 +48,11 @@ const tiers: Tier[] = [
   },
   {
     name: "Pro",
-    price: 20,
-    priceStr: "$20",
-    description: "Enhanced tools for professional day traders.",
-    buttonText: "UPGRADE TO PRO",
+    priceRaw: DAILY_PASS_PRICE_RAW,
+    priceStr: `${formatUsdc(DAILY_PASS_PRICE_RAW, { minDecimals: 2 })} USDC`,
+    period: "/24 hours",
+    description: "Full reasoning traces for 24 hours, paid in USDC on Stellar.",
+    buttonText: "GET A DAILY PASS",
     featured: true,
     features: [
       { text: "Full Market Depth", included: true },
@@ -49,10 +63,11 @@ const tiers: Tier[] = [
   },
   {
     name: "Institutional",
-    price: 50,
-    priceStr: "$50",
-    description: "The terminal for firms and high-volume funds.",
-    buttonText: "GET ENTERPRISE",
+    priceRaw: null,
+    priceStr: "—",
+    period: "",
+    description: "The terminal for firms and high-volume funds. Not available to buy yet.",
+    buttonText: "NOT AVAILABLE YET",
     features: [
       { text: "Unlimited Market Depth", included: true },
       { text: "50,000 Trace Depth", included: true },
@@ -70,75 +85,59 @@ const features = [
 ];
 
 export default function PremiumPage() {
-  const { address, isConnected, chainId, openModal } = useWallet();
-  const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
-  
+  const { isConnected, isWrongNetwork, openModal, ensureSession } = useWallet();
+  const transfer = useUsdcTransfer();
+  const unlock = useUnlockTrace();
+
   const [selectedTier, setSelectedTier] = useState<Tier | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"usdc" | "card">("usdc");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const openCheckout = (tier: Tier) => {
-    if (tier.name === "Free") return;
+    if (!tier.priceRaw) return;
     if (!isConnected) {
-      openModal();
+      void openModal();
       return;
     }
+    setStatusMessage(null);
     setSelectedTier(tier);
   };
 
   const handlePayment = async () => {
-    if (!selectedTier) return;
-    
-    if (paymentMethod === 'card') {
-      alert("Credit card processing is currently disabled. Please use USDC for the hackathon demo.");
+    if (!selectedTier?.priceRaw) return;
+
+    if (paymentMethod === "card") {
+      setStatusMessage("Card payments aren't available. Pay with USDC instead.");
       return;
     }
-
-    if (chainId !== arcTestnet.id) {
-      setStatusMessage(`Please switch your wallet to ${arcTestnet.name} to complete the purchase.`);
+    if (isWrongNetwork) {
+      setStatusMessage("Switch your wallet to Stellar Testnet to complete the purchase.");
       return;
     }
 
     setIsSubmitting(true);
-    setStatusMessage("Initiating institutional clearing...");
-
     try {
-      const amountRaw = parseUsdc(selectedTier.price);
-      
-      setStatusMessage(`Requesting USDC transfer of ${selectedTier.price} to OracleDesk Treasury...`);
-      
-      const txHash = await writeContractAsync({
-        address: CONTRACTS.arc.usdc,
-        abi: ERC20_ABI,
-        functionName: "transfer",
-        args: [CONTRACTS.arc.treasuryManager, amountRaw],
-      });
-
-      setStatusMessage("Waiting for block confirmation...");
-      
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash: txHash });
+      setStatusMessage("Signing in to OracleDesk…");
+      if (!(await ensureSession())) {
+        setStatusMessage("You need to sign in with your wallet before paying.");
+        return;
       }
 
-      setStatusMessage("Provisioning access on OracleDesk Backend...");
-      
-      // Use a special ID or a first-trace fetch to register the subscription.
-      // Since DAILY_PASS on the backend ignores traceId for the subscription itself, 
-      // but requires a valid-looking UUID for the route, we use a constant.
-      await unlockTrace(
-        "00000000-0000-0000-0000-000000000000", 
-        txHash, 
-        selectedTier.price, 
-        "DAILY_PASS"
-      );
+      setStatusMessage(`Confirm the ${formatUsdc(selectedTier.priceRaw)} USDC transfer in your wallet…`);
+      const { txHash } = await transfer.mutateAsync({ to: PAYMENTS_RECIPIENT, amount: selectedTier.priceRaw });
 
-      setStatusMessage("Upgrade Successful! Your account is now provisioned.");
-      setTimeout(() => setSelectedTier(null), 3000);
+      setStatusMessage("Payment sent. Waiting for OracleDesk to verify it on-chain…");
+      await unlock.mutateAsync({
+        traceId: DAILY_PASS_TRACE_PLACEHOLDER,
+        txHash,
+        amountRaw: selectedTier.priceRaw.toString(),
+      });
+
+      setStatusMessage(`Your daily pass is active for 24 hours. Transaction: ${explorerTx(txHash)}`);
+      setTimeout(() => setSelectedTier(null), 4000);
     } catch (error) {
-      console.error("Payment failed:", error);
-      setStatusMessage(error instanceof Error ? `Payment failed: ${error.message}` : "Payment failed. Please try again.");
+      setStatusMessage(error instanceof Error ? error.message : "Payment failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -180,7 +179,7 @@ export default function PremiumPage() {
                 <h3 className="font-headline-sm text-headline-sm mb-2">{tier.name}</h3>
                 <div className="flex items-baseline gap-1 mb-4">
                   <span className="font-display-lg text-display-lg text-4xl">{tier.priceStr}</span>
-                  <span className="text-on-surface-variant font-body-md">/month</span>
+                  {tier.period && <span className="text-on-surface-variant font-body-md">{tier.period}</span>}
                 </div>
                 <p className="text-on-surface-variant font-body-md h-12">{tier.description}</p>
               </div>
@@ -201,7 +200,8 @@ export default function PremiumPage() {
               </ul>
               <button
                 onClick={() => openCheckout(tier)}
-                className={`w-full py-3 rounded-lg font-label-caps text-label-caps transition-all cursor-pointer ${
+                disabled={tier.priceRaw === null}
+                className={`w-full py-3 rounded-lg font-label-caps text-label-caps transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                   tier.name === "Free"
                     ? "border border-outline hover:bg-surface-container"
                     : tier.featured
@@ -249,7 +249,7 @@ export default function PremiumPage() {
               Powered by Oracle AI Reasoning
             </h2>
             <p className="font-body-lg text-body-lg text-on-surface-variant mb-8 leading-relaxed">
-              Our proprietary reasoning engine analyzes billions of on-chain data points to provide "Oracle Insights"—AI-generated predictive narratives that distinguish raw data from market noise.
+              Our proprietary reasoning engine analyzes billions of on-chain data points to provide &quot;Oracle Insights&quot;—AI-generated predictive narratives that distinguish raw data from market noise.
             </p>
             <div className="flex flex-wrap gap-4">
               <div className="bg-white p-4 border border-outline-variant rounded-lg flex-1 min-w-[140px]">
@@ -294,6 +294,7 @@ export default function PremiumPage() {
                 <h2 className="font-headline-md text-headline-md">Confirm Subscription</h2>
                 <button
                   className="material-symbols-outlined text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                  aria-label="Close"
                   onClick={() => setSelectedTier(null)}
                 >
                   close
@@ -305,10 +306,10 @@ export default function PremiumPage() {
                     <p className="font-label-caps text-label-caps text-primary font-bold">
                       {selectedTier.name.toUpperCase()} TIER
                     </p>
-                    <p className="font-body-md text-on-surface-variant">Billed Monthly</p>
+                    <p className="font-body-md text-on-surface-variant">One payment, 24 hours of access</p>
                   </div>
                   <p className="font-headline-md text-headline-md text-on-surface text-2xl">
-                    {selectedTier.price}.00
+                    {selectedTier.priceStr}
                   </p>
                 </div>
 
@@ -333,7 +334,7 @@ export default function PremiumPage() {
                     </div>
                     <div className="flex-grow">
                       <p className="font-body-md font-bold">Pay with USDC</p>
-                      <p className="text-xs text-on-surface-variant">Ethereum, Solana, or Polygon</p>
+                      <p className="text-xs text-on-surface-variant">From your wallet on Stellar Testnet</p>
                     </div>
                     {paymentMethod === 'usdc' && (
                       <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -354,7 +355,7 @@ export default function PremiumPage() {
                     </div>
                     <div className="flex-grow">
                       <p className="font-body-md font-bold">Credit / Debit Card</p>
-                      <p className="text-xs text-on-surface-variant">Secure checkout via Stripe</p>
+                      <p className="text-xs text-on-surface-variant">Not available yet</p>
                     </div>
                     {paymentMethod === 'card' && (
                       <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -366,16 +367,16 @@ export default function PremiumPage() {
 
                 <div className="mt-8 space-y-4">
                   <div className="flex justify-between font-body-md text-on-surface-variant">
-                    <span>Transaction Fee</span>
-                    <span className="font-data-mono">$0.00</span>
+                    <span>Network fee</span>
+                    <span className="font-data-mono">Paid in XLM by your wallet</span>
                   </div>
                   <div className="flex justify-between font-headline-sm text-headline-sm pt-4 border-t border-outline-variant">
                     <span>Total Due</span>
-                    <span className="text-primary">${selectedTier.price}.00</span>
+                    <span className="text-primary">{selectedTier.priceStr}</span>
                   </div>
                   
                   {statusMessage && (
-                    <div className="p-3 bg-primary-container/10 border border-primary/20 rounded text-primary text-xs font-bold animate-pulse">
+                    <div className="p-3 bg-primary-container/10 border border-primary/20 rounded text-primary text-xs font-bold break-all" role="status">
                       {statusMessage}
                     </div>
                   )}
@@ -388,7 +389,7 @@ export default function PremiumPage() {
                     {isSubmitting ? "Processing..." : paymentMethod === 'usdc' ? "Pay with Wallet" : "Proceed to Payment"}
                   </button>
                   <p className="text-center text-[10px] text-on-surface-variant uppercase tracking-widest mt-4">
-                    Secured by OracleDesk Institutional Clearing
+                    Verified on-chain by OracleDesk before access is granted
                   </p>
                 </div>
               </div>

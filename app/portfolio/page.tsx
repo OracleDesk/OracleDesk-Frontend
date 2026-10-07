@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { usePortfolio, usePositions } from "@/lib/hooks/usePortfolio";
+import { formatUsdc } from "@/lib/stellar/units";
 
 const TerminalLog = () => {
   const [logs, setLogs] = useState([
@@ -65,7 +66,25 @@ const TerminalLog = () => {
   );
 };
 
-const PositionRow = ({ market, category, platform, side, sideColor, entry, prob, yesNo, size, pnl, pnlPercent, pnlColor, status, resolved, claimable }: any) => {
+interface PositionRowProps {
+  market: string;
+  category: string;
+  platform: string;
+  side: string;
+  sideColor: string;
+  entry: string;
+  prob: number;
+  yesNo: string;
+  size: string;
+  pnl: string;
+  pnlPercent: string;
+  pnlColor: string;
+  status: string;
+  resolved?: boolean;
+  claimable?: boolean;
+}
+
+const PositionRow = ({ market, category, platform, side, sideColor, entry, prob, yesNo, size, pnl, pnlPercent, pnlColor, status, resolved, claimable }: PositionRowProps) => {
   return (
     <tr className={`transition-colors border-b border-outline-variant hover:bg-surface-container/50 ${resolved ? 'bg-surface-container-highest' : ''}`}>
       <td className="px-6 py-4 font-body-md text-on-surface max-w-xs">
@@ -132,7 +151,7 @@ const PositionRow = ({ market, category, platform, side, sideColor, entry, prob,
 };
 
 export default function PortfolioPage() {
-  const [status, setStatus] = useState<any>("OPEN");
+  const [status, setStatus] = useState<"OPEN" | "CLOSED">("OPEN");
   const { data: summary, isLoading: isSummaryLoading } = usePortfolio();
   const { data: positionsData, isLoading: isPositionsLoading } = usePositions({ status });
   const positions = positionsData?.positions ?? [];
@@ -159,13 +178,12 @@ export default function PortfolioPage() {
             </div>
           </div>
           
-          {/* J6: EURC Treasury Display */}
           <div className="bg-white border border-outline-variant p-4 rounded min-w-[160px] shadow-sm">
-            <div className="font-label-caps text-label-caps text-outline mb-1">EURC TREASURY</div>
+            <div className="font-label-caps text-label-caps text-outline mb-1">TREASURY CAPITAL</div>
             <div className="font-headline-sm text-headline-sm text-secondary">
-              {isSummaryLoading ? "..." : "€1,240.50"}
+              {isSummaryLoading ? "..." : summary?.availableCapitalRaw ? `${formatUsdc(BigInt(summary.availableCapitalRaw), { maxDecimals: 2, grouping: true })} USDC` : "—"}
             </div>
-            <div className="text-[10px] font-bold text-on-surface-variant mt-1">EU-Event Internal Tracking (Arc)</div>
+            <div className="text-[10px] font-bold text-on-surface-variant mt-1">Read live from the treasury contract</div>
           </div>
 
           <div className="bg-white border border-outline-variant p-4 rounded min-w-[160px] shadow-sm">
@@ -185,24 +203,19 @@ export default function PortfolioPage() {
             <span className="material-symbols-outlined">account_balance_wallet</span>
           </div>
           <div>
-            <h3 className="font-headline-sm text-headline-sm">Unified Gateway Balance</h3>
-            <p className="text-on-surface-variant text-sm">Cross-chain liquidity managed by Circle CCTP</p>
+            <h3 className="font-headline-sm text-headline-sm">Agent Treasury</h3>
+            <p className="text-on-surface-variant text-sm">USDC the agent can trade with, capped on-chain by the treasury contract</p>
           </div>
         </div>
         <div className="flex gap-8">
           <div className="text-center">
-            <div className="font-label-caps text-[10px] text-outline mb-1">ARC TESTNET</div>
-            <div className="font-data-mono font-bold text-lg text-primary">{(summary?.availableCapital || 0).toLocaleString()} USDC</div>
+            <div className="font-label-caps text-[10px] text-outline mb-1">AVAILABLE (STELLAR TESTNET)</div>
+            <div className="font-data-mono font-bold text-lg text-primary">{summary?.availableCapitalRaw ? formatUsdc(BigInt(summary.availableCapitalRaw), { maxDecimals: 2, grouping: true }) : "—"} USDC</div>
           </div>
           <div className="w-px h-10 bg-outline-variant self-center"></div>
           <div className="text-center">
-            <div className="font-label-caps text-[10px] text-outline mb-1">POLYGON AMOY</div>
-            <div className="font-data-mono font-bold text-lg text-secondary">14,204.00 USDC</div>
-          </div>
-          <div className="w-px h-10 bg-outline-variant self-center"></div>
-          <div className="text-center">
-            <div className="font-label-caps text-[10px] text-outline mb-1">CCTP IN-FLIGHT</div>
-            <div className="font-data-mono font-bold text-lg text-tertiary">0.00 USDC</div>
+            <div className="font-label-caps text-[10px] text-outline mb-1">DEPLOYED (BACKEND RECORD)</div>
+            <div className="font-data-mono font-bold text-lg text-secondary">{(summary?.deployedCapital ?? 0).toLocaleString()} USDC</div>
           </div>
         </div>
       </section>
@@ -257,15 +270,15 @@ export default function PortfolioPage() {
                     key={pos.id}
                     market={pos.market.question}
                     category={pos.market.category}
-                    platform="POLYMARKET"
+                    platform={pos.market.onChainMarketId !== null ? `On-chain #${pos.market.onChainMarketId}` : "Not on-chain"}
                     side={pos.direction}
                     sideColor={pos.direction === 'YES' ? "bg-secondary-container text-on-secondary-container" : "bg-tertiary-container text-on-tertiary-container"}
                     entry={`$${pos.entryPrice.toFixed(2)}`}
                     prob={pos.currentPrice ? Math.round(pos.currentPrice * 100) : 50}
                     yesNo={pos.direction}
-                    size={pos.amount.toLocaleString()}
+                    size={pos.size.toLocaleString()}
                     pnl={(pos.pnl ?? 0) >= 0 ? `+$${Math.abs(pos.pnl ?? 0).toFixed(2)}` : `-$${Math.abs(pos.pnl ?? 0).toFixed(2)}`}
-                    pnlPercent={`${(pos.pnl ?? 0) >= 0 ? '+' : ''}${(((pos.pnl ?? 0) / (pos.amount * pos.entryPrice)) * 100 || 0).toFixed(1)}%`}
+                    pnlPercent={`${(pos.pnl ?? 0) >= 0 ? '+' : ''}${(((pos.pnl ?? 0) / (pos.size * pos.entryPrice)) * 100 || 0).toFixed(1)}%`}
                     pnlColor={(pos.pnl ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}
                     status={pos.status}
                     resolved={pos.status !== 'OPEN'}

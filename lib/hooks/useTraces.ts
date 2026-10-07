@@ -7,10 +7,9 @@ import {
   getTrace,
   listTraces,
   setSpendingAllowance,
-  unlockTrace,
+  unlockDailyPass,
   verifyTrace,
   type ListTracesParams,
-  type UnlockType,
 } from "@/lib/api/traces";
 
 export function useTraces(params: ListTracesParams = {}) {
@@ -40,12 +39,8 @@ export function useUnlockTrace() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (params: {
-      traceId: string;
-      txHash: string;
-      amount: number;
-      type: UnlockType;
-    }) => unlockTrace(params.traceId, params.txHash, params.amount, params.type),
+    mutationFn: (params: { traceId: string; txHash: string; amountRaw: string }) =>
+      unlockDailyPass(params.traceId, params.txHash, params.amountRaw),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["trace", variables.traceId] });
       queryClient.invalidateQueries({ queryKey: ["traces"] });

@@ -3,13 +3,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useGenerateMarket } from "@/lib/hooks/useMarkets";
+import type { MarketCategory } from "@/lib/api/markets";
+import { isAdminAddress } from "@/lib/stellar/config";
+import { BACKEND_CATEGORIES, BACKEND_CATEGORY_LABELS, BACKEND_TO_CONTRACT_CATEGORY } from "@/lib/stellar/categories";
 
 export default function AdminPage() {
-  const { isConnected, connect } = useWallet();
+  const { isConnected, address, openModal, ensureSession } = useWallet();
   const generateMarket = useGenerateMarket();
 
   const [question, setQuestion] = useState("");
-  const [category, setCategory] = useState("CRYPTO");
+  const [category, setCategory] = useState<MarketCategory>("CRYPTO");
   const [expiry, setExpiry] = useState("");
   const [liquidity, setLiquidity] = useState("");
   const [aiEnabled, setAiEnabled] = useState(true);
@@ -27,7 +30,7 @@ export default function AdminPage() {
   };
 
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
+    const val = e.target.value as MarketCategory;
     setCategory(val);
     addLog(`PARAM_CHANGE: CATEGORY_${val.toUpperCase()}`);
   };
@@ -61,6 +64,10 @@ export default function AdminPage() {
     }
 
     addLog("INITIATING_GEN_AI_ORACLE...");
+    if (!(await ensureSession())) {
+      addLog("ERROR: WALLET_SIGN_IN_REQUIRED");
+      return;
+    }
     try {
       const result = await generateMarket.mutateAsync({
         question,
@@ -89,12 +96,25 @@ export default function AdminPage() {
             </p>
           </div>
           <button
-            onClick={() => connect()}
+            onClick={() => openModal()}
             className="w-full bg-primary text-primary-foreground py-4 rounded-lg font-label-caps text-label-caps hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
           >
             <span className="material-symbols-outlined">account_balance_wallet</span>
             CONNECT WALLET TO ACCESS
           </button>
+        </div>
+      </main>
+    );
+  }
+
+  // UI gate only; the backend enforces ADMIN_ADDRESSES on /markets/generate.
+  if (!isAdminAddress(address)) {
+    return (
+      <main className="flex-grow flex items-center justify-center p-gutter">
+        <div className="max-w-md w-full text-center space-y-4 bg-white p-10 rounded-xl border border-outline-variant shadow-sm">
+          <h2 className="font-headline-md text-headline-md">Access Denied</h2>
+          <p className="text-on-surface-variant">Only OracleDesk admins can deploy markets.</p>
+          <p className="text-on-surface-variant text-sm font-data-mono break-all">{address}</p>
         </div>
       </main>
     );
@@ -108,7 +128,7 @@ export default function AdminPage() {
           <div className="space-y-2">
             <h1 className="font-display-lg text-display-lg text-primary">Deploy New Market</h1>
             <p className="text-on-surface-variant font-body-lg text-body-lg">
-              Institutional prediction engine terminal. Ensure parameter precision before execution.
+              Starts one market-maker run. The agent currently picks the question from live signals; the fields below are a preview and aren&apos;t sent to the contract yet.
             </p>
           </div>
           
@@ -139,15 +159,11 @@ export default function AdminPage() {
                   value={category}
                   onChange={handleCategoryChange}
                 >
-                  <option value="CRYPTO">Crypto</option>
-                  <option value="MACRO">Macro</option>
-                  <option value="ELECTION">Election</option>
-                  <option value="FED">Fed</option>
-                  <option value="ECB">ECB</option>
-                  <option value="GEOPOLITICAL">Geopolitical</option>
-                  <option value="POLITICS">Politics</option>
-                  <option value="SPORTS">Sports</option>
-                  <option value="ENTERTAINMENT">Entertainment</option>
+                  {BACKEND_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {BACKEND_CATEGORY_LABELS[c]} (on-chain: {BACKEND_TO_CONTRACT_CATEGORY[c]})
+                    </option>
+                  ))}
                 </select>
               </div>
               
@@ -168,7 +184,7 @@ export default function AdminPage() {
             <div className="space-y-2">
               <label className="font-label-caps text-label-caps text-on-surface-variant flex justify-between">
                 INITIAL_LIQUIDITY (USDC)
-                <span className="text-secondary font-bold">Min: 500 USDC</span>
+                <span className="text-secondary font-bold">Min: 100 USDC</span>
               </label>
               <div className="relative">
                 <input
@@ -238,7 +254,7 @@ export default function AdminPage() {
               <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
               <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded border border-outline-variant">
                 <span className="font-label-caps text-label-caps text-primary">
-                  {category.toUpperCase()}
+                  {BACKEND_CATEGORY_LABELS[category].toUpperCase()} · {BACKEND_TO_CONTRACT_CATEGORY[category].toUpperCase()}
                 </span>
               </div>
             </div>

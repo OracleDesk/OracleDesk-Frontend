@@ -1,35 +1,18 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAppKit, useAppKitAccount, useAppKitNetwork } from "@reown/appkit/react";
-import { useDisconnect, useBalance, useChainId } from "wagmi";
-import { CONTRACTS } from "@/lib/web3/contracts";
-import { arcTestnet, polygonAmoy } from "@/lib/web3/chains";
+import { useWallet } from "@/lib/contexts/WalletContext";
+import { useUsdcBalance } from "@/lib/hooks/useStellar";
+import { NETWORK_LABEL, explorerAccount } from "@/lib/stellar/config";
+import { formatUsdc, shortAddress } from "@/lib/stellar/units";
 
 const WalletDropdown = () => {
-  const { open } = useAppKit();
-  const { address, isConnected } = useAppKitAccount();
-  const { caipNetwork } = useAppKitNetwork();
-  const { disconnect } = useDisconnect();
+  const { address, isConnected, isConnecting, isWrongNetwork, openModal, disconnect, error } = useWallet();
   const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const chainId = useChainId();
-
-  // Determine USDC token address based on current chain
-  const usdcTokenAddress = useMemo(() => {
-    if (chainId === arcTestnet.id) return CONTRACTS.arc.usdc;
-    if (chainId === polygonAmoy.id || chainId === 137) return CONTRACTS.polygon.usdc;
-    return undefined;
-  }, [chainId]);
-
-  // Fetch USDC balance
-  const { data: balance } = useBalance({
-    address: address as `0x${string}`,
-    token: usdcTokenAddress && usdcTokenAddress !== "0x0000000000000000000000000000000000000000" 
-      ? usdcTokenAddress 
-      : undefined,
-  });
+  const balance = useUsdcBalance(address);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -42,29 +25,46 @@ const WalletDropdown = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (!isConnected) {
+  if (!isConnected || !address) {
     return (
       <button
-        onClick={() => open()}
-        className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-label-caps text-label-caps uppercase tracking-wider hover:opacity-90 transition-all active:scale-95"
+        onClick={() => openModal()}
+        disabled={isConnecting}
+        title={error ?? undefined}
+        className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-label-caps text-label-caps uppercase tracking-wider hover:opacity-90 transition-all active:scale-95 disabled:opacity-60"
       >
-        Connect Wallet
+        {isConnecting ? "Connecting…" : "Connect Wallet"}
       </button>
     );
   }
 
-  const truncatedAddress = `${address?.slice(0, 6)}...${address?.slice(-4)}`;
+  const truncatedAddress = shortAddress(address, 6, 4);
+  const balanceText = balance.data !== undefined
+    ? formatUsdc(balance.data, { maxDecimals: 2, minDecimals: 2, grouping: true })
+    : balance.isError ? "—" : "…";
+
+  const copyAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be blocked; the address is still visible in the menu.
+    }
+  };
 
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-label="Wallet menu"
+        aria-expanded={isOpen}
         className="flex items-center gap-3 px-3 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg hover:bg-surface-container transition-colors active:scale-95"
       >
         <div className="flex flex-col items-end hidden sm:flex">
-          <span className="text-[10px] font-bold text-on-surface-variant leading-none uppercase">
-            {caipNetwork?.name ?? "Unknown Network"}
+          <span className={`text-[10px] font-bold leading-none uppercase ${isWrongNetwork ? "text-error" : "text-on-surface-variant"}`}>
+            {isWrongNetwork ? "Wrong network" : NETWORK_LABEL}
           </span>
           <span className="text-sm font-data-mono font-bold text-on-surface">
             {truncatedAddress}
@@ -95,54 +95,54 @@ const WalletDropdown = () => {
               </span>
               <div className="flex items-baseline gap-1">
                 <span className="text-xl font-bold text-on-surface font-data-mono">
-                  {balance?.formatted.slice(0, 7) ?? "0.00"}
+                  {balanceText}
                 </span>
                 <span className="text-xs font-bold text-on-surface-variant uppercase">
-                  {balance?.symbol}
+                  USDC
                 </span>
               </div>
+              {isWrongNetwork && (
+                <p className="mt-2 text-[11px] text-error">Your wallet is on a different network. Switch it to Stellar Testnet.</p>
+              )}
             </div>
 
             {/* Menu Items */}
             <div className="p-2">
               <button
-                onClick={() => {
-                  setIsOpen(false);
-                  open({ view: "Networks" });
-                }}
+                onClick={copyAddress}
                 className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-surface-container rounded-lg transition-colors group"
               >
                 <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary">
-                  language
+                  {copied ? "check" : "content_copy"}
                 </span>
                 <div className="text-left">
-                  <span className="block text-sm font-bold text-on-surface">Switch Network</span>
-                  <span className="block text-[10px] text-on-surface-variant uppercase">Change chain</span>
+                  <span className="block text-sm font-bold text-on-surface">{copied ? "Copied" : "Copy address"}</span>
+                  <span className="block text-[10px] text-on-surface-variant font-data-mono">{truncatedAddress}</span>
                 </div>
               </button>
 
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  open({ view: "Account" });
-                }}
+              <a
+                href={explorerAccount(address)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIsOpen(false)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-surface-container rounded-lg transition-colors group"
               >
                 <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary">
-                  account_circle
+                  open_in_new
                 </span>
                 <div className="text-left">
-                  <span className="block text-sm font-bold text-on-surface">Account Info</span>
-                  <span className="block text-[10px] text-on-surface-variant uppercase">View settings</span>
+                  <span className="block text-sm font-bold text-on-surface">View on Stellar Expert</span>
+                  <span className="block text-[10px] text-on-surface-variant uppercase">Account history</span>
                 </div>
-              </button>
+              </a>
 
               <div className="h-px bg-outline-variant my-2 mx-2"></div>
 
               <button
                 onClick={() => {
                   setIsOpen(false);
-                  disconnect();
+                  void disconnect();
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-error-container text-on-surface hover:text-on-error-container rounded-lg transition-colors group"
               >

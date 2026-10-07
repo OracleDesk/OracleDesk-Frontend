@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 
 export default function BuyYesDemoPage() {
@@ -15,11 +15,11 @@ export default function BuyYesDemoPage() {
   const profitPercentage = ((maxProfit / (parseFloat(amount) || 1)) * 100).toFixed(1);
 
   // Micro-interaction: flicker effect when amount changes
-  useEffect(() => {
+  const changeAmount = (value: string) => {
+    setAmount(value);
     setIsFlickering(true);
-    const timer = setTimeout(() => setIsFlickering(false), 40);
-    return () => clearTimeout(timer);
-  }, [amount]);
+    setTimeout(() => setIsFlickering(false), 40);
+  };
 
   return (
     <div className="min-h-screen bg-surface font-body-md text-on-surface antialiased overflow-x-hidden">
@@ -124,7 +124,7 @@ export default function BuyYesDemoPage() {
                         className="w-full bg-white border-2 border-outline-variant group-hover:border-primary-container focus:border-primary focus:ring-2 focus:ring-primary/10 p-4 font-data-mono text-[24px] font-bold outline-none transition-all pr-24 rounded-lg" 
                         type="number" 
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={(e) => changeAmount(e.target.value)}
                       />
                       <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-3">
                         <button className="text-[12px] font-bold text-primary hover:underline uppercase tracking-tight">Max</button>

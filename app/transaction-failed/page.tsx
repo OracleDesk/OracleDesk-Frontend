@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { DemoBadge } from "@/components/ui/demo-badge";
 import Link from "next/link";
 
 export default function TransactionFailedPage() {
@@ -129,15 +130,15 @@ export default function TransactionFailedPage() {
                   <div className="flex-1">
                     <span className="font-label-caps text-label-caps text-on-surface-variant mb-1 block text-[10px] font-bold tracking-tight">Error Code: GAS_INSUFFICIENT_OR_SLIPPAGE</span>
                     <p className="text-on-surface font-body-md leading-relaxed text-[13px]">
-                      Execution failed due to <strong className="font-bold">slippage exceeding 0.5%</strong> or insufficient gas for the current network congestion levels.
+                      Execution failed due to <strong className="font-bold">slippage exceeding 0.5%</strong> or too little XLM in your wallet to pay the network fee.
                     </p>
                   </div>
                 </div>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-[11px] font-data-mono text-on-surface-variant">
-                  <span>Gas Used (Estimated)</span>
-                  <span className="text-on-surface font-bold">0.00241 ETH</span>
+                  <span>Network fee (XLM) <DemoBadge /></span>
+                  <span className="text-on-surface font-bold">—</span>
                 </div>
                 <div className="flex justify-between text-[11px] font-data-mono text-on-surface-variant">
                   <span>Network Status</span>

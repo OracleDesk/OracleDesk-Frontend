@@ -1,23 +1,20 @@
 import { apiClient } from "./client";
-import type { SettlementCurrency } from "./markets";
 
+/** What the wallet must sign to copy a trace: market_core.buy. */
 export interface CopyTradePayload {
-  marketAddress: string | null;
-  direction: "YES" | "NO";
-  amount: number;
-  price: number;
+  contractId: string;
+  onChainMarketId: string;
+  outcome: "Yes" | "No";
+  collateralInRaw: string;
   userWallet: string;
-  builderCode: string;
-  settlementToken: string;
-  estimatedFee: number;
   traceReference: string | null;
 }
 
 export interface InitiateCopyTradeParams {
   traceId: string;
   marketId: string;
-  amount: number;
-  userWallet: string;
+  /** 7-decimal USDC base units, as a decimal string. */
+  amountRaw: string;
 }
 
 export interface CopyTradeRecord {
@@ -27,8 +24,8 @@ export interface CopyTradeRecord {
   marketId: string;
   direction: "YES" | "NO";
   amount: number;
+  amountRaw: string | null;
   status: "PENDING" | "EXECUTED" | "FAILED";
-  builderFee: number;
   txHash?: string | null;
 }
 
@@ -49,5 +46,3 @@ export async function confirmCopyTrade(id: string, txHash: string) {
 
   return data;
 }
-
-export type { SettlementCurrency };

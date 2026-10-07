@@ -63,7 +63,13 @@ const generateChartData = (period: string) => {
   }));
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipProps {
+  active?: boolean;
+  label?: string | number;
+  payload?: Array<{ name?: string; value?: number; color?: string; dataKey?: string | number }>;
+}
+
+const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-on-background text-surface px-3 py-2 rounded shadow-xl font-data-mono text-[11px] border border-primary/20">

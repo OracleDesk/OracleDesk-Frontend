@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { DemoBadge } from "@/components/ui/demo-badge";
 import Link from "next/link";
 
 export default function TransactionSuccessPage() {
@@ -116,7 +117,7 @@ export default function TransactionSuccessPage() {
                 </div>
                 <div className="flex justify-between items-center text-xs sm:text-sm">
                   <span className="font-body-md text-on-surface-variant">Network Fee</span>
-                  <span className="font-data-mono text-on-surface">0.00042 ETH (~$1.24)</span>
+                  <span className="font-data-mono text-on-surface">— <DemoBadge /></span>
                 </div>
                 <div className="flex justify-between items-center text-xs sm:text-sm">
                   <span className="font-body-md text-on-surface-variant">Execution Time</span>

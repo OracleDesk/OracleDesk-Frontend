@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
+import React from "react";
 import { useWallet } from "@/lib/contexts/WalletContext";
-import { useBalance } from "wagmi";
-import { CONTRACTS } from "@/lib/web3/contracts";
-import { arcTestnet, polygonAmoy } from "@/lib/web3/chains";
+import { useUsdcBalance } from "@/lib/hooks/useStellar";
+import { NETWORK_LABEL, explorerAccount } from "@/lib/stellar/config";
+import { formatUsdc, shortAddress } from "@/lib/stellar/units";
+import { DemoBadge } from "@/components/ui/demo-badge";
 
 const WalletCard = ({ name, address, balance, active }: { name: string, address: string, balance: string, active?: boolean }) => (
   <div className={`bg-white border ${active ? 'border-primary' : 'border-outline-variant'} rounded p-4 flex items-center justify-between group hover:border-primary transition-colors cursor-pointer`}>
     <div className="flex items-center gap-3">
       <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center">
-        <span className="material-symbols-outlined text-primary">{name === 'Phantom' ? 'token' : 'account_balance_wallet'}</span>
+        <span className="material-symbols-outlined text-primary">account_balance_wallet</span>
       </div>
       <div>
         <div className="font-bold text-on-surface">{name}</div>
@@ -27,7 +27,19 @@ const WalletCard = ({ name, address, balance, active }: { name: string, address:
   </div>
 );
 
-const TransactionRow = ({ type, icon, iconColor, asset, amount, amountColor, status, statusClass, date }: any) => (
+interface TransactionRowProps {
+  type: string;
+  icon: string;
+  iconColor: string;
+  asset: string;
+  amount: string;
+  amountColor: string;
+  status: string;
+  statusClass: string;
+  date: string;
+}
+
+const TransactionRow = ({ type, icon, iconColor, asset, amount, amountColor, status, statusClass, date }: TransactionRowProps) => (
   <tr className="zebra-stripe border-b border-outline-variant group transition-colors hover:bg-surface-container/40">
     <td className="px-4 py-4">
       <div className="flex items-center gap-2">
@@ -42,66 +54,17 @@ const TransactionRow = ({ type, icon, iconColor, asset, amount, amountColor, sta
     </td>
     <td className="px-4 py-4 text-on-surface-variant text-[12px]">{date}</td>
     <td className="px-4 py-4 text-right">
-      <a className="text-primary hover:underline font-label-caps text-[11px] inline-flex items-center gap-1" href="#">
-        EXPLORER <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-      </a>
+      <span className="text-on-surface-variant font-label-caps text-[11px]">—</span>
     </td>
   </tr>
 );
 
 export default function WalletsPage() {
-  const { address, isConnected, chainId, openModal, providerName } = useWallet();
-  
-  // Determine USDC token address based on current chain
-  const usdcTokenAddress = useMemo(() => {
-    if (chainId === arcTestnet.id) return CONTRACTS.arc.usdc;
-    if (chainId === polygonAmoy.id || chainId === 137) return CONTRACTS.polygon.usdc;
-    return undefined;
-  }, [chainId]);
+  const { address, isConnected, openModal, isWrongNetwork } = useWallet();
+  const balance = useUsdcBalance(address);
 
-  // Fetch USDC balance
-  const { data: balanceData } = useBalance({
-    address: address as `0x${string}`,
-    token: usdcTokenAddress && usdcTokenAddress !== "0x0000000000000000000000000000000000000000" 
-      ? usdcTokenAddress 
-      : undefined,
-  });
-
-  const formattedBalance = useMemo(() => {
-    if (!balanceData) return "0.00";
-    return Number(balanceData.formatted).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  }, [balanceData]);
-
-  const [terminalLogs, setTerminalLogs] = useState([
-    { time: "14:42:01", msg: "PING: Connection to Solana Mainnet verified via Phantom_Ext.", type: "default" },
-    { time: "14:41:55", msg: "VALIDATE: USDC Balance sync initiated for 0x71C...4242", type: "default" },
-    { time: "14:40:12", msg: "MEMPOOL: Transaction 0x82...a1f found in block #294,102,593", type: "default" },
-    { time: "14:38:44", msg: "SUCCESS: Settlement of OracleDesk_Vault_02 finalized. Amount: 150,000.00 USDC", type: "success" },
-    { time: "14:35:10", msg: "AUTH: Session token refreshed. Expiry in 43,200s.", type: "default" },
-  ]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
-      const time = now.toLocaleTimeString('en-GB', { hour12: false });
-      const newLogs = [
-        { time, msg: `SYNC: Asset prices updated from 8 oracle sources.`, type: "default" },
-        { time, msg: `HEARTBEAT: Ledger connectivity verified.`, type: "default" },
-        { time, msg: `EVENT: New USDC deposit detected in cold storage vault.`, type: "success" }
-      ];
-      const randomLog = newLogs[Math.floor(Math.random() * newLogs.length)];
-      setTerminalLogs(prev => [...prev.slice(-10), randomLog]);
-    }, 8000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const truncateAddress = (addr: string) => {
-    if (!addr) return "";
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
+  const formattedBalance =
+    balance.data !== undefined ? formatUsdc(balance.data, { minDecimals: 2, maxDecimals: 2, grouping: true }) : "0.00";
 
   return (
     <main className="flex-grow pt-8 pb-12 max-w-container-max-width mx-auto px-gutter w-full">
@@ -109,7 +72,7 @@ export default function WalletsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
           <h1 className="font-display-lg text-display-lg text-on-surface mb-1">Portfolio & Assets</h1>
-          <p className="text-on-surface-variant font-body-md">Manage institutional-grade liquidity and multi-chain wallet connections.</p>
+          <p className="text-on-surface-variant font-body-md">Your USDC on {NETWORK_LABEL} and the wallet you&apos;re connected with.</p>
         </div>
         <div className="flex gap-3">
           <button 
@@ -134,9 +97,7 @@ export default function WalletsPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <span className="font-label-caps text-label-caps text-on-surface-variant">TOTAL EQUITY</span>
-              <span className="text-secondary font-data-mono flex items-center gap-1 font-bold">
-                <span className="material-symbols-outlined text-[16px]">trending_up</span> +2.4%
-              </span>
+              {isWrongNetwork && <span className="text-error text-[11px] font-bold">Wrong network</span>}
             </div>
             <div className="font-display-lg text-display-lg text-on-surface tracking-tight text-4xl">
               ${formattedBalance}
@@ -156,7 +117,7 @@ export default function WalletsPage() {
         {/* Balance Chart Card */}
         <div className="col-span-12 lg:col-span-8 bg-white border border-outline-variant rounded p-6 h-64 relative overflow-hidden shadow-sm">
           <div className="flex justify-between items-center mb-4">
-            <span className="font-label-caps text-label-caps text-on-surface-variant">USDC PERFORMANCE (30D)</span>
+            <span className="font-label-caps text-label-caps text-on-surface-variant flex items-center gap-2">USDC PERFORMANCE (30D) <DemoBadge /></span>
             <div className="flex gap-4 text-label-caps font-label-caps text-on-surface-variant">
               <button className="hover:text-primary transition-colors">1D</button>
               <button className="hover:text-primary transition-colors">1W</button>
@@ -185,8 +146,8 @@ export default function WalletsPage() {
           <h3 className="font-headline-sm text-headline-sm text-on-surface">Connected Wallets</h3>
           {isConnected && address ? (
             <WalletCard 
-              name={providerName || "Connected Wallet"} 
-              address={truncateAddress(address)} 
+              name="Stellar wallet"
+              address={shortAddress(address, 6, 4)}
               balance={`$${formattedBalance}`} 
               active 
             />
@@ -213,11 +174,17 @@ export default function WalletsPage() {
         {/* Transaction History Table */}
         <div className="col-span-12 lg:col-span-8 bg-white border border-outline-variant rounded overflow-hidden shadow-sm">
           <div className="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
-            <h3 className="font-headline-sm text-headline-sm text-on-surface">Transaction History</h3>
-            <div className="flex gap-2">
-              <button className="material-symbols-outlined p-1 text-on-surface-variant hover:text-primary transition-colors">filter_list</button>
-              <button className="material-symbols-outlined p-1 text-on-surface-variant hover:text-primary transition-colors">download</button>
-            </div>
+            <h3 className="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">Transaction History <DemoBadge /></h3>
+            {address && (
+              <a
+                href={explorerAccount(address)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-label-caps text-[11px] inline-flex items-center gap-1"
+              >
+                YOUR REAL HISTORY ON STELLAR EXPERT <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+              </a>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -260,9 +227,7 @@ export default function WalletsPage() {
             </table>
           </div>
           <div className="p-4 bg-white border-t border-outline-variant flex items-center justify-center gap-4">
-            <button className="material-symbols-outlined text-on-surface-variant hover:text-primary disabled:opacity-30 cursor-pointer" disabled>chevron_left</button>
-            <span className="text-label-caps font-bold font-label-caps text-[11px]">PAGE 1 OF 12</span>
-            <button className="material-symbols-outlined text-on-surface-variant hover:text-primary cursor-pointer">chevron_right</button>
+            <span className="text-[11px] text-on-surface-variant">Sample rows. Indexed history is on the roadmap.</span>
           </div>
         </div>
       </div>

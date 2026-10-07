@@ -21,6 +21,13 @@ export interface ReasoningTrace {
   confidenceInterval: { lower: number; upper: number };
   verified: boolean;
   ipfsCid: string | null;
+  /** sha256 of the exact bytes pinned to IPFS. */
+  traceHash?: string | null;
+  /** reasoning-registry trace id; null until published on-chain. */
+  onChainTraceId?: string | null;
+  publishTxHash?: string | null;
+  accessLevel?: "FREE_PREVIEW" | "PER_TRACE" | "DAILY_PASS" | "NO_ACCESS";
+  dailyPassPriceRaw?: string;
   previewSources: ReasoningSource[] | null;
   sourcesUsed?: ReasoningSource[];
   betFraction?: number;
@@ -30,6 +37,7 @@ export interface ReasoningTrace {
     question: string;
     category: MarketCategory;
     settlementCurrency: SettlementCurrency;
+    onChainMarketId?: string | null;
   };
   createdAt: string;
 }
@@ -41,10 +49,14 @@ export interface ListTracesParams {
 }
 
 export interface TraceVerification {
-  verified: boolean;
-  storedHash: string;
+  traceId: string;
+  onChainTraceId: string;
+  ipfsCid: string;
+  onChainHash: string;
   computedHash: string;
-  ipfsCid?: string;
+  storedHash: string | null;
+  verified: boolean;
+  verifiedAt: string;
 }
 
 export interface SpendingAllowance {
@@ -72,16 +84,16 @@ export async function verifyTrace(traceId: string) {
   return data;
 }
 
-export async function unlockTrace(
-  traceId: string,
-  txHash: string,
-  amount: number,
-  type: UnlockType,
-) {
+/**
+ * Daily pass: after paying with a USDC transfer to PAYMENTS_RECIPIENT, hand
+ * the backend the transaction hash; it verifies the transfer on-chain.
+ * Per-trace unlocks go through the x402 service instead.
+ */
+export async function unlockDailyPass(traceId: string, txHash: string, amountRaw: string) {
   const { data } = await apiClient.post<{
     subscription: unknown;
-    trace: ReasoningTrace;
-  }>(`/traces/${traceId}/unlock`, { txHash, amount, type });
+    trace: ReasoningTrace | null;
+  }>(`/traces/${traceId}/unlock`, { txHash, amountRaw, type: "DAILY_PASS" satisfies UnlockType });
 
   return data;
 }

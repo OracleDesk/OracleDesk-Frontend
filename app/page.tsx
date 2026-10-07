@@ -6,41 +6,46 @@ import { motion } from "framer-motion";
 import { io } from "socket.io-client";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useMarkets } from "@/lib/hooks/useMarkets";
+import { API_URL } from "@/lib/api/client";
+import { formatUsdc } from "@/lib/stellar/units";
+import { DemoBadge } from "@/components/ui/demo-badge";
+
+interface FeedItem {
+  time: string;
+  agent: string;
+  action: string;
+  details: string;
+  chain: string;
+  color: string;
+}
 
 const AgentActivityFeed = () => {
-  const [feed, setFeed] = useState([
-    { time: "12:45:12", agent: "Alpha-Centauri", action: "DEPLOY_MARKET", details: "US CPI Nov 2026", chain: "Arc", color: "text-primary" },
-    { time: "12:44:58", agent: "Kelly-Bot-01", action: "OPEN_POSITION", details: "YES 5,000 USDC @ $0.64", chain: "Polygon", color: "text-secondary" },
-    { time: "12:44:20", agent: "Reasoning-Node-7", action: "PUBLISH_TRACE", details: "Trace ID: 0x77AF...42", chain: "Arc", color: "text-primary-fixed" },
-    { time: "12:43:55", agent: "Circle-Messenger", action: "CCTP_BURN", details: "20,000 USDC (Polygon)", chain: "Polygon", color: "text-on-primary-fixed-variant" },
-  ]);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
 
   useEffect(() => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://oracledesk-backend.onrender.com";
-    const socket = io(API_URL.replace("/api/v1", ""));
+    const socket = io(API_URL.replace(/\/api\/v1\/?$/, ""));
 
-    socket.on("TRADE_EXECUTED", (data: any) => {
-      const now = new Date();
-      const time = now.toLocaleTimeString('en-GB', { hour12: false });
+    // Payloads are documented in docs/api.md (Realtime).
+    socket.on("TRADE_EXECUTED", (data: { direction: string; isBuy: boolean; collateralRaw: string; priceYesBps: number; onChainMarketId: string }) => {
+      const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
       setFeed(prev => [{
         time,
-        agent: "Autonomous-Agent",
-        action: "EXECUTE_TRADE",
-        details: `${data.direction} ${data.amount.toLocaleString()} USDC @ ${data.price || "---"}`,
-        chain: "Polygon",
+        agent: "Trader",
+        action: data.isBuy ? "BUY" : "SELL",
+        details: `${data.direction} ${formatUsdc(BigInt(data.collateralRaw), { maxDecimals: 2, grouping: true })} USDC on #${data.onChainMarketId} · YES ${(data.priceYesBps / 100).toFixed(1)}%`,
+        chain: "Stellar",
         color: "text-secondary"
       }, ...prev.slice(0, 5)]);
     });
 
-    socket.on("REASONING_PUBLISHED", (data: any) => {
-      const now = new Date();
-      const time = now.toLocaleTimeString('en-GB', { hour12: false });
+    socket.on("REASONING_PUBLISHED", (data: { onChainTraceId: string; action: string }) => {
+      const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
       setFeed(prev => [{
         time,
-        agent: "Oracle-Reasoner",
+        agent: "Reasoner",
         action: "PUBLISH_TRACE",
-        details: `Trace ID: ${data.traceId?.substring(0, 10)}...`,
-        chain: "Arc",
+        details: `Trace #${data.onChainTraceId} (${data.action})`,
+        chain: "Stellar",
         color: "text-primary-fixed"
       }, ...prev.slice(0, 5)]);
     });
@@ -57,16 +62,19 @@ const AgentActivityFeed = () => {
           <span className="material-symbols-outlined text-secondary animate-pulse">monitoring</span>
           <h3 className="font-headline-sm text-headline-sm text-white uppercase tracking-widest text-xs">Live Agent Activity</h3>
         </div>
-        <span className="text-white/30 text-[9px] font-data-mono uppercase">Streaming Mainnet Trace</span>
+        <span className="text-white/30 text-[9px] font-data-mono uppercase">Stellar Testnet</span>
       </div>
       <div className="p-6 h-[320px] overflow-y-auto font-data-mono text-[11px] space-y-3 custom-scrollbar">
+        {feed.length === 0 && (
+          <p className="text-white/40">Waiting for agent activity on-chain…</p>
+        )}
         {feed.map((item, i) => (
           <div key={i} className="flex gap-4 border-l border-white/10 pl-4 py-1 hover:bg-white/5 transition-colors group">
             <span className="text-white/20 whitespace-nowrap">[{item.time}]</span>
             <span className="text-primary font-bold whitespace-nowrap">{item.agent}</span>
             <span className={`font-black ${item.color} whitespace-nowrap`}>{item.action}</span>
             <span className="text-white/70 truncate flex-grow">{item.details}</span>
-            <span className={`text-[9px] px-1.5 py-0.5 rounded border ${item.chain === 'Arc' ? 'border-primary/50 text-primary' : 'border-secondary/50 text-secondary'} font-bold`}>{item.chain}</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded border border-primary/50 text-primary font-bold`}>{item.chain}</span>
           </div>
         ))}
       </div>
@@ -76,16 +84,17 @@ const AgentActivityFeed = () => {
 
 const ProtocolActivity = () => {
   const activity = [
-    { type: "NANOPAYMENT", detail: "USDC 0.10 -> Trace Unlock", status: "CONFIRMED", chain: "Arc", color: "text-secondary" },
-    { type: "CCTP_BRIDGE", detail: "Arc -> Polygon Settlement", status: "PENDING", chain: "Cross-Chain", color: "text-primary" },
-    { type: "PAYMASTER", detail: "Gas Sponsored: market_deploy", status: "SUCCESS", chain: "Arc", color: "text-secondary" },
+    { type: "DAILY_PASS", detail: "USDC 0.50 -> 24h trace access", status: "CONFIRMED", chain: "Stellar", color: "text-secondary" },
+    { type: "TRACE_UNLOCK", detail: "x402 per-trace payment", status: "PENDING", chain: "Stellar", color: "text-primary" },
+    { type: "MARKET_CREATE", detail: "Treasury seeds a new market", status: "SUCCESS", chain: "Stellar", color: "text-secondary" },
   ];
 
   return (
     <div className="bg-surface-container-low border border-outline-variant rounded-xl p-6 shadow-sm flex flex-col h-full">
       <div className="flex items-center gap-2 mb-6 text-on-surface">
         <span className="material-symbols-outlined text-primary">hub</span>
-        <h3 className="font-headline-sm text-headline-sm uppercase tracking-tight text-sm">Circle Protocol Activity</h3>
+        <h3 className="font-headline-sm text-headline-sm uppercase tracking-tight text-sm">Protocol Activity</h3>
+        <DemoBadge className="ml-auto" />
       </div>
       <div className="space-y-4 flex-grow">
         {activity.map((item, i) => (
@@ -102,8 +111,8 @@ const ProtocolActivity = () => {
         ))}
       </div>
       <div className="pt-4 mt-auto border-t border-outline-variant flex items-center justify-between">
-        <span className="text-[10px] text-on-surface-variant font-data-mono uppercase">Arc Gas Status</span>
-        <span className="text-[10px] text-secondary font-bold">FREE (SPONSORED)</span>
+        <span className="text-[10px] text-on-surface-variant font-data-mono uppercase">Network fees</span>
+        <span className="text-[10px] text-secondary font-bold">PAID IN XLM BY YOUR WALLET</span>
       </div>
     </div>
   );
@@ -116,15 +125,9 @@ const Ticker = () => {
   const tickerItems = markets.length > 0 
     ? markets.map(m => {
         const prob = Math.round((m.currentYesProb ?? m.initialYesProb) * 100);
-        const change = "+0.0%"; // Placeholder for real 1h change if available
-        return `${m.question.substring(0, 30).toUpperCase()}: ${prob}% (${change})`;
+        return `${m.question.substring(0, 30).toUpperCase()}: ${prob}%`;
       })
-    : [
-        "BTC ETF APPROVAL: 92% (+2.4%)",
-        "FED RATE CUT MAR: 41% (-5.1%)",
-        "ETH LONDON UPGRADE: 78% (STABLE)",
-        "SOLANA BREAKPOINT ANNOUNCEMENT: 65% (+12%)",
-      ];
+    : ["NO LIVE MARKETS YET"];
 
   return (
     <div className="bg-on-background text-primary-fixed-dim py-2 border-b border-outline overflow-hidden">
@@ -246,7 +249,19 @@ const Hero = () => {
   );
 };
 
-const MarketCard = ({ id, icon, category, platform, change, title, prob, volume, color = "secondary" }: any) => {
+interface HomeMarketCardProps {
+  id?: string;
+  icon: string;
+  category: string;
+  platform: string;
+  change: string;
+  title: string;
+  prob: number;
+  volume: string;
+  color?: string;
+}
+
+const MarketCard = ({ id, icon, category, platform, change, title, prob, volume, color = "secondary" }: HomeMarketCardProps) => {
   return (
     <div className="bg-white border border-outline-variant p-6 rounded-lg hover:shadow-md transition-all group cursor-pointer block">
       <div className="flex justify-between items-start mb-4">
@@ -255,8 +270,8 @@ const MarketCard = ({ id, icon, category, platform, change, title, prob, volume,
             <span className="material-symbols-outlined">{icon}</span>
           </div>
           <div className="flex flex-col">
-            <span className={`text-[9px] font-bold uppercase tracking-tighter ${platform === 'ARC' ? 'text-primary' : 'text-secondary'}`}>
-              {platform === 'ARC' ? 'Arc Native' : 'Polygon/Poly'}
+            <span className="text-[9px] font-bold uppercase tracking-tighter text-primary">
+              {platform}
             </span>
             <span className="font-label-caps text-on-surface-variant">{category}</span>
           </div>
@@ -337,8 +352,8 @@ const MarketsGrid = () => {
                 id={m.id}
                 icon={icon}
                 category={m.category}
-                platform={m.marketUrl ? 'POLYMARKET' : 'ARC'}
-                change="+0.0% 24H"
+                platform={m.onChainMarketId !== null ? `On-chain #${m.onChainMarketId}` : 'Not on-chain yet'}
+                change=""
                 title={m.question}
                 prob={Math.round((m.currentYesProb ?? m.initialYesProb) * 100)}
                 volume={`$${(m.totalLiquidity / 1000).toFixed(1)}K`}
@@ -447,7 +462,7 @@ const PortfolioAnalytics = () => {
         </div>
         <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
           <div className="bg-white border border-outline-variant p-6 rounded-xl shadow-sm">
-            <h4 className="font-label-caps mb-4 text-on-surface-variant">TOP POSITIONS</h4>
+            <h4 className="font-label-caps mb-4 text-on-surface-variant flex items-center gap-2">TOP POSITIONS <DemoBadge /></h4>
             <div className="space-y-4">
               <div className="flex justify-between">
                 <span className="font-body-md font-semibold">FED PIVOT MAY</span>

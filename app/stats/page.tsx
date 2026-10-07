@@ -2,15 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import { usePlatformStats } from "@/lib/hooks/usePortfolio";
+import { DemoBadge } from "@/components/ui/demo-badge";
 
 const KPIStats = () => {
   const { data: statsData, isLoading } = usePlatformStats();
   
-  const stats = [
-    { label: "Subscriber Count", value: isLoading ? "..." : statsData?.subscriberCount?.toLocaleString(), change: "12%", trend: "up" },
-    { label: "Total Copy Volume", value: isLoading ? "..." : `$${(statsData?.totalCopyVolume / 1000).toFixed(1)}k`, change: "8.4%", trend: "up" },
-    { label: "Builder Fees", value: isLoading ? "..." : `$${(statsData?.builderFees / 1000).toFixed(1)}k`, change: "5.2%", trend: "up" },
-    { label: "Avg. Latency", value: "14ms", status: "Stable", trend: "stable" },
+  const show = (v: string | undefined) => (isLoading ? "..." : v ?? "—");
+  const stats: Array<{ label: string; value: string; change?: string; status?: string }> = [
+    { label: "Subscriber Count", value: show(statsData?.subscriberCount.toLocaleString()) },
+    { label: "Total Copy Volume", value: show(statsData ? `$${statsData.totalCopyVolume.toLocaleString()}` : undefined) },
+    { label: "Markets", value: show(statsData?.marketCount.toLocaleString()), status: statsData ? `${statsData.onChainMarketCount} on-chain` : undefined },
+    { label: "Reasoning Traces", value: show(statsData?.traceCount.toLocaleString()) },
   ];
 
   return (
@@ -42,7 +44,7 @@ const VolumeChart = () => {
     <div className="lg:col-span-2 bg-white border border-outline-variant rounded-lg p-6 flex flex-col gap-6 hover:shadow-md transition-all">
       <div className="flex justify-between items-start">
         <div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface">Copy Volume Over Time</h3>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">Copy Volume Over Time <DemoBadge /></h3>
           <p className="text-on-surface-variant font-label-caps text-label-caps">CUMULATIVE TRANSACTION THROUGHPUT (USD)</p>
         </div>
         <div className="flex items-center gap-4">
@@ -86,7 +88,7 @@ const TopTrades = () => {
   return (
     <div className="bg-white border border-outline-variant rounded-lg overflow-hidden flex flex-col hover:shadow-md transition-all">
       <div className="p-6 border-b border-outline-variant">
-        <h3 className="font-headline-sm text-headline-sm text-on-surface">Top Copied Trades</h3>
+        <h3 className="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">Top Copied Trades <DemoBadge /></h3>
         <p className="text-on-surface-variant font-label-caps text-label-caps uppercase">HIGHEST 24H VELOCITY</p>
       </div>
       <div className="flex-1 divide-y divide-outline-variant overflow-y-auto">
@@ -124,7 +126,7 @@ const ProtocolReliability = () => {
   return (
     <div className="bg-white border border-outline-variant rounded-lg p-6 hover:shadow-md transition-all">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="font-headline-sm text-headline-sm text-on-surface">Protocol Reliability</h3>
+        <h3 className="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">Protocol Reliability <DemoBadge /></h3>
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-secondary"></span>
           <span className="font-label-caps text-label-caps text-secondary">Operational</span>
@@ -145,7 +147,7 @@ const ProtocolReliability = () => {
 const LiveTerminal = () => {
   const [logs, setLogs] = useState([
     { time: "14:22:01", type: "INFO", message: "New swap sequence initiated by node 0x7E...42", typeColor: "text-primary" },
-    { time: "14:22:02", type: "INFO", message: "Copy trade executed: 2.4 ETH @ $2,421.10", typeColor: "text-primary" },
+    { time: "14:22:02", type: "INFO", message: "Copy trade executed: 2,400 USDC on YES", typeColor: "text-primary" },
     { time: "14:22:05", type: "EVENT", message: "Block 19,420,112 validated in 1.1s", typeColor: "text-secondary" },
     { time: "14:22:09", type: "INFO", message: "Oracle price sync complete (BTC/USD: $42,104.20)", typeColor: "text-primary" },
     { time: "14:22:11", type: "WARN", message: "Slight latency increase in Region: EU-WEST", typeColor: "text-destructive" },
@@ -162,7 +164,7 @@ const LiveTerminal = () => {
       const newLogs = [
         { time, type: "INFO", message: `Node 0x${Math.random().toString(16).slice(2, 6)} synchronized successfully`, typeColor: "text-primary" },
         { time, type: "EVENT", message: `New consensus reached on block ${Math.floor(Math.random() * 20000000)}`, typeColor: "text-secondary" },
-        { time, type: "INFO", message: `Transaction verified: ${ (Math.random() * 10).toFixed(2) } ETH`, typeColor: "text-primary" }
+        { time, type: "INFO", message: `Transaction verified: ${ (Math.random() * 10).toFixed(2) } USDC`, typeColor: "text-primary" }
       ];
       
       setLogs(prev => [...prev.slice(-6), newLogs[Math.floor(Math.random() * newLogs.length)]]);
@@ -175,7 +177,7 @@ const LiveTerminal = () => {
       <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
-          <span className="text-white/70 font-bold uppercase tracking-widest text-[10px]">Real-time Network Trace</span>
+          <span className="text-white/70 font-bold uppercase tracking-widest text-[10px]">Network Trace (demo data)</span>
         </div>
         <span className="text-white/30 text-[9px]">v4.2.1-STABLE</span>
       </div>
@@ -200,7 +202,7 @@ export default function StatsPage() {
       <section className="flex flex-col md:flex-row justify-between items-end gap-4">
         <div className="space-y-1">
           <h1 className="font-display-lg text-display-lg text-on-surface">Platform Intelligence</h1>
-          <p className="text-on-surface-variant font-body-lg">Real-time institutional protocol analytics and network health.</p>
+          <p className="text-on-surface-variant font-body-lg">Platform counts from the OracleDesk backend. Panels marked demo data are samples.</p>
         </div>
         <div className="flex gap-2 bg-surface-container-low p-1 rounded-lg border border-outline-variant">
           {["24H", "7D", "30D", "ALL"].map((period) => (

@@ -137,7 +137,7 @@ export default function UnlockPremiumTracePage() {
                       </div>
                       <div>
                         <div className="font-headline-sm text-headline-sm">Single Trace</div>
-                        <div className="font-body-md text-xs text-on-surface-variant">Unlock this specific market's reasoning.</div>
+                        <div className="font-body-md text-xs text-on-surface-variant">Unlock this specific market&apos;s reasoning.</div>
                       </div>
                     </div>
                     <div className="text-right">

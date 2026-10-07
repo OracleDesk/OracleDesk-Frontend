@@ -8,7 +8,7 @@ const TerminalStream = () => {
     { time: "09:12:44", text: "ORDER FILL: $4.2K YES (FED_R)", color: "text-secondary" },
     { time: "09:12:31", text: "PRICE_TICK: 0.64 -> 0.65", color: "text-primary" },
     { time: "09:12:15", text: "LIQUIDITY REMOVED: -10.5K", color: "text-destructive" },
-    { time: "09:11:58", text: "NEW_POSITION: 0.5 ETH YES", color: "text-secondary" },
+    { time: "09:11:58", text: "NEW_POSITION: 500 USDC YES", color: "text-secondary" },
     { time: "09:11:42", text: "SYSTEM: CALIBRATING FEED...", color: "text-on-surface-variant" },
   ]);
 

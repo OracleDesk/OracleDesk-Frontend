@@ -1,40 +1,47 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { Suspense, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { verifyTrace, TraceVerification } from "@/lib/api/traces";
+import { useQueryClient } from "@tanstack/react-query";
+import { getTrace } from "@/lib/api/traces";
+import { CONTRACTS, explorerAccount } from "@/lib/stellar/config";
+import { reasoningRegistry } from "@/lib/stellar/clients";
+import { simulated } from "@/lib/hooks/useStellar";
+import { fetchAndVerifyTrace, ipfsUrl, type TraceCheck } from "@/lib/stellar/trace";
 
-const logs = [
-  ">> [INIT] Requesting trace manifest from IPFS...",
-  ">> [CONN] Established peer-to-peer connection with shard-cluster-7",
-  ">> [DATA] Downloading shard 1/4 [Reasoning Engine Output]",
-  ">> [DATA] Shard 1 received. (Size: 1.2MB)",
-  ">> [DATA] Downloading shard 2/4 [Knowledge Graph Reference]",
-  ">> [DATA] Shard 2 received. (Size: 0.8MB)",
-  ">> [DATA] Downloading shard 3/4 [Probabilistic Calculation Matrix]",
-  ">> [DATA] Shard 3 received. (Size: 4.5MB)",
-  ">> [DATA] Downloading shard 4/4 [Final Commitment Signature]",
-  ">> [DATA] Shard 4 received. (Size: 0.1MB)",
-  ">> [AUDIT] Executing Merkle Proof verification...",
-  ">> [AUDIT] Validating leaf node: 0x77...2a1",
-  ">> [AUDIT] Validating leaf node: 0xbc...f92",
-  ">> [AUDIT] Root hash match confirmed.",
-  ">> [FINAL] Reconstructing full reasoning trace...",
-];
+interface VerificationResult {
+  verified: boolean;
+  status: TraceCheck["status"];
+  onChainTraceId: string;
+  ipfsCid: string;
+  storedHash: string;
+  computedHash: string | null;
+  reason?: string;
+}
 
 export default function VerifyTracePage() {
+  return (
+    <Suspense fallback={<main className="min-h-[calc(100vh-64px)] flex items-center justify-center">Loading…</main>}>
+      <VerifyTraceContent />
+    </Suspense>
+  );
+}
+
+function VerifyTraceContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const traceId = searchParams.get("traceId");
+  const onChainTraceIdParam = searchParams.get("onChainTraceId");
 
   const [isVerifying, setIsVerifying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const [isComplete, setIsComplete] = useState(false);
-  const [statusLabel, setStatusLabel] = useState("Initializing cryptographic audit...");
-  const [verificationResult, setVerificationResult] = useState<TraceVerification | null>(null);
+  const [statusLabel, setStatusLabel] = useState("Ready to check this trace against the chain");
+  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,55 +50,78 @@ export default function VerifyTracePage() {
     }
   }, [terminalLogs]);
 
+  const log = (line: string, pct: number) => {
+    setTerminalLogs((prev) => [...prev, line]);
+    setProgress(pct);
+  };
+
+  const fail = (message: string) => {
+    setIsVerifying(false);
+    setStatusLabel("Verification Failed");
+    setTerminalLogs((prev) => [...prev, `>> [ERROR] ${message}`]);
+  };
+
   const startVerification = async () => {
-    if (isVerifying || isComplete || !traceId) return;
-
+    if (isVerifying || isComplete || (!traceId && !onChainTraceIdParam)) return;
     setIsVerifying(true);
-    setTerminalLogs([">> [INIT] Connecting to decentralized reasoning shard..."]);
-    
+    setStatusLabel("Checking…");
+    setTerminalLogs([]);
+
     try {
-      const result = await verifyTrace(traceId);
-      setVerificationResult(result);
-      
-      const realLogs = [
-        ">> [INIT] Requesting trace manifest from IPFS...",
-        `>> [CONN] IPFS CID Detected: ${result.ipfsCid?.substring(0, 15)}...`,
-        ">> [DATA] Downloading reasoning shards from decentralized cluster...",
-        ">> [DATA] Shard retrieval complete (2.4MB retrieved).",
-        ">> [AUDIT] Checking Arc ReasoningRegistry (Contract: 0xE318...257)",
-        ">> [AUDIT] Merkle Proof: Validating commitment leaf nodes...",
-        `>> [AUDIT] Stored Hash: ${result.storedHash?.substring(0, 32)}...`,
-        `>> [AUDIT] Local Hash: ${result.computedHash?.substring(0, 32)}...`,
-        ">> [FINAL] Comparing cryptographic fingerprints...",
-      ];
+      // 1. Which on-chain trace?
+      let onChainTraceId = onChainTraceIdParam;
+      if (!onChainTraceId && traceId) {
+        log(">> [INIT] Looking up the trace in OracleDesk…", 10);
+        const trace = await getTrace(traceId);
+        onChainTraceId = trace.onChainTraceId ?? null;
+        if (!onChainTraceId) return fail("This trace hasn't been published on-chain yet, so there is nothing to verify against.");
+      }
 
-      let step = 0;
-      const interval = setInterval(() => {
-        if (step < realLogs.length) {
-          setTerminalLogs((prev) => [...prev, realLogs[step]]);
-          step++;
-          setProgress(Math.floor((step / realLogs.length) * 100));
-        } else {
-          clearInterval(interval);
-          completeVerification(result);
-        }
-      }, 300);
+      // 2. Read the commitment from reasoning-registry.
+      log(`>> [CHAIN] reasoning_registry.get_trace(${onChainTraceId}) on ${CONTRACTS.reasoningRegistry.slice(0, 8)}…`, 30);
+      const onChain = simulated<{ trace_hash: Uint8Array; ipfs_cid: string; market_id: bigint }>(
+        await reasoningRegistry().get_trace({ trace_id: BigInt(onChainTraceId as string) }),
+        "reasoningRegistry",
+      );
+      const storedHash = Array.from(onChain.trace_hash, (b) => b.toString(16).padStart(2, "0")).join("");
+      log(`>> [CHAIN] On-chain hash: ${storedHash}`, 50);
+      log(`>> [IPFS] Fetching ${onChain.ipfs_cid}`, 60);
 
+      // 3. Fetch the exact bytes and hash them locally.
+      const check = await fetchAndVerifyTrace(onChain.ipfs_cid, storedHash);
+      const result: VerificationResult = {
+        verified: check.status === "verified",
+        status: check.status,
+        onChainTraceId: onChainTraceId as string,
+        ipfsCid: onChain.ipfs_cid,
+        storedHash,
+        computedHash: check.status === "unavailable" ? null : check.computedHash,
+        reason: check.status === "unavailable" ? check.reason : undefined,
+      };
+      if (check.status === "unavailable") {
+        log(`>> [IPFS] ${check.reason}. The content can't be checked.`, 90);
+      } else {
+        log(`>> [LOCAL] sha256 of the bytes received: ${check.computedHash}`, 90);
+      }
+      queryClient.setQueryData(["stellar", "trace", onChainTraceId], undefined);
+      completeVerification(result);
     } catch (err) {
-      console.error("Verification failed:", err);
-      setIsVerifying(false);
-      setStatusLabel("Verification Failed");
-      setTerminalLogs((prev) => [...prev, ">> [ERROR] Cryptographic Audit Failed: Could not fetch trace proof from Arc."]);
+      fail(err instanceof Error ? err.message : "Couldn't read the trace from the chain.");
     }
   };
 
-  const completeVerification = (result: TraceVerification) => {
-    setStatusLabel(result.verified ? "Verification Complete" : "Verification Failed");
+  const completeVerification = (result: VerificationResult) => {
+    setVerificationResult(result);
+    setStatusLabel(
+      result.status === "verified" ? "Verification Complete" : result.status === "mismatch" ? "Verification Failed" : "Content Unavailable",
+    );
     setTerminalLogs((prev) => [
-      ...prev, 
-      result.verified 
-        ? ">> [SUCCESS] Integrity Verified: All Shards Intact." 
-        : ">> [FAIL] Cryptographic Mismatch Detected: Trace Tampering Possible."
+      ...prev,
+      result.status === "verified"
+        ? ">> [SUCCESS] The content matches the on-chain hash."
+        : result.status === "mismatch"
+          ? ">> [FAIL] The content does NOT match the on-chain hash. Don't trust it."
+          : ">> [FAIL] The content couldn't be fetched, so it wasn't verified.",
     ]);
     setIsComplete(true);
     setIsVerifying(false);
@@ -164,10 +194,12 @@ export default function VerifyTracePage() {
               </div>
               <div>
                 <h2 className="font-headline-sm text-headline-sm text-on-surface">Verify Trace Integrity</h2>
-                <p className="font-label-caps text-label-caps text-on-surface-variant">TRACE-ID: {traceId?.substring(0, 12)}...</p>
+                <p className="font-label-caps text-label-caps text-on-surface-variant">
+                  {onChainTraceIdParam ? `ON-CHAIN TRACE #${onChainTraceIdParam}` : traceId ? `TRACE-ID: ${traceId.substring(0, 12)}…` : "NO TRACE SELECTED"}
+                </p>
               </div>
             </div>
-            <Link href="/reasoning" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-variant transition-colors">
+            <Link href="/reasoning" aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-variant transition-colors">
               <span className="material-symbols-outlined text-on-surface-variant">close</span>
             </Link>
           </div>
@@ -199,7 +231,7 @@ export default function VerifyTracePage() {
                   </motion.p>
                 ))}
                 {!isVerifying && !isComplete && (
-                  <p className="text-surface-variant opacity-50">&gt;&gt; Ready to begin cryptographic audit...</p>
+                  <p className="text-surface-variant opacity-50">&gt;&gt; Fetches the content, hashes the exact bytes and compares them with reasoning-registry.</p>
                 )}
               </div>
             </div>
@@ -221,7 +253,7 @@ export default function VerifyTracePage() {
                 )}
                 <label className="font-label-caps text-label-caps text-on-surface-variant block mb-2">COMPUTED HASH (LOCAL)</label>
                 <code className={`text-xs break-all font-data-mono ${isComplete ? (verificationResult?.verified ? 'text-secondary font-bold' : 'text-error font-bold') : 'text-on-surface'}`}>
-                  {isComplete && verificationResult ? verificationResult.computedHash : "****************************************"}
+                  {isComplete && verificationResult ? verificationResult.computedHash ?? "not available" : "****************************************"}
                 </code>
               </div>
             </div>
@@ -238,24 +270,26 @@ export default function VerifyTracePage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-headline-sm text-headline-sm">
-                      {verificationResult.verified ? 'Verified Reasoning Trace Integrity: 100%' : 'Integrity Check Failed'}
+                      {verificationResult.verified ? 'Trace verified' : verificationResult.status === 'mismatch' ? 'Integrity check failed' : 'Content unavailable'}
                     </h3>
                     <p className="text-sm opacity-80">
-                      {verificationResult.verified 
-                        ? 'All reasoning shards matched the cryptographic commitment stored on-chain.' 
-                        : 'Local computation did not match the on-chain commitment. This trace may have been altered.'}
+                      {verificationResult.verified
+                        ? 'The content hashes to exactly the value recorded in reasoning-registry.'
+                        : verificationResult.status === 'mismatch'
+                          ? "The content doesn't match the on-chain hash. It may have been altered."
+                          : `${verificationResult.reason ?? "The content couldn't be fetched"}, so it wasn't verified.`}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">
                     {verificationResult.ipfsCid && (
-                      <a className={`flex items-center gap-2 px-4 py-2 bg-white border ${verificationResult.verified ? 'border-secondary text-secondary' : 'border-error text-error'} font-label-caps rounded hover:brightness-95 transition-all text-xs`} href={`https://ipfs.io/ipfs/${verificationResult.ipfsCid}`} target="_blank" rel="noopener noreferrer">
+                      <a className={`flex items-center gap-2 px-4 py-2 bg-white border ${verificationResult.verified ? 'border-secondary text-secondary' : 'border-error text-error'} font-label-caps rounded hover:brightness-95 transition-all text-xs`} href={ipfsUrl(verificationResult.ipfsCid)} target="_blank" rel="noopener noreferrer">
                         <span className="material-symbols-outlined text-sm">link</span>
                         View IPFS
                       </a>
                     )}
-                    <a className={`flex items-center gap-2 px-4 py-2 bg-white border ${verificationResult.verified ? 'border-secondary text-secondary' : 'border-error text-error'} font-label-caps rounded hover:brightness-95 transition-all text-xs`} href={`https://testnet.arcscan.app/address/0xE3188B3b4E14d74E6110137FF91f12B981A82257`} target="_blank" rel="noopener noreferrer">
+                    <a className={`flex items-center gap-2 px-4 py-2 bg-white border ${verificationResult.verified ? 'border-secondary text-secondary' : 'border-error text-error'} font-label-caps rounded hover:brightness-95 transition-all text-xs`} href={explorerAccount(CONTRACTS.reasoningRegistry)} target="_blank" rel="noopener noreferrer">
                       <span className="material-symbols-outlined text-sm">search</span>
-                      View on Arc
+                      View on Stellar Expert
                     </a>
                   </div>
                 </motion.div>
