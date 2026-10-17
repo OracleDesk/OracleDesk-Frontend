@@ -9,6 +9,8 @@ export default function BuyNoDemoPage() {
 
   const price = 0.68;
   const shares = (parseFloat(amount) || 0) / price;
+  const fee = (parseFloat(amount) || 0) * 0.01;
+  const priceImpact = Math.min(0.99, shares ? ((parseFloat(amount) || 0) / Math.max(shares, 1)) * 0.002 : 0);
   const potentialPayout = shares; // Since it's a binary outcome usually 1 USDC per share
 
   return (
@@ -116,6 +118,14 @@ export default function BuyNoDemoPage() {
                   <span className="font-data-mono font-bold text-on-surface">{shares.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm sm:text-base">
+                  <span className="font-body-md text-on-surface-variant">Trading fee</span>
+                  <span className="font-data-mono font-bold text-on-surface">{fee.toFixed(2)} USDC</span>
+                </div>
+                <div className="flex justify-between items-center text-sm sm:text-base">
+                  <span className="font-body-md text-on-surface-variant">Estimated price impact</span>
+                  <span className="font-data-mono font-bold text-on-surface">{(priceImpact * 100).toFixed(2)}%</span>
+                </div>
+                <div className="flex justify-between items-center text-sm sm:text-base">
                   <span className="font-body-md text-on-surface-variant">Avg. Purchase Price</span>
                   <span className="font-data-mono font-bold text-on-surface">0.68 USDC</span>
                 </div>
@@ -165,3 +175,4 @@ export default function BuyNoDemoPage() {
     </div>
   );
 }
+
