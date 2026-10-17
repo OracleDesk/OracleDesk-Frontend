@@ -5,11 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Keypair, scValToNative, xdr } from "@stellar/stellar-sdk";
 import type { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import { useWallet } from "@/lib/contexts/WalletContext";
-import { marketCore, reasoningRegistry, token, Outcomes, rpcServer, type OutcomeTag, type Signer } from "@/lib/stellar/clients";
+import { marketCore, reasoningRegistry, token, Outcomes, rpcServer, signerAddress, type OutcomeTag, type Signer } from "@/lib/stellar/clients";
+import { submitAsContract } from "@/lib/stellar/contract-submit";
 import { UserFacingError, type ContractName } from "@/lib/stellar/errors";
 import { collateralOutForShares, priceYesBps } from "@/lib/stellar/generated/fpmm";
 import type { Market as OnChainMarket, Position } from "@/lib/stellar/generated/market-core";
 import { fetchAndVerifyTrace, type TraceCheck } from "@/lib/stellar/trace";
+import { bytesToHex, read, submit } from "@/lib/stellar/typed-call";
 import { maxIn, minOut } from "@/lib/stellar/units";
 import {
   feeBreakdown,
@@ -19,7 +21,6 @@ import {
   type FeeBreakdown,
 } from "@/lib/stellar/fees";
 import {
-  simulated,
   TxLifecycle,
   type TxPhase,
 } from "@/lib/stellar/tx-lifecycle";
@@ -27,7 +28,11 @@ import { useTxTracker } from "@/lib/stellar/tx-tracker";
 import { tradeInvalidationKeys } from "@/lib/stellar/tx-tracker-core";
 import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
 
-export { simulated };
+/**
+ * @deprecated Use `read` from `@/lib/stellar/typed-call` instead.
+ */
+export const simulated = read;
+
 export { tradeInvalidationKeys };
 
 /** Query keys all start with "stellar" so a disconnect can drop them in one go. */
@@ -49,7 +54,7 @@ const toId = (id: bigint | string | number) => BigInt(id);
 export function useMarketCount() {
   return useQuery({
     queryKey: stellarKeys.marketCount,
-    queryFn: async () => simulated<bigint>(await marketCore().market_count()),
+    queryFn: async () => read(await marketCore().market_count()),
     staleTime: 30_000,
   });
 }
@@ -62,7 +67,7 @@ export interface OnChainMarketView {
 }
 
 export async function fetchOnChainMarket(id: bigint | string): Promise<OnChainMarketView> {
-  const market = simulated<OnChainMarket>(await marketCore().get_market({ market_id: toId(id) }));
+  const market = read(await marketCore().get_market({ market_id: toId(id) }));
   return { id: String(id), market, yesBps: Number(priceYesBps(market.reserve_yes, market.reserve_no)) };
 }
 
@@ -101,7 +106,7 @@ export function usePosition(id: bigint | string | null | undefined, holder: stri
     queryKey: stellarKeys.position(String(id), holder ?? ""),
     enabled: id !== null && id !== undefined && Boolean(holder),
     queryFn: async () =>
-      simulated<Position>(await marketCore().get_position({ market_id: toId(id as string), holder: holder as string })),
+      read(await marketCore().get_position({ market_id: toId(id as string), holder: holder as string })),
     staleTime: 15_000,
   });
 }
@@ -110,7 +115,7 @@ export function useUsdcBalance(owner: string | null | undefined) {
   return useQuery({
     queryKey: stellarKeys.balance(owner ?? ""),
     enabled: Boolean(owner),
-    queryFn: async () => simulated<bigint>(await token.balance(owner as string)),
+    queryFn: async () => read(await token.balance(owner as string)),
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
@@ -203,7 +208,7 @@ export function useQuoteBuy(id: bigint | string | null | undefined, outcome: Out
     queryKey: stellarKeys.quoteBuy(String(id), outcome, collateralIn?.toString() ?? ""),
     enabled: id !== null && id !== undefined && collateralIn !== null && collateralIn > 0n,
     queryFn: async () =>
-      simulated<bigint>(
+      read(
         await marketCore().quote_buy({ market_id: toId(id as string), outcome: Outcomes[outcome], collateral_in: collateralIn as bigint }),
       ),
     staleTime: 5_000,
@@ -240,7 +245,7 @@ export function usePrepareBuy(params: {
     enabled: Boolean(marketId) && Boolean(holder) && collateralIn !== null && collateralIn > 0n,
     queryFn: async (): Promise<PreparedBuy> => {
       const id = toId(marketId!);
-      const quote = simulated<bigint>(
+      const quote = read(
         await marketCore().quote_buy({
           market_id: id,
           outcome: Outcomes[outcome],
@@ -249,8 +254,9 @@ export function usePrepareBuy(params: {
       );
       const minSharesOut = minOut(quote, slippageBps);
       const dummySigner: Signer = {
+        kind: "account",
         publicKey: holder!,
-        signTransaction: async (xdr) => ({ signedTxXdr: xdr }),
+        signTransaction: async (xdrStr) => ({ signedTxXdr: xdrStr }),
       };
       const tx = await marketCore(dummySigner).buy({
         trader: holder!,
@@ -297,8 +303,9 @@ export function usePrepareUsdcTransfer(params: {
     enabled: Boolean(to) && Boolean(holder) && amount !== null && amount > 0n,
     queryFn: async (): Promise<PreparedUsdcTransfer> => {
       const dummySigner: Signer = {
+        kind: "account",
         publicKey: holder!,
-        signTransaction: async (xdr) => ({ signedTxXdr: xdr }),
+        signTransaction: async (xdrStr) => ({ signedTxXdr: xdrStr }),
       };
       const tx = await token.transfer({ from: holder!, to: to!, amount: amount! }, dummySigner);
       const fees = feeBreakdown(tx);
@@ -330,15 +337,11 @@ export function useVerifiedTrace(onChainTraceId: bigint | string | null | undefi
     queryKey: stellarKeys.trace(String(onChainTraceId)),
     enabled: onChainTraceId !== null && onChainTraceId !== undefined && onChainTraceId !== "",
     queryFn: async (): Promise<VerifiedTrace> => {
-      const trace = simulated<{
-        market_id: bigint;
-        agent: string;
-        action: string;
-        trace_hash: Uint8Array;
-        ipfs_cid: string;
-        published_at: bigint;
-      }>(await reasoningRegistry().get_trace({ trace_id: toId(onChainTraceId as string) }), "reasoningRegistry");
-      const onChainHash = Array.from(trace.trace_hash, (b) => b.toString(16).padStart(2, "0")).join("");
+      const trace = read(
+        await reasoningRegistry().get_trace({ trace_id: toId(onChainTraceId as string) }),
+        "reasoningRegistry",
+      );
+      const onChainHash = bytesToHex(trace.trace_hash);
       return {
         onChainTraceId: String(onChainTraceId),
         marketId: trace.market_id.toString(),
@@ -362,7 +365,8 @@ function useWriteGuard(): () => Signer {
     if (!signer) {
       throw new UserFacingError({ kind: "disconnected", message: "Connect your wallet first." });
     }
-    if (isWrongNetwork) {
+    // isWrongNetwork relies on the kit reporting a passphrase; bypass it for passkey signers.
+    if (isWrongNetwork && signer.kind !== "contract") {
       throw new UserFacingError({ kind: "wrong-network", message: "Switch your wallet to Stellar Testnet and try again." });
     }
     return signer;
@@ -418,6 +422,10 @@ export interface BuyParams {
  * min_shares_out = minOut(quote, slippageBps), so slippage is enforced
  * on-chain (SlippageExceeded otherwise).
  *
+ * For passkey (contract) signers, delegates to submitAsContract instead of
+ * the TxLifecycle runner, as contract accounts sign auth entries rather than
+ * whole envelopes.
+ *
  * Unmount safety: The underlying TxLifecycle runner keeps polling if the component
  * unmounts so React Query's mutation promise resolves and onSuccess cache invalidations
  * complete reliably.
@@ -437,6 +445,7 @@ export function useBuy() {
       prepared,
     }: BuyParams & { prepared?: PreparedBuy }) => {
       const signer = guard();
+      const trader = signerAddress(signer);
       if (collateralIn <= 0n) throw new UserFacingError({ kind: "contract", message: "Enter an amount greater than zero." });
       const id = toId(marketId);
 
@@ -450,12 +459,12 @@ export function useBuy() {
         quote = prepared.quote;
         minSharesOut = prepared.minSharesOut;
       } else {
-        quote = simulated<bigint>(
+        quote = read(
           await marketCore().quote_buy({ market_id: id, outcome: Outcomes[outcome], collateral_in: collateralIn }),
         );
         minSharesOut = minOut(quote, slippageBps);
         tx = await marketCore(signer).buy({
-          trader: signer.publicKey,
+          trader,
           market_id: id,
           outcome: Outcomes[outcome],
           collateral_in: collateralIn,
@@ -463,11 +472,16 @@ export function useBuy() {
         });
       }
 
+      if (signer.kind === "contract") {
+        const { value, txHash } = await submitAsContract(tx, signer, "marketCore");
+        return { sharesOut: value, quotedShares: quote, minSharesOut, txHash, holder: trader };
+      }
+
       const onHash = (hash: string) => {
         tracker.track({
           hash,
           kind: "buy",
-          holder: signer.publicKey,
+          holder: trader,
           marketId: String(marketId),
           outcome,
           amounts: { collateralIn: collateralIn.toString(), minSharesOut: minSharesOut.toString() },
@@ -480,7 +494,7 @@ export function useBuy() {
       };
 
       const { value, txHash } = await runner.start(tx, parse, onHash);
-      return { sharesOut: value, quotedShares: quote, minSharesOut, txHash, holder: signer.publicKey };
+      return { sharesOut: value, quotedShares: quote, minSharesOut, txHash, holder: trader };
     },
     onSuccess: (d, v) => invalidate(String(v.marketId), d.holder),
   });
@@ -508,6 +522,7 @@ export function useSell() {
   const mutation = useMutation({
     mutationFn: async ({ marketId, outcome, shares, slippageBps }: SellParams) => {
       const signer = guard();
+      const trader = signerAddress(signer);
       const id = toId(marketId);
       const { market } = await fetchOnChainMarket(id);
       const [rSold, rOther] = outcome === "Yes" ? [market.reserve_yes, market.reserve_no] : [market.reserve_no, market.reserve_yes];
@@ -519,18 +534,23 @@ export function useSell() {
       }
       const maxSharesIn = maxIn(shares, slippageBps) + 1n;
       const tx = await marketCore(signer).sell({
-        trader: signer.publicKey,
+        trader,
         market_id: id,
         outcome: Outcomes[outcome],
         collateral_out: collateralOut,
         max_shares_in: maxSharesIn,
       });
 
+      if (signer.kind === "contract") {
+        const { value, txHash } = await submitAsContract(tx, signer, "marketCore");
+        return { sharesSold: value, collateralOut, maxSharesIn, txHash, holder: trader };
+      }
+
       const onHash = (hash: string) => {
         tracker.track({
           hash,
           kind: "sell",
-          holder: signer.publicKey,
+          holder: trader,
           marketId: String(marketId),
           outcome,
           amounts: { shares: shares.toString(), maxSharesIn: maxSharesIn.toString() },
@@ -543,7 +563,7 @@ export function useSell() {
       };
 
       const { value, txHash } = await runner.start(tx, parse, onHash);
-      return { sharesSold: value, collateralOut, maxSharesIn, txHash, holder: signer.publicKey };
+      return { sharesSold: value, collateralOut, maxSharesIn, txHash, holder: trader };
     },
     onSuccess: (d, v) => invalidate(String(v.marketId), d.holder),
   });
@@ -563,13 +583,19 @@ export function useRedeem() {
   const mutation = useMutation({
     mutationFn: async ({ marketId }: { marketId: bigint | string }) => {
       const signer = guard();
-      const tx = await marketCore(signer).redeem({ holder: signer.publicKey, market_id: toId(marketId) });
+      const holder = signerAddress(signer);
+      const tx = await marketCore(signer).redeem({ holder, market_id: toId(marketId) });
+
+      if (signer.kind === "contract") {
+        const { value, txHash } = await submitAsContract(tx, signer, "marketCore");
+        return { payout: value, txHash, holder };
+      }
 
       const onHash = (hash: string) => {
         tracker.track({
           hash,
           kind: "redeem",
-          holder: signer.publicKey,
+          holder,
           marketId: String(marketId),
           amounts: {},
           networkPassphrase: NETWORK_PASSPHRASE,
@@ -581,7 +607,7 @@ export function useRedeem() {
       };
 
       const { value, txHash } = await runner.start(tx, parse, onHash);
-      return { payout: value, txHash, holder: signer.publicKey };
+      return { payout: value, txHash, holder };
     },
     onSuccess: (d, v) => invalidate(String(v.marketId), d.holder),
   });
@@ -609,18 +635,25 @@ export function useUsdcTransfer() {
   const mutation = useMutation({
     mutationFn: async ({ to, amount, followUp, prepared }: UsdcTransferParams) => {
       const signer = guard();
+      const from = signerAddress(signer);
       if (amount <= 0n) throw new UserFacingError({ kind: "contract", message: "Enter an amount greater than zero." });
 
       const isFresh = prepared && Date.now() - prepared.preparedAt < 15_000;
       const tx = isFresh && prepared
         ? (prepared.tx as unknown as AssembledTransaction<null>)
-        : await token.transfer({ from: signer.publicKey, to, amount }, signer);
+        : await token.transfer({ from, to, amount }, signer);
+
+      if (signer.kind === "contract") {
+        const { txHash } = await submitAsContract(tx, signer, "marketCore");
+        if (!txHash) throw new UserFacingError({ kind: "unknown", message: "The payment was sent but no transaction hash came back." });
+        return { txHash, holder: from };
+      }
 
       const onHash = (hash: string) => {
         tracker.track({
           hash,
           kind: "usdc-transfer",
-          holder: signer.publicKey,
+          holder: from,
           amounts: { amount: amount.toString() },
           networkPassphrase: NETWORK_PASSPHRASE,
           followUp,
@@ -631,7 +664,7 @@ export function useUsdcTransfer() {
 
       const { txHash } = await runner.start<null>(tx, parse, onHash);
       if (!txHash) throw new UserFacingError({ kind: "unknown", message: "The payment was sent but no transaction hash came back." });
-      return { txHash, holder: signer.publicKey };
+      return { txHash, holder: from };
     },
     onSuccess: (d) => {
       queryClient.invalidateQueries({ queryKey: stellarKeys.balance(d.holder) });

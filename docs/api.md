@@ -150,6 +150,45 @@ address mismatch).
 Multisig accounts: only a signature from `address`'s own key is accepted.
 Threshold-based SEP-10 verification is a backlog item.
 
+#### Proposed: Contract-account (passkey) authentication (SEP-45 style)
+
+Smart-wallet contract accounts (`C…`) cannot sign classical ed25519 transaction envelopes. A SEP-45 style Soroban authorization verification flow is proposed:
+
+##### `POST /auth/challenge` (with contract address)
+
+Request:
+```json
+{ "address": "CABC…" }
+```
+
+Response `200`:
+```json
+{
+  "entryXdr": "<base64 SorobanAuthorizationEntry XDR>",
+  "validUntilLedger": 1234567,
+  "networkPassphrase": "Test SDF Network ; September 2015"
+}
+```
+
+The challenge constructs an auth entry requiring `address`'s authorization for a dedicated verification invocation with a random nonce.
+
+##### `POST /auth/verify` (contract account verification)
+
+Request:
+```json
+{
+  "address": "CABC…",
+  "signed": "<base64 signed SorobanAuthorizationEntry XDR>"
+}
+```
+
+The server verifies the entry by simulating the invocation on Soroban with the signed authorization entry, invoking the contract's `__check_auth` logic. Upon successful simulation, a standard 7-day JWT session is issued.
+
+Response `200`:
+```json
+{ "token": "<jwt>", "userId": "<uuid>", "walletAddress": "CABC…" }
+```
+
 ### Markets
 
 #### Market object

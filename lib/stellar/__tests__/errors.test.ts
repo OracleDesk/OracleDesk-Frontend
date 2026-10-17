@@ -27,6 +27,8 @@ describe("describeError", () => {
     // A SAC failure inside market_core.buy carries the token's own code.
     expect(describeError("Error(Contract, #10) ... balance is not sufficient to spend").kind).toBe("insufficient-balance");
     expect(describeError("Error(Contract, #13) ... trustline entry is missing for account").kind).toBe("no-trustline");
+    expect(describeError("Error(Contract, #13) ... trustline entry is missing", "marketCore", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM").kind).toBe("insufficient-balance");
+    expect(describeError("Error(Contract, #13) ... trustline entry is missing", "marketCore", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM").message).toBe("This wallet doesn't hold USDC yet.");
   });
 
   it("maps op_low_reserve and txInsufficientBalance to insufficient-xlm while preserving USDC balance mapping", () => {
