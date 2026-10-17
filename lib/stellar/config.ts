@@ -26,6 +26,18 @@ export const CONTRACTS = {
   usdc: env(process.env.NEXT_PUBLIC_USDC_CONTRACT_ID, deployments.contracts.usdc),
 } as const;
 
+/** Experimental passkey smart-wallet flag (off by default). */
+export const EXPERIMENTAL_PASSKEYS = process.env.NEXT_PUBLIC_EXPERIMENTAL_PASSKEYS === "true";
+
+/** Source account for relayer fee-payment and passkey contract simulation. */
+export const PASSKEY_RELAYER_SOURCE = env(
+  process.env.NEXT_PUBLIC_PASSKEY_RELAYER_SOURCE,
+  "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H",
+);
+
+/** Relayer service URL for deploying smart wallets and submitting contract auth txs. */
+export const PASSKEY_RELAYER_URL = env(process.env.NEXT_PUBLIC_PASSKEY_RELAYER_URL, "");
+
 /**
  * Recipient of premium payments. Must match the backend's PAYMENTS_RECIPIENT
  * or the backend will reject the payment. Defaults to the treasury, like the

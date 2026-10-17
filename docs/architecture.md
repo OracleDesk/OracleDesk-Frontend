@@ -19,7 +19,20 @@ A backend market links to the chain through `onChainMarketId` (market-core's `u6
 - The kit is imported dynamically in an effect, because it reads `localStorage` when its module loads.
 - A session the kit persisted is restored without prompting and without redirecting. Only a connect completed in the modal redirects to `/markets`.
 - After connecting, the wallet signs the backend's SEP-10 style challenge transaction (`signTransaction`, which every Stellar wallet supports; `signMessage` is not universal). The backend returns a JWT. A stored session for a different address is cleared, never reused.
-- `useWallet()` exposes `address`, `isWrongNetwork`, a `signer` for the binding clients, `openModal`, `ensureSession` and `disconnect`.
+- `useWallet()` exposes `address`, `isWrongNetwork`, `isPasskey`, a `signer` for the binding clients, `openModal`, `connectPasskey`, `createPasskey`, `ensureSession` and `disconnect`.
+
+## Passkey smart wallets (contract accounts)
+
+Passkey smart wallets (`C…`) are contract accounts whose `__check_auth` verifies secp256r1 ECDSA signatures created via WebAuthn.
+
+- **Feature flag**: Experimental passkey support is gated behind `NEXT_PUBLIC_EXPERIMENTAL_PASSKEYS=true` and badged "Experimental" in the UI.
+- **Signer abstraction**: `Signer` (`lib/stellar/clients.ts`) supports both `account` (ed25519 `G…`) and `contract` (`C…`) variants. For contract signers, binding client simulation uses `NEXT_PUBLIC_PASSKEY_RELAYER_SOURCE` as the source account.
+- **Auth entry signing & submit**: `submitAsContract` (`lib/stellar/contract-submit.ts`) verifies that simulation requires authorization exclusively from the trader's `C…` contract address, signs the auth entries with WebAuthn, re-simulates for accurate footprint/resources, and forwards the transaction to a fee-paying relayer.
+- **RP ID constraints**: WebAuthn requires the Relying Party ID (`rpId`) to match the active origin's domain or a registrable suffix of `window.location.hostname`. Ports and scheme must be omitted.
+- **Relayer interface**: A relayer service provides two endpoints:
+  - `POST /wallet/deploy`: Deploys the smart wallet contract with the passkey's uncompressed P-256 public key.
+  - `POST /tx/submit`: Signs as source/fee payer, submits to the Stellar network, and returns `{ hash }`.
+- **Signature normalisation**: Soroban's secp256r1 verification enforces canonical low-S (`s <= N/2`). WebAuthn DER signatures are converted to 64-byte raw `r || s` and normalised (`s' = N - s` if `s > N/2`).
 
 ## Contract calls
 
@@ -28,6 +41,14 @@ A backend market links to the chain through `onChainMarketId` (market-core's `u6
 - Writes (`useBuy`, `useSell`, `useRedeem`, `useUsdcTransfer`) check that a wallet is connected and on the right network, simulate, then `signAndSend`.
 - `useBuy` quotes again immediately before building the transaction and sets `min_shares_out = minOut(quote, slippageBps)`, so slippage is enforced on-chain.
 - `useSell` turns "sell N shares" into the exact `collateral_out` the contract needs, using the contract's own FPMM math (`generated/fpmm.ts`) on freshly read reserves, with `max_shares_in` slightly above N (see the contracts repo's `docs/frontend-integration.md`).
+
+## Reading contract results
+
+Contract calls must always be consumed through `read(tx, contract)` for reads/simulations or `submit(tx, contract)` for signed writes (`lib/stellar/typed-call.ts`).
+
+- **No manual generics or casts**: `read` and `submit` automatically infer and unwrap the return type directly from the contract binding signature (`Result<T>` is unwrapped to `T`, while non-Result values like `Position` or SAC balances remain untouched). Never pass a type parameter (e.g. `read<Type>(...)`) or hand-write contract result shapes. An ESLint rule enforces this across `app/` and `lib/`.
+- **Result detection**: Soroban `Result`s are detected using the SDK's `Ok` and `Err` classes (`instanceof`), avoiding duck-typing bugs where plain objects with `isOk` could be mistakenly unwrapped. Unhandled contract errors or simulation failures are mapped to user-friendly messages via `UserFacingError`.
+- **Type tests**: `lib/stellar/__tests__/typed-call.test-d.ts` pins the return type of every binding method and argument shape of every write the app calls. When adding or calling a new contract binding method, always add a corresponding type test so upstream contract changes fail during `npm test`.
 
 ## Amounts
 

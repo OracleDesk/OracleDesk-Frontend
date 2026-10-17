@@ -4,13 +4,25 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useUsdcBalance } from "@/lib/hooks/useStellar";
-import { NETWORK_LABEL, explorerAccount } from "@/lib/stellar/config";
+import { EXPERIMENTAL_PASSKEYS, NETWORK_LABEL, explorerAccount } from "@/lib/stellar/config";
 import { formatUsdc, shortAddress } from "@/lib/stellar/units";
 
 const WalletDropdown = () => {
-  const { address, isConnected, isConnecting, isWrongNetwork, openModal, disconnect, error } = useWallet();
+  const {
+    address,
+    isConnected,
+    isConnecting,
+    isWrongNetwork,
+    isPasskey,
+    openModal,
+    connectPasskey,
+    createPasskey,
+    disconnect,
+    error,
+  } = useWallet();
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showPasskeyPrompt, setShowPasskeyPrompt] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const balance = useUsdcBalance(address);
 
@@ -19,6 +31,7 @@ const WalletDropdown = () => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        setShowPasskeyPrompt(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -27,14 +40,66 @@ const WalletDropdown = () => {
 
   if (!isConnected || !address) {
     return (
-      <button
-        onClick={() => openModal()}
-        disabled={isConnecting}
-        title={error ?? undefined}
-        className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-label-caps text-label-caps uppercase tracking-wider hover:opacity-90 transition-all active:scale-95 disabled:opacity-60"
-      >
-        {isConnecting ? "Connecting…" : "Connect Wallet"}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => openModal()}
+          disabled={isConnecting}
+          title={error ?? undefined}
+          className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-label-caps text-label-caps uppercase tracking-wider hover:opacity-90 transition-all active:scale-95 disabled:opacity-60"
+        >
+          {isConnecting ? "Connecting…" : "Connect Wallet"}
+        </button>
+
+        {EXPERIMENTAL_PASSKEYS && connectPasskey && (
+          <div className="relative">
+            <button
+              onClick={() => setShowPasskeyPrompt(!showPasskeyPrompt)}
+              disabled={isConnecting}
+              title="Sign in with Face ID or a passkey smart wallet"
+              className="flex items-center gap-1.5 bg-surface-container-low border border-outline-variant hover:bg-surface-container text-on-surface px-3 py-2 rounded-lg font-label-caps text-label-caps tracking-wider transition-all active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[16px]">key</span>
+              <span>Passkey</span>
+              <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-800 px-1 py-0.2 rounded">Exp</span>
+            </button>
+
+            <AnimatePresence>
+              {showPasskeyPrompt && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-56 bg-white border border-outline-variant rounded-xl shadow-xl z-[100] p-2 space-y-1"
+                >
+                  <button
+                    onClick={() => {
+                      setShowPasskeyPrompt(false);
+                      void connectPasskey();
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-surface-container rounded-lg transition-colors flex items-center justify-between"
+                  >
+                    <span>Connect existing</span>
+                    <span className="material-symbols-outlined text-[14px]">login</span>
+                  </button>
+                  {createPasskey && (
+                    <button
+                      onClick={() => {
+                        setShowPasskeyPrompt(false);
+                        const name = window.prompt("Enter a name for your passkey smart-wallet:", "My Passkey Wallet");
+                        if (name) void createPasskey({ name });
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-bold text-primary hover:bg-surface-container rounded-lg transition-colors flex items-center justify-between"
+                    >
+                      <span>Create new wallet</span>
+                      <span className="material-symbols-outlined text-[14px]">add_circle</span>
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -63,15 +128,22 @@ const WalletDropdown = () => {
         className="flex items-center gap-3 px-3 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg hover:bg-surface-container transition-colors active:scale-95"
       >
         <div className="flex flex-col items-end hidden sm:flex">
-          <span className={`text-[10px] font-bold leading-none uppercase ${isWrongNetwork ? "text-error" : "text-on-surface-variant"}`}>
-            {isWrongNetwork ? "Wrong network" : NETWORK_LABEL}
-          </span>
+          <div className="flex items-center gap-1">
+            {isPasskey && (
+              <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-800 px-1 rounded">
+                Experimental
+              </span>
+            )}
+            <span className={`text-[10px] font-bold leading-none uppercase ${isWrongNetwork ? "text-error" : "text-on-surface-variant"}`}>
+              {isWrongNetwork ? "Wrong network" : isPasskey ? "Smart Wallet" : NETWORK_LABEL}
+            </span>
+          </div>
           <span className="text-sm font-data-mono font-bold text-on-surface">
             {truncatedAddress}
           </span>
         </div>
         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-          <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+          <span className="material-symbols-outlined text-[20px]">{isPasskey ? "key" : "account_balance_wallet"}</span>
         </div>
         <span className={`material-symbols-outlined text-on-surface-variant transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
           expand_more
@@ -90,9 +162,16 @@ const WalletDropdown = () => {
           >
             {/* Balance Section */}
             <div className="p-4 bg-surface-container-low border-b border-outline-variant">
-              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-1">
-                Available Balance
-              </span>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block">
+                  Available Balance
+                </span>
+                {isPasskey && (
+                  <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-800 px-1 py-0.2 rounded">
+                    Passkey
+                  </span>
+                )}
+              </div>
               <div className="flex items-baseline gap-1">
                 <span className="text-xl font-bold text-on-surface font-data-mono">
                   {balanceText}
@@ -133,7 +212,9 @@ const WalletDropdown = () => {
                 </span>
                 <div className="text-left">
                   <span className="block text-sm font-bold text-on-surface">View on Stellar Expert</span>
-                  <span className="block text-[10px] text-on-surface-variant uppercase">Account history</span>
+                  <span className="block text-[10px] text-on-surface-variant uppercase">
+                    {isPasskey ? "Contract history" : "Wallet history"}
+                  </span>
                 </div>
               </a>
 

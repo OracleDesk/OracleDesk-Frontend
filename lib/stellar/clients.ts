@@ -5,21 +5,36 @@ import { Client as MarketCoreClient, type Category, type Outcome } from "./gener
 import { Client as TreasuryClient } from "./generated/treasury";
 import { Client as ResolverClient } from "./generated/resolver";
 import { Client as ReasoningRegistryClient } from "./generated/reasoning-registry";
-import { CONTRACTS, NETWORK_PASSPHRASE, RPC_URL } from "./config";
+import type { Transaction, xdr } from "@stellar/stellar-sdk";
+import { CONTRACTS, NETWORK_PASSPHRASE, PASSKEY_RELAYER_SOURCE, RPC_URL } from "./config";
 
-/** What a wallet provides to sign. Omit it for read-only simulation. */
-export interface Signer {
-  publicKey: string;
-  signTransaction: SignTransaction;
-}
+/** What a wallet or passkey provides to sign. Omit it for read-only simulation. */
+export type Signer =
+  | { kind: "account"; publicKey: string; signTransaction: SignTransaction }
+  | {
+      kind: "contract";
+      address: string /* C… */;
+      signAuthEntry: (entry: xdr.SorobanAuthorizationEntry, validUntilLedger: number) => Promise<xdr.SorobanAuthorizationEntry>;
+      submit: (tx: Transaction) => Promise<{ hash: string }>;
+    };
+
+export const signerAddress = (s: Signer) => (s.kind === "account" ? s.publicKey : s.address);
 
 function options(contractId: string, signer?: Signer): ClientOptions {
+  const isContract = signer?.kind === "contract";
+  const sourceAccount = isContract
+    ? PASSKEY_RELAYER_SOURCE
+    : signer?.kind === "account"
+      ? signer.publicKey
+      : undefined;
+
   return {
     contractId,
     networkPassphrase: NETWORK_PASSPHRASE,
     rpcUrl: RPC_URL,
     allowHttp: RPC_URL.startsWith("http://"),
-    ...(signer ? { publicKey: signer.publicKey, signTransaction: signer.signTransaction } : {}),
+    ...(sourceAccount ? { publicKey: sourceAccount } : {}),
+    ...(signer && signer.kind === "account" ? { signTransaction: signer.signTransaction } : {}),
   };
 }
 

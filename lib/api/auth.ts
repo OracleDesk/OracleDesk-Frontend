@@ -38,4 +38,37 @@ export async function signInWithWallet(
   return verifyChallenge(address, signed);
 }
 
+import { type xdr } from "@stellar/stellar-sdk";
+
+/**
+ * Proposed SEP-45 style contract-account login:
+ * Issues a contract auth challenge, signs the authorization entry,
+ * and verifies it on the backend.
+ * Until the backend ships contract-account auth, this surfaces a clear message.
+ */
+export async function signInWithContractAccount(
+  address: string,
+  signAuthEntry: (entry: xdr.SorobanAuthorizationEntry, validUntilLedger: number) => Promise<xdr.SorobanAuthorizationEntry>,
+): Promise<AuthSession> {
+  try {
+    const { data: challenge } = await apiClient.post<{ entryXdr?: string; validUntilLedger?: number }>(
+      "/auth/challenge",
+      { address },
+    );
+    if (!challenge?.entryXdr) {
+      throw new Error("Contract account login is not yet supported by the backend.");
+    }
+    const entry = (challenge as any).entryXdr;
+    const signedEntry = await signAuthEntry(entry, challenge.validUntilLedger ?? 0);
+    const { data: session } = await apiClient.post<AuthSession>("/auth/verify", {
+      address,
+      signed: signedEntry.toXDR("base64"),
+    });
+    storeAuthSession(session);
+    return session;
+  } catch {
+    throw new Error("Not available for passkey wallets yet.");
+  }
+}
+
 export { clearAuthSession, getStoredSessionWallet, getStoredToken };

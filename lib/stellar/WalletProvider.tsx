@@ -3,9 +3,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { clearAuthSession, getStoredSessionWallet, signInWithWallet } from "@/lib/api/auth";
-import { NETWORK_PASSPHRASE } from "./config";
+import { clearAuthSession, getStoredSessionWallet, signInWithWallet, signInWithContractAccount } from "@/lib/api/auth";
+import { EXPERIMENTAL_PASSKEYS, NETWORK_PASSPHRASE } from "./config";
 import { describeError } from "./errors";
+import {
+  clearStoredPasskeyWallet,
+  connectPasskeyWallet,
+  createPasskeyWallet,
+  getStoredPasskeyWallet,
+  passkeySigner,
+  type StoredPasskeyWallet,
+} from "./passkey";
 import type { Signer } from "./clients";
 
 type Kit = typeof import("@creit.tech/stellar-wallets-kit").StellarWalletsKit;
@@ -14,6 +22,7 @@ export interface WalletContextValue {
   address: string | null;
   isConnected: boolean;
   isConnecting: boolean;
+  isPasskey: boolean;
   /** Passphrase the wallet reports, or null before it has said. */
   walletNetworkPassphrase: string | null;
   isWrongNetwork: boolean;
@@ -24,6 +33,10 @@ export interface WalletContextValue {
   /** Last connect/sign-in error, in plain language. */
   error: string | null;
   openModal: () => Promise<void>;
+  /** Connect an existing passkey smart-wallet (experimental). */
+  connectPasskey?: () => Promise<void>;
+  /** Create and deploy a new passkey smart-wallet (experimental). */
+  createPasskey?: (opts: { name: string }) => Promise<void>;
   /** Runs the backend challenge login if there's no session for this address. */
   ensureSession: () => Promise<boolean>;
   disconnect: () => Promise<void>;
@@ -48,6 +61,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const [kit, setKit] = useState<Kit | null>(null);
   const [address, setAddress] = useState<string | null>(null);
+  const [passkeyWallet, setPasskeyWallet] = useState<StoredPasskeyWallet | null>(null);
   const [walletNetworkPassphrase, setWalletNetworkPassphrase] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [sessionWallet, setSessionWallet] = useState<string | null>(null);
@@ -59,6 +73,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const unsubscribe: Array<() => void> = [];
     (async () => {
+      // Check stored passkey wallet first if experimental flag is active
+      if (EXPERIMENTAL_PASSKEYS) {
+        const storedPasskey = getStoredPasskeyWallet();
+        if (storedPasskey) {
+          setPasskeyWallet(storedPasskey);
+          setAddress(storedPasskey.address);
+          setWalletNetworkPassphrase(NETWORK_PASSPHRASE);
+        }
+      }
+
       const [{ StellarWalletsKit, KitEventType, Networks }, { defaultModules }] = await Promise.all([
         import("@creit.tech/stellar-wallets-kit"),
         import("@creit.tech/stellar-wallets-kit/modules/utils"),
@@ -77,10 +101,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             setSessionWallet(null);
           }
           setAddress(next);
+          setPasskeyWallet(null);
           setWalletNetworkPassphrase(payload.networkPassphrase || null);
         }),
         StellarWalletsKit.on(KitEventType.DISCONNECT, () => {
           setAddress(null);
+          setPasskeyWallet(null);
           setWalletNetworkPassphrase(null);
           clearAuthSession();
           setSessionWallet(null);
@@ -91,7 +117,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // so it never redirects and never prompts the wallet.
       try {
         const { address: restored } = await StellarWalletsKit.getAddress();
-        if (!cancelled && restored) setAddress(restored);
+        if (!cancelled && restored && !getStoredPasskeyWallet()) setAddress(restored);
       } catch {
         // Nothing persisted.
       }
@@ -104,25 +130,40 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signer = useMemo<Signer | null>(() => {
-    if (!address || !kit) return null;
+    if (!address) return null;
+    if (address.startsWith("C") && passkeyWallet) {
+      return passkeySigner(passkeyWallet);
+    }
+    if (!kit) return null;
     return {
+      kind: "account",
       publicKey: address,
       signTransaction: (xdr, opts) =>
         kit.signTransaction(xdr, { networkPassphrase: opts?.networkPassphrase ?? NETWORK_PASSPHRASE, address }),
     };
-  }, [address, kit]);
+  }, [address, kit, passkeyWallet]);
 
-  const signIn = useCallback(async (forAddress: string) => {
-    if (!kit) throw new Error("Wallet is still loading");
-    const session = await signInWithWallet(forAddress, async (xdr, networkPassphrase) => {
-      const { signedTxXdr } = await kit.signTransaction(xdr, { networkPassphrase, address: forAddress });
-      return signedTxXdr;
-    });
-    setSessionWallet(session.walletAddress);
-  }, [kit]);
+  const signIn = useCallback(
+    async (forAddress: string) => {
+      if (forAddress.startsWith("C")) {
+        if (!signer || signer.kind !== "contract") {
+          throw new Error("Not available for passkey wallets yet.");
+        }
+        return signInWithContractAccount(forAddress, signer.signAuthEntry);
+      }
+      if (!kit) throw new Error("Wallet is still loading");
+      const session = await signInWithWallet(forAddress, async (xdr, networkPassphrase) => {
+        const { signedTxXdr } = await kit.signTransaction(xdr, { networkPassphrase, address: forAddress });
+        return signedTxXdr;
+      });
+      setSessionWallet(session.walletAddress);
+    },
+    [kit, signer],
+  );
 
   const ensureSession = useCallback(async () => {
     if (!address) return false;
+    if (address.startsWith("C")) return false;
     if (sessionWallet === address) return true;
     try {
       setError(null);
@@ -146,6 +187,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setSessionWallet(null);
       }
       setAddress(connected);
+      setPasskeyWallet(null);
       try {
         const { networkPassphrase } = await kit.getNetwork();
         setWalletNetworkPassphrase(networkPassphrase);
@@ -156,18 +198,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         try {
           await signIn(connected);
         } catch (err) {
-          // Connected, but not signed in to the backend. Pages that need a
-          // session call ensureSession() again.
           setError(describeError(err).message);
         }
       } else {
         setSessionWallet(connected);
       }
-      // Only a connect the user just completed in this tab redirects.
       router.push("/markets");
     } catch (err) {
       const described = describeError(err);
-      // Closing the picker is not an error worth showing.
       if (described.kind !== "rejected" && !/closed/i.test(String((err as { message?: string })?.message))) {
         setError(described.message);
       }
@@ -176,28 +214,83 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [kit, router, signIn]);
 
-  const disconnect = useCallback(async () => {
+  const connectPasskey = useCallback(async () => {
+    setIsConnecting(true);
+    setError(null);
     try {
-      await kit?.disconnect();
+      const res = await connectPasskeyWallet();
+      const data: StoredPasskeyWallet = { address: res.address, credentialId: res.credentialId, network: NETWORK_PASSPHRASE };
+      setPasskeyWallet(data);
+      setAddress(res.address);
+      setWalletNetworkPassphrase(NETWORK_PASSPHRASE);
+      router.push("/markets");
+    } catch (err) {
+      const described = describeError(err, "marketCore", address ?? undefined);
+      if (described.kind !== "rejected") setError(described.message);
     } finally {
-      setAddress(null);
-      setWalletNetworkPassphrase(null);
-      clearAuthSession();
-      setSessionWallet(null);
-      queryClient.removeQueries({ queryKey: ["stellar"] });
+      setIsConnecting(false);
     }
-  }, [kit, queryClient]);
+  }, [address, router]);
+
+  const createPasskey = useCallback(
+    async (opts: { name: string }) => {
+      setIsConnecting(true);
+      setError(null);
+      try {
+        const res = await createPasskeyWallet(opts);
+        const data: StoredPasskeyWallet = { address: res.address, credentialId: res.credentialId, network: NETWORK_PASSPHRASE };
+        setPasskeyWallet(data);
+        setAddress(res.address);
+        setWalletNetworkPassphrase(NETWORK_PASSPHRASE);
+        router.push("/markets");
+      } catch (err) {
+        const described = describeError(err, "marketCore", address ?? undefined);
+        if (described.kind !== "rejected") setError(described.message);
+      } finally {
+        setIsConnecting(false);
+      }
+    },
+    [address, router],
+  );
+
+  const disconnect = useCallback(async () => {
+    if (address?.startsWith("C")) {
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm("Disconnect passkey wallet? This will remove the active passkey session in this browser.")
+      ) {
+        return;
+      }
+      clearStoredPasskeyWallet();
+      setPasskeyWallet(null);
+    } else {
+      try {
+        await kit?.disconnect();
+      } catch {
+        // Nothing to disconnect
+      }
+    }
+    setAddress(null);
+    setWalletNetworkPassphrase(null);
+    clearAuthSession();
+    setSessionWallet(null);
+    queryClient.removeQueries({ queryKey: ["stellar"] });
+  }, [address, kit, queryClient]);
+
+  const isPasskey = Boolean(address?.startsWith("C"));
 
   const value: WalletContextValue = {
     address,
     isConnected: Boolean(address),
     isConnecting,
+    isPasskey,
     walletNetworkPassphrase,
-    isWrongNetwork: Boolean(walletNetworkPassphrase) && walletNetworkPassphrase !== NETWORK_PASSPHRASE,
+    isWrongNetwork: Boolean(walletNetworkPassphrase) && walletNetworkPassphrase !== NETWORK_PASSPHRASE && !isPasskey,
     signer,
     isAuthenticated: Boolean(address) && sessionWallet === address,
     error,
     openModal,
+    ...(EXPERIMENTAL_PASSKEYS ? { connectPasskey, createPasskey } : {}),
     ensureSession,
     disconnect,
   };

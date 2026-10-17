@@ -85,7 +85,7 @@ const features = [
 ];
 
 export default function PremiumPage() {
-  const { isConnected, isWrongNetwork, openModal, ensureSession } = useWallet();
+  const { address, isConnected, isWrongNetwork, openModal, ensureSession } = useWallet();
   const transfer = useUsdcTransfer();
   const unlock = useUnlockTrace();
 
@@ -106,6 +106,11 @@ export default function PremiumPage() {
 
   const handlePayment = async () => {
     if (!selectedTier?.priceRaw) return;
+
+    if (address?.startsWith("C")) {
+      setStatusMessage("Not available for passkey wallets yet.");
+      return;
+    }
 
     if (paymentMethod === "card") {
       setStatusMessage("Card payments aren't available. Pay with USDC instead.");

@@ -71,17 +71,37 @@ function safeJson(v: unknown): string {
 }
 
 /** Turns anything thrown by the SDK, a binding or a wallet into a message for the user. */
-export function describeError(err: unknown, contract: ContractName = "marketCore"): DescribedError {
+export function describeError(
+  err: unknown,
+  contract: ContractName = "marketCore",
+  trader?: string,
+): DescribedError {
   const text = textOf(err);
 
-  if (/user (rejected|declined|denied)|rejected by (the )?user|request (was )?rejected|declined|cancell?ed by user|user closed/i.test(text)) {
+  if (
+    /user (rejected|declined|denied)|rejected by (the )?user|request (was )?rejected|declined|cancell?ed by user|user closed|NotAllowedError/i.test(
+      text,
+    )
+  ) {
     return { kind: "rejected", message: "You cancelled the request in your wallet." };
   }
   if (/trustline entry is missing|TrustlineMissing|trustline.*(missing|not found)|op_no_trust/i.test(text)) {
+    if (trader?.startsWith("C")) {
+      return {
+        kind: "insufficient-balance",
+        message: "This wallet doesn't hold USDC yet.",
+      };
+    }
     return {
       kind: "no-trustline",
-      message: "Your account has no USDC trustline. Add the USDC asset in your wallet first.",
+      message: "Your wallet has no USDC trustline. Add the USDC asset in your wallet first.",
     };
+  }
+  if (/check_auth.*failed|signature.*invalid|signature verification failed|unauthorized.*signature/i.test(text)) {
+    return { kind: "contract", message: "The passkey signature was rejected or is invalid." };
+  }
+  if (/signature.*expired|auth.*expired|signatureExpirationLedger/i.test(text)) {
+    return { kind: "contract", message: "The passkey authorization has expired. Please try again." };
   }
   if (/balance is not sufficient|resulting balance is not within the allowed range|insufficient (balance|funds)|BalanceError|op_underfunded/i.test(text)) {
     return { kind: "insufficient-balance", message: "You don't have enough USDC for this." };

@@ -119,6 +119,11 @@ function CopyTradeContent() {
       return;
     }
 
+    if (address?.startsWith("C")) {
+      setStatusMessage("Not available for passkey wallets yet.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       setStatusMessage("Signing in to OracleDesk…");
