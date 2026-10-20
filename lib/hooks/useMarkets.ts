@@ -1,8 +1,15 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUserScope } from "@/lib/query/scope";
+import { userKeys, publicKeys } from "@/lib/query/keys";
+import { useScopedMutation } from "@/lib/query/useScopedMutation";
+import { fetchTrackedJob, isSessionError, nextPollInterval, shouldRetryStatus, statusRetryDelay, toJobPatch } from "./generation-status";
+import { saveJob } from "@/lib/admin/job-store";
 import {
   getMarket,
+  getMarketGenerationStatus,
   listMarkets,
   triggerMarketGeneration,
   type ListMarketsParams,
@@ -11,7 +18,7 @@ import { nextPageParam } from "@/lib/ui/virtual-math";
 
 export function useMarkets(params: ListMarketsParams = {}) {
   return useQuery({
-    queryKey: ["markets", params],
+    queryKey: publicKeys.markets(params),
     queryFn: () => listMarkets(params),
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -32,7 +39,7 @@ export function useInfiniteMarkets(params: Omit<ListMarketsParams, "page"> = {})
 
 export function useMarket(id: string | undefined) {
   return useQuery({
-    queryKey: ["market", id],
+    queryKey: publicKeys.market(id),
     queryFn: () => getMarket(id!),
     enabled: Boolean(id),
   });
@@ -40,9 +47,7 @@ export function useMarket(id: string | undefined) {
 
 /** Starts one market-maker run. The agent ignores inputs, so none are sent. */
 export function useGenerateMarket() {
-  return useMutation({
-    mutationFn: ({ idempotencyKey }: { idempotencyKey: string }) => triggerMarketGeneration({}, idempotencyKey),
-  });
+  return useScopedMutation(({ idempotencyKey }: { idempotencyKey: string }, options) => triggerMarketGeneration({}, idempotencyKey, options));
 }
 
 /**
@@ -51,11 +56,12 @@ export function useGenerateMarket() {
  * session error until the caller signs in again and refetches.
  */
 export function useMarketGenerationStatus(address: string | null | undefined, jobId: string, enabled: boolean) {
+  const scope = useUserScope();
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: ["market-generation", address, jobId],
-    queryFn: () => fetchTrackedJob(jobId),
-    enabled: enabled && Boolean(address),
+    queryKey: userKeys.marketGeneration(scope, jobId),
+    queryFn: ({ signal }) => fetchTrackedJob(jobId, (id) => getMarketGenerationStatus(id, { expectScope: scope, signal })),
+    enabled: enabled && Boolean(address) && address === scope.wallet,
     staleTime: 0,
     retry: shouldRetryStatus,
     retryDelay: statusRetryDelay,

@@ -7,6 +7,8 @@ import { useSubmitQueueState } from "@/lib/stellar/submit-queue";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUserScopeStore } from "@/lib/query/scope";
+import { userKeys } from "@/lib/query/keys";
 import {
   Dialog,
   DialogClose,
@@ -120,6 +122,7 @@ export default function PremiumPageClient() {
   const transfer = useUsdcTransfer();
   const submitQueue = useSubmitQueueState(address);
   const queryClient = useQueryClient();
+  const scopeStore = useUserScopeStore();
   const reserve = useAccountReserve(address);
   const [, setPendingVersion] = useState(0);
   const refreshPending = useCallback(() => setPendingVersion((version) => version + 1), []);
@@ -175,14 +178,13 @@ export default function PremiumPageClient() {
     async (payment: PendingPayment, signIn?: () => Promise<boolean>): Promise<VerifyResult> => {
       const result = await verifyPendingPayment(payment, { signIn, onUpdate: refreshPending });
       refreshPending();
-      if (result === "verified") {
-        queryClient.invalidateQueries({ queryKey: ["trace-payments"] });
-        queryClient.invalidateQueries({ queryKey: ["trace"] });
-        queryClient.invalidateQueries({ queryKey: ["traces"] });
+      const scope = scopeStore?.getSnapshot();
+      if (result === "verified" && scope?.wallet === payment.from) {
+        void queryClient.invalidateQueries({ queryKey: userKeys.root(scope) });
       }
       return result;
     },
-    [queryClient, refreshPending],
+    [queryClient, refreshPending, scopeStore],
   );
 
   useEffect(() => {

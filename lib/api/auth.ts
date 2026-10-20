@@ -21,8 +21,9 @@ export async function requestChallenge(address: string) {
   return data;
 }
 
-export async function verifyChallenge(address: string, signed: string) {
+export async function verifyChallenge(address: string, signed: string, isCurrent: () => boolean = () => true) {
   const { data } = await apiClient.post<AuthSession>("/auth/verify", { address, signed });
+  if (!isCurrent() || data.walletAddress !== address) throw new Error("Your account changed; sign in again.");
   storeAuthSession(data);
   broadcastSessionChange(data.token, data.walletAddress);
   return data;
@@ -46,6 +47,7 @@ export function validateChallenge(challenge: AuthChallenge): SEP10ValidationErro
 export async function signInWithWallet(
   address: string,
   signTransaction: (xdr: string, networkPassphrase: string) => Promise<string>,
+  isCurrent: () => boolean = () => true,
 ): Promise<AuthSession> {
   const challenge = await requestChallenge(address);
 
@@ -55,8 +57,10 @@ export async function signInWithWallet(
     throw new Error(`Invalid SEP-10 challenge: ${validationError.message}`);
   }
 
+  if (!isCurrent()) throw new Error("Your account changed; sign in again.");
   const signed = await signTransaction(challenge.transaction, challenge.networkPassphrase);
-  return verifyChallenge(address, signed);
+  if (!isCurrent()) throw new Error("Your account changed; sign in again.");
+  return verifyChallenge(address, signed, isCurrent);
 }
 
 /**

@@ -10,7 +10,7 @@ import React, { useState, useRef, useEffect, useCallback, Suspense } from "react
 import { useSearchParams, useRouter } from "next/navigation";
 import { useWalletActions, useWalletAddress, useWalletNetwork } from "@/lib/contexts/WalletContext";
 import { DevProfiler } from "@/lib/dev/profiler";
-import { getTrace, ReasoningTrace } from "@/lib/api/traces";
+import { useTrace } from "@/lib/hooks/useTraces";
 import { confirmCopyTrade, initiateCopyTrade } from "@/lib/api/trade";
 import { ApiError } from "@/lib/api/client";
 import { useMarket } from "@/lib/hooks/useMarkets";
@@ -116,8 +116,9 @@ function CopyTradeContent() {
   const traceId = searchParams.get("traceId");
   const marketIdParam = searchParams.get("marketId");
 
-  const [trace, setTrace] = useState<ReasoningTrace | null>(null);
-  const [traceError, setTraceError] = useState<string | null>(null);
+  const traceQuery = useTrace(traceId ?? undefined);
+  const trace = traceQuery.data ?? null;
+  const traceError = traceQuery.isError ? "We couldn't load this reasoning trace." : null;
   const { data: market } = useMarket(marketIdParam ?? trace?.marketId ?? undefined);
   const onChainMarketId = market?.onChainMarketId ?? null;
   const onChainMarket = useOnChainMarket(onChainMarketId);
@@ -172,13 +173,6 @@ function CopyTradeContent() {
     },
     [],
   );
-
-  useEffect(() => {
-    if (!traceId) return;
-    getTrace(traceId)
-      .then(setTrace)
-      .catch(() => setTraceError("We couldn't load this reasoning trace."));
-  }, [traceId]);
 
   // Side comes from the trace's edge. No trace or zero edge means no trade.
   const side: "Yes" | "No" | null = trace && trace.edge !== 0 ? (trace.edge > 0 ? "Yes" : "No") : null;

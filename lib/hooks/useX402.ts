@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUserScope } from "@/lib/query/scope";
+import { userKeys } from "@/lib/query/keys";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { currentRpcUrl, rpcServer } from "@/lib/stellar/clients";
 import { NETWORK_PASSPHRASE, STELLAR_NETWORK_ID, X402_URL } from "@/lib/stellar/config";
@@ -21,8 +23,6 @@ import { addToCart, cartKey, loadCart, quoteCart, removeFromCart, saveCart, type
 export const X402_ENABLED = Boolean(X402_URL);
 
 export const x402Transport = (): X402Transport => ({ baseUrl: X402_URL, network: STELLAR_NETWORK_ID });
-
-const journalKey = (wallet: string | null) => ["x402", "journal", STELLAR_NETWORK_ID, wallet] as const;
 
 /**
  * Dependencies for unlockTrace bound to the connected wallet, or null when no
@@ -52,28 +52,32 @@ export function useX402UnlockDeps(): UnlockDeps | null {
 /** Re-reads journal queries when any tab writes to the journal. */
 function useJournalRefresh(wallet: string | null) {
   const queryClient = useQueryClient();
+  const scope = useUserScope();
   useEffect(() => {
     if (!wallet || !X402_ENABLED) return;
     return subscribeJournalChanges((change) => {
       if (change.wallet === wallet && change.network === STELLAR_NETWORK_ID) {
-        void queryClient.invalidateQueries({ queryKey: journalKey(wallet) });
+        void queryClient.invalidateQueries({ queryKey: userKeys.x402Journal(scope, STELLAR_NETWORK_ID, wallet) });
       }
     });
-  }, [wallet, queryClient]);
+  }, [wallet, queryClient, scope]);
 }
 
 /** This wallet's journal entries on this network, newest first. Null data when IndexedDB is unavailable. */
 function useJournalEntries(wallet: string | null) {
+  const scope = useUserScope();
   useJournalRefresh(wallet);
   return useQuery({
-    queryKey: journalKey(wallet),
+    queryKey: userKeys.x402Journal(scope, STELLAR_NETWORK_ID, wallet),
     enabled: Boolean(wallet) && X402_ENABLED,
     staleTime: Infinity,
-    queryFn: async (): Promise<JournalEntry[] | null> => {
+    queryFn: async ({ signal }): Promise<JournalEntry[] | null> => {
       const journal = browserJournal();
       if (!journal || !wallet) return null;
       try {
-        return await journal.list(wallet, STELLAR_NETWORK_ID);
+        const entries = await journal.list(wallet, STELLAR_NETWORK_ID);
+        signal.throwIfAborted();
+        return entries;
       } catch {
         return null;
       }

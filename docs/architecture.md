@@ -18,6 +18,28 @@ A backend market links to the chain through `onChainMarketId` (market-core's `u6
 
 ## Wallet and login
 
+### User-scoped data
+
+Backend routes using `requireAuth` or `optionalAuth` use `userKeys`, prefixed
+with `["scope", walletOrDash, sessionIdOrDash]`. Trace bodies and lists,
+allowances, payments, positions, portfolio and admin jobs follow this rule.
+Public markets and platform statistics keep `publicKeys` and survive sign-out.
+The session id is random per sign-in and stored beside the session; bearer
+tokens never appear in query keys.
+
+`UserScopeStore.resetUserScope` runs synchronously on wallet disconnect,
+account change, invalid/expired token and sign-in. It cancels and removes only
+the previous user scope, aborts its mutation requests, detaches their pending
+observers, and discards late results. Chain caches are also removed on account
+change, disconnect and token invalidation. Scoped API requests bind to the
+expected session before sending and after receiving, so an old response cannot
+clear or populate a new session. `TOKEN_EXPIRED`, `INVALID_TOKEN` and
+`UNAUTHORIZED` with a token clear the session and notify the provider.
+
+Copy-trade reads traces through `useTrace`; it never retains a trace in an
+independent component-state cache. Add new authenticated hooks through the same
+key factory and `useScopedMutation` guard.
+
 `lib/stellar/WalletProvider.tsx` wraps `@creit.tech/stellar-wallets-kit` 2.5.0 (pinned: the last release built on `@stellar/stellar-sdk` 16, the same major as the contract bindings). The application and bindings share SDK 16; hardware-wallet internals can carry separate transitive versions.
 
 - The kit is imported dynamically in an effect, because it reads `localStorage` when its module loads.

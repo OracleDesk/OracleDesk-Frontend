@@ -15,6 +15,8 @@ import { viewOf } from "./wallet-machine";
 import { TransactionTrackerProvider } from "./tx-tracker";
 import { storedPushWallet, unsubscribe as unsubscribePush } from "@/lib/notifications/push";
 import { LedgerInvalidator } from "./ledger-invalidation";
+import { getStoredSessionId, onAuthInvalid, onAuthSessionChanged } from "@/lib/api/client";
+import { UserScopeContext, UserScopeStore } from "@/lib/query/scope";
 
 export interface OpenModalOptions {
   /**
@@ -174,6 +176,7 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
         defaultOptions: { queries: { staleTime: 1000 * 60 * 2, refetchOnWindowFocus: false } },
       }),
   );
+  const [scopeStore] = useState(() => new UserScopeStore(queryClient));
 
   // All wallet logic lives in the state machine; this component only renders it.
   // The initializer stores deferred navigation callbacks; it never reads the ref.
@@ -184,11 +187,11 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
         loadKit: kitLoader,
         storedSessionWallet: getStoredSessionWallet,
         clearBackendSession: clearAuthSession,
-        signIn: async (address, sign) => {
+        signIn: async (address, sign, isCurrent) => {
           const session = await signInWithWallet(address, async (xdr, networkPassphrase) => {
             const { signedTxXdr } = await sign(xdr, { networkPassphrase, address });
             return signedTxXdr;
-          });
+          }, isCurrent);
           return session.walletAddress;
         },
         purgeStellarQueries: () => queryClient.removeQueries({ queryKey: ["stellar"] }),
@@ -197,6 +200,33 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
         broadcastDisconnect: broadcastWalletDisconnect,
       }),
   );
+
+  // Subscribe before starting the kit: clear the old cache in the same tick as
+  // every identity/session transition, before React can render a new account.
+  useEffect(() => {
+    const syncScope = () => {
+      const current = viewOf(interpreter.getState());
+      const previous = scopeStore.getSnapshot();
+      const next = {
+        wallet: current.address,
+        sessionId: current.address && getStoredSessionWallet() === current.address ? getStoredSessionId() : null,
+      };
+      scopeStore.resetUserScope(next,
+        !next.wallet ? "disconnect" : previous.wallet !== next.wallet ? "account-change" :
+          next.sessionId ? "signed-in" : "token-invalid");
+    };
+    const offState = interpreter.subscribe(syncScope);
+    const offSession = onAuthSessionChanged(() => {
+      syncScope();
+      if (!getStoredSessionWallet()) interpreter.send({ type: "SESSION_SYNCED", wallet: null });
+    });
+    const offInvalid = onAuthInvalid(() => {
+      interpreter.send({ type: "SESSION_SYNCED", wallet: null });
+      syncScope();
+    });
+    syncScope();
+    return () => { offState(); offSession(); offInvalid(); };
+  }, [interpreter, scopeStore]);
 
   // Starts the kit, restores a session the kit persisted (never redirects or
   // prompts), and tears the kit subscriptions down on unmount.
@@ -300,6 +330,7 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
 
   return (
     <QueryClientProvider client={queryClient}>
+      <UserScopeContext.Provider value={scopeStore}>
       <ActionsContext.Provider value={actions}>
         <IdentityContext.Provider value={identity}>
           <NetworkContext.Provider value={network}>
@@ -313,6 +344,7 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
           </NetworkContext.Provider>
         </IdentityContext.Provider>
       </ActionsContext.Provider>
+      </UserScopeContext.Provider>
     </QueryClientProvider>
   );
 }
