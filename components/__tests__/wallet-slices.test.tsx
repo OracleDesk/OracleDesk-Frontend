@@ -29,6 +29,11 @@ vi.mock("@/lib/notifications/push", () => ({
   unsubscribe: async () => {},
 }));
 
+vi.mock("@/lib/stellar/network-check", async (original) => ({
+  ...await original<typeof import("@/lib/stellar/network-check")>(),
+  checkRpcNetwork: async () => ({ status: "ok", protocolVersion: 23 }),
+}));
+
 // The provider reads the router; there is no app router in a unit test.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn(), prefetch: vi.fn(), refresh: vi.fn() }),
@@ -242,7 +247,9 @@ describe("wallet context slices", () => {
     const networkCommits = snapshot.commits.network;
 
     await act(async () => {
-      kit.emitState({ address: FAKE_ADDRESS, passphrase: "Public Global Stellar Network ; September 2015" });
+      kit.adapter.getNetwork = async () => ({ networkPassphrase: "Public Global Stellar Network ; September 2015" });
+      // Kit STATE_UPDATED reports selectedNetwork, not wallet-side changes.
+      document.dispatchEvent(new Event("visibilitychange"));
     });
     await waitFor(() => expect(snapshot.network?.isWrongNetwork).toBe(true));
 

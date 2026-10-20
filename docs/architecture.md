@@ -47,6 +47,29 @@ key factory and `useScopedMutation` guard.
 - After connecting, the wallet signs the backend's SEP-10 style challenge transaction (`signTransaction`, which every Stellar wallet supports; `signMessage` is not universal). The backend returns a JWT. A stored session for a different address is cleared, never reused.
 - `useWallet()` exposes `address`, `isWrongNetwork`, a `signer` for the binding clients, `openModal`, `ensureSession` and `disconnect`.
 
+### Runtime network consistency
+
+The provider checks RPC `getNetwork` on startup (two retries for unreachable
+servers). A passphrase mismatch shows a blocking banner and blocks the shared
+RPC transport, including chain reads outside React Query. Retry can recover
+after the operator repairs the endpoint. An unreachable RPC is shown separately
+and rechecked before signing; it is never treated as a confirmed mismatch.
+
+Wallet network state is `match`, `mismatch`, or `unknown`. Kit STATE_UPDATED
+contains the kit-selected network, so it is deliberately ignored as network
+evidence. `getNetwork` is probed before transaction, auth-entry and login signing,
+every 15 seconds for reporting wallets while visible, and on returning to the
+tab. Unknown wallets require an explicit confirmation in the wallet menu, per
+address/module; disconnect/reconnect forgets it. Storage failures are harmless.
+
+Account changes or a transition to a mismatched network invalidate the network
+epoch and purge chain caches. Signing and submission are separate steps: late
+signatures are discarded, and the lifecycle checks its captured epoch immediately
+before submission. Transactions already submitted continue being monitored and
+are never reported as failed merely because the wallet network changed.
+SEP-10 checks the backend's advertised passphrase against the app configuration
+before parsing or signing the challenge.
+
 ### Wallet context slices
 
 The provider publishes six memoized slices instead of one context value, so a

@@ -29,7 +29,7 @@ import {
 } from "@/lib/hooks/useStellar";
 import { useWalletActions, useWalletAddress, useWalletNetwork } from "@/lib/contexts/WalletContext";
 import { useSettings } from "@/lib/settings/useSettings";
-import { explorerTx } from "@/lib/stellar/config";
+import { explorerTx, NETWORK_LABEL } from "@/lib/stellar/config";
 import { MIN_TX_TIMEOUT_S, SAFETY_MARGIN_S } from "@/lib/stellar/deadline";
 import { isStale } from "@/lib/stellar/health";
 import { useLedgerNow as useLedgerClock } from "@/lib/stellar/ledger-clock";
@@ -226,7 +226,7 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
       return;
     }
     if (isWrongNetwork) {
-      setBuyResult({ kind: "error", message: "Switch your wallet to Stellar Testnet to place this trade." });
+      setBuyResult({ kind: "error", message: `Switch your wallet to ${NETWORK_LABEL} to place this trade.` });
       return;
     }
     if (!amountRaw || amountRaw <= 0n) {
@@ -297,7 +297,7 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
       return;
     }
     if (isWrongNetwork) {
-      setMultisigStatus("Switch your wallet to Stellar Testnet to prepare this trade.");
+      setMultisigStatus(`Switch your wallet to ${NETWORK_LABEL} to prepare this trade.`);
       return;
     }
     if (!spendRaw || spendRaw <= 0n) {

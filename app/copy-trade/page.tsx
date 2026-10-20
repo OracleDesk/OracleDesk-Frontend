@@ -15,7 +15,7 @@ import { confirmCopyTrade, initiateCopyTrade } from "@/lib/api/trade";
 import { ApiError } from "@/lib/api/client";
 import { useMarket } from "@/lib/hooks/useMarkets";
 import { useBuy, useQuoteBuy, useUsdcBalance, useAccountReserve, usePrepareBuy, useOnChainMarket, fetchOnChainMarketBySimulation, useUsdcTrustline, useEnableUsdc, useUsdcBalanceState, type PreparedWriteReview } from "@/lib/hooks/useStellar";
-import { explorerTx } from "@/lib/stellar/config";
+import { explorerTx, NETWORK_LABEL } from "@/lib/stellar/config";
 import { formatUsdc, formatXlm, minOut, bpsToPercent, probabilityToBps, tryParseUsdc, BPS } from "@/lib/stellar/units";
 import { chooseCollateral, maxCollateralForEdge, quoteCopy, type CopyMarket, type CopyQuote, type SizingMode } from "@/lib/stellar/quote";
 import type { OutcomeTag } from "@/lib/stellar/clients";
@@ -263,7 +263,7 @@ function CopyTradeContent() {
       return;
     }
     if (isWrongNetwork) {
-      setStatusMessage("Switch your wallet to Stellar Testnet to place this trade.");
+      setStatusMessage(`Switch your wallet to ${NETWORK_LABEL} to place this trade.`);
       return;
     }
     if (!trace || !side) {

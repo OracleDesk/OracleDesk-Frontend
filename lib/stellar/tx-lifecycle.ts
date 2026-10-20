@@ -101,6 +101,7 @@ export class TxLifecycle<T> {
     tx: AssembledTransaction<T>,
     parse: (v: xdr.ScVal | undefined) => T,
     onHash?: (hash: string) => void,
+    beforeSubmit?: () => void | Promise<void>,
   ): Promise<{ value: T; txHash: string; ledger: number }> {
     // 1. Simulating
     this.setPhase({ name: "simulating" });
@@ -118,6 +119,7 @@ export class TxLifecycle<T> {
     this.setPhase({ name: "awaiting-signature" });
     try {
       await tx.sign();
+      await beforeSubmit?.();
     } catch (err) {
       const described: TxDescribedError = describeError(err, this.contract);
       this.setPhase({ name: "failed", hash: null, error: described });

@@ -14,6 +14,7 @@ import {
 } from "@/lib/format/money";
 import { useTreasuryValuation } from "@/lib/portfolio/useValuation";
 import { formatUsdc } from "@/lib/stellar/units";
+import { NETWORK_LABEL } from "@/lib/stellar/config";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useRedeemAll, type PreparedWriteReview } from "@/lib/hooks/useStellar";
 import { shouldSkipTxReview, TxReview, TxReviewPreferenceControl } from "@/components/tx-review";
@@ -519,7 +520,7 @@ export default function PortfolioPage() {
         </div>
 
         {!wallet.isConnected && <p className="mt-4 text-sm text-on-surface-variant">Connect a Stellar wallet to scan your positions.</p>}
-        {wallet.isWrongNetwork && <p className="mt-4 text-sm text-error">Switch your wallet to Stellar Testnet to redeem positions.</p>}
+        {wallet.isWrongNetwork && <p className="mt-4 text-sm text-error">Switch your wallet to {NETWORK_LABEL} to redeem positions.</p>}
         {redeemBatch.error && <p className="mt-4 text-sm text-error" role="alert">{redeemBatch.error}</p>}
 
         {redeemBatch.discovery && redeemBatch.discovery.redeemables.length > 0 && (

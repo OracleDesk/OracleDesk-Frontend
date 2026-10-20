@@ -20,7 +20,7 @@ import { LiveRegion } from "@/components/ui/live-region";
 
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useUsdcTransfer, useAccountReserve, usePrepareUsdcTransfer, useAccountAuth, usePrepareMultisig } from "@/lib/hooks/useStellar";
-import { PAYMENTS_RECIPIENT, NETWORK_PASSPHRASE, explorerTx } from "@/lib/stellar/config";
+import { PAYMENTS_RECIPIENT, NETWORK_LABEL, NETWORK_PASSPHRASE, explorerTx } from "@/lib/stellar/config";
 import { formatUsdc, parseUsdc } from "@/lib/stellar/units";
 import { TxPhase } from "@/lib/stellar/tx-lifecycle";
 import { isMultisigAccount, type MultisigSession } from "@/lib/stellar/multisig";
@@ -246,7 +246,7 @@ export default function PremiumPageClient() {
       return;
     }
     if (isWrongNetwork) {
-      setStatusMessage("Switch your wallet to Stellar Testnet to complete the purchase.");
+      setStatusMessage(`Switch your wallet to ${NETWORK_LABEL} to complete the purchase.`);
       return;
     }
     if (listPending(address, NETWORK_PASSPHRASE).some(isUnfinishedPayment)) {

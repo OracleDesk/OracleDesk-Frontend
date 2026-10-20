@@ -1,5 +1,5 @@
-import { rpc } from "@stellar/stellar-sdk";
-import { RPC_URL } from "./config";
+import type { rpc } from "@stellar/stellar-sdk";
+import { rpcServer } from "./clients";
 import { settleValue, type Settlement } from "./generated/fpmm";
 import type { Market, Position } from "./generated/market-core";
 import {
@@ -50,8 +50,6 @@ export interface RedeemAllResume {
   states: Record<string, ItemState>;
 }
 
-const rpcServer = new rpc.Server(RPC_URL, { allowHttp: RPC_URL.startsWith("http://") });
-
 function isItemState(value: unknown): value is ItemState {
   if (!value || typeof value !== "object" || !("s" in value)) return false;
   const state = value as Record<string, unknown>;
@@ -66,7 +64,7 @@ function isItemState(value: unknown): value is ItemState {
 export async function discoverRedeemable(
   holder: string,
   totalMarkets: bigint,
-  server: rpc.Server = rpcServer,
+  server: rpc.Server = rpcServer(),
 ): Promise<RedeemDiscovery> {
   const scannedMarkets = totalMarkets > MAX_REDEEM_SCAN_MARKETS ? MAX_REDEEM_SCAN_MARKETS : totalMarkets;
   const startId = totalMarkets - scannedMarkets;

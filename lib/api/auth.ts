@@ -2,6 +2,9 @@ import { apiClient, clearAuthSession, getStoredSessionWallet, getStoredToken, st
 import { validateSEP10Challenge, type SEP10ValidationError } from "@/lib/stellar/sep10-validator";
 import { isTokenExpired, getTokenTTL, getReAuthPromise, setReAuthPromise, isReAuthInFlight, waitForReAuth } from "./jwt-manager";
 import { broadcastSessionChange } from "./cross-tab-sync";
+import { TransactionBuilder } from "@stellar/stellar-sdk";
+import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
+import { NetworkMismatchError } from "@/lib/stellar/network-check";
 
 export interface AuthSession {
   token: string;
@@ -34,7 +37,7 @@ export async function verifyChallenge(address: string, signed: string, isCurrent
  * Throws if the challenge is invalid or expired.
  */
 export function validateChallenge(challenge: AuthChallenge): SEP10ValidationError | null {
-  return validateSEP10Challenge(challenge, challenge.networkPassphrase);
+  return validateSEP10Challenge(challenge, NETWORK_PASSPHRASE);
 }
 
 /**
@@ -50,6 +53,13 @@ export async function signInWithWallet(
   isCurrent: () => boolean = () => true,
 ): Promise<AuthSession> {
   const challenge = await requestChallenge(address);
+
+  if (challenge.networkPassphrase !== NETWORK_PASSPHRASE) {
+    throw new NetworkMismatchError(NETWORK_PASSPHRASE, challenge.networkPassphrase);
+  }
+  // XDR does not itself encode a passphrase; parsing here ensures the envelope
+  // is valid, and the exact advertised passphrase check above binds the hash.
+  TransactionBuilder.fromXDR(challenge.transaction, NETWORK_PASSPHRASE);
 
   // Validate challenge before signing
   const validationError = validateChallenge(challenge);

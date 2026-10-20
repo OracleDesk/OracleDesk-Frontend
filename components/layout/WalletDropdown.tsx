@@ -12,7 +12,7 @@ import { formatUsdc, formatXlm, shortAddress } from "@/lib/stellar/units";
 
 const WalletDropdownBody = () => {
   const { address, isConnected } = useWalletAddress();
-  const { isWrongNetwork } = useWalletNetwork();
+  const { isWrongNetwork, walletNetwork, confirmUnknownNetwork } = useWalletNetwork();
   const { isConnecting, error } = useWalletSession();
   const { openModal, disconnect } = useWalletActions();
   const [copied, setCopied] = useState(false);
@@ -80,7 +80,7 @@ const WalletDropdownBody = () => {
         >
           <div className="flex flex-col items-end hidden sm:flex">
             <span className={`text-[10px] font-bold leading-none uppercase ${isWrongNetwork ? "text-error" : "text-on-surface-variant"}`}>
-              {isWrongNetwork ? "Wrong network" : NETWORK_LABEL}
+              {isWrongNetwork ? "Wrong network" : walletNetwork?.state === "unknown" ? "Network unknown" : NETWORK_LABEL}
             </span>
             <span className="text-sm font-data-mono font-bold text-on-surface">
               {truncatedAddress}
@@ -154,7 +154,13 @@ const WalletDropdownBody = () => {
               <p className="mt-2 text-[11px] text-error">{enableUsdc.error.message}</p>
             )}
             {isWrongNetwork && (
-              <p className="mt-2 text-[11px] text-error">Your wallet is on a different network. Switch it to Stellar Testnet.</p>
+              <p className="mt-2 text-[11px] text-error">Your wallet is on a different network. Switch it to {NETWORK_LABEL}.</p>
+            )}
+            {walletNetwork?.state === "unknown" && (
+              <div className="mt-2 text-xs">
+                <p>Network: unknown {walletNetwork.confirmedByUser ? "(confirmed)" : "— confirm before signing"}</p>
+                {!walletNetwork.confirmedByUser && <button type="button" onClick={confirmUnknownNetwork} className="mt-2 rounded bg-primary px-3 py-2 text-primary-foreground">I confirm my wallet is on {NETWORK_LABEL}</button>}
+              </div>
             )}
           </DM.Label>
 

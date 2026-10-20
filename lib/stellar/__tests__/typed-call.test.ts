@@ -15,7 +15,8 @@ function mockTx<T>(
   return {
     result,
     simulation: options?.simulation,
-    signAndSend: vi.fn().mockResolvedValue({
+    sign: vi.fn().mockResolvedValue(undefined),
+    send: vi.fn().mockResolvedValue({
       result: options?.signAndSendResult ?? result,
       sendTransactionResponse: {
         hash: options?.txHash !== undefined ? options?.txHash : "test-tx-hash-abc",
@@ -28,13 +29,14 @@ function mockThrowingTx(
   errorToThrow: unknown,
   simulation?: { error?: string },
 ): AssembledTransaction<unknown> {
-  const signAndSend = vi.fn();
+  const sign = vi.fn();
   return {
     get result() {
       throw errorToThrow;
     },
     simulation,
-    signAndSend,
+    sign,
+    send: vi.fn(),
   } as unknown as AssembledTransaction<unknown>;
 }
 
@@ -124,14 +126,15 @@ describe("read() runtime helper", () => {
 });
 
 describe("submit() runtime helper", () => {
-  it("surfaces simulation failure before calling signAndSend", async () => {
+  it("surfaces simulation failure before signing", async () => {
     const tx = mockThrowingTx(
       new Error("Error(Contract, #2)"),
       { error: "Error(Contract, #2)" },
     );
 
     await expect(submit(tx, "marketCore")).rejects.toThrow(UserFacingError);
-    expect(tx.signAndSend).not.toHaveBeenCalled();
+    expect(tx.sign).not.toHaveBeenCalled();
+    expect(tx.send).not.toHaveBeenCalled();
   });
 
   it("returns { value, txHash } from sendTransactionResponse on success", async () => {
@@ -147,7 +150,8 @@ describe("submit() runtime helper", () => {
       ledger: null,
       txHash: "mocked-hash-xyz",
     });
-    expect(tx.signAndSend).toHaveBeenCalledTimes(1);
+    expect(tx.sign).toHaveBeenCalledTimes(1);
+    expect(tx.send).toHaveBeenCalledTimes(1);
   });
 
   it("returns null txHash when sendTransactionResponse has no hash", async () => {

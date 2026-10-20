@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNetworkMutation as useMutation } from "@/lib/query/useNetworkMutation";
+import { recheckRpcAfterSimulation } from "@/lib/stellar/rpc-network-guard";
 import { Keypair, scValToNative, TransactionBuilder, xdr } from "@stellar/stellar-sdk";
 import type { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import { useWalletAddress, useWalletNetwork, useWalletSigner } from "@/lib/contexts/WalletContext";
@@ -28,7 +30,7 @@ import {
 } from "@/lib/stellar/tx-lifecycle";
 import { useTxTracker } from "@/lib/stellar/tx-tracker";
 import { tradeInvalidationKeys } from "@/lib/stellar/tx-tracker-core";
-import { CONTRACTS, NETWORK_PASSPHRASE } from "@/lib/stellar/config";
+import { CONTRACTS, NETWORK_LABEL, NETWORK_PASSPHRASE } from "@/lib/stellar/config";
 
 import { preflightBuy, preflightRedeem, type Preflight, type PreflightFailure, type PreflightInput } from "@/lib/stellar/preflight";
 import { getSubmitQueue } from "@/lib/stellar/submit-queue";
@@ -94,6 +96,7 @@ async function measured<Tx extends AssembledTransaction<unknown>>(method: string
   const t0 = Date.now();
   try {
     const tx = await build();
+    await recheckRpcAfterSimulation();
     const sim = tx.simulation as { latestLedger?: number; error?: string } | undefined;
     try {
       rpcPool()?.record(url, { ms: Date.now() - t0, ok: true, latestLedger: sim?.latestLedger });
@@ -447,10 +450,10 @@ export function useAccountReserve(address: string | null | undefined) {
 }
 
 export function useUsdcTrustline(owner: string | null | undefined) {
-  const { isWrongNetwork } = useWalletNetwork();
+  const { isWrongNetwork, rpcNetwork } = useWalletNetwork();
   return useQuery({
     queryKey: stellarKeys.trustline(owner ?? ""),
-    enabled: Boolean(owner) && !isWrongNetwork,
+    enabled: Boolean(owner) && !isWrongNetwork && rpcNetwork?.status !== "mismatch",
     queryFn: () => trustlineFor(owner as string),
     staleTime: 10_000,
     refetchInterval: 10_000,
@@ -671,7 +674,7 @@ export function useVerifiedTrace(onChainTraceId: bigint | string | null | undefi
 
 function useWriteGuard(): () => Signer {
   const signer = useWalletSigner();
-  const { isWrongNetwork } = useWalletNetwork();
+  const { isWrongNetwork, rpcNetwork, walletNetwork } = useWalletNetwork();
   const queryClient = useQueryClient();
   const updatePending = useUpdatePending();
   // The guard's identity is stable, so the write hooks don't get a new
@@ -685,8 +688,10 @@ function useWriteGuard(): () => Signer {
       throw new UserFacingError({ kind: "disconnected", message: "Connect your wallet first." });
     }
     if (isWrongNetwork) {
-      throw new UserFacingError({ kind: "wrong-network", message: "Switch your wallet to Stellar Testnet and try again." });
+      throw new UserFacingError({ kind: "wrong-network", message: `Switch your wallet to ${NETWORK_LABEL} and try again.` });
     }
+    if (rpcNetwork?.status === "mismatch") throw new UserFacingError({ kind: "wrong-network", message: "The RPC is on a different Stellar network. Signing is disabled." });
+    if (walletNetwork?.state === "unknown" && !walletNetwork.confirmedByUser) throw new UserFacingError({ kind: "wrong-network", message: `Confirm your wallet is on ${NETWORK_LABEL} first in the wallet menu.` });
     // An unfunded account has no ledger entry, so building any transaction
     // from it would fail with a raw SDK error. Refuse here, in plain words.
     const account = queryClient.getQueryData<AccountReserveState>(stellarKeys.account(signer.publicKey));
@@ -697,7 +702,7 @@ function useWriteGuard(): () => Signer {
       });
     }
     return signer;
-  }, [signer, isWrongNetwork, queryClient, updatePending]);
+  }, [signer, isWrongNetwork, rpcNetwork, walletNetwork, queryClient, updatePending]);
 }
 
 export function useInvalidateAfterTrade() {
@@ -728,10 +733,11 @@ function confirmedAmount(value: xdr.ScVal | undefined): bigint {
 }
 
 function useTxRunner(contract: ContractName) {
+  const { networkEpoch, assertNetworkCurrent } = useWalletNetwork();
   const [runner] = useState(() => new TxLifecycle<unknown>({ server: () => rpcServer(), contract }));
   const phase = useSyncExternalStore(runner.subscribe, runner.getSnapshot, runner.getSnapshot);
   const start = useCallback(<T, R = T>(tx: AssembledTransaction<T>, parse: (v: xdr.ScVal | undefined) => R, onHash?: (hash: string) => void) => {
-    const run = runner.run(tx as AssembledTransaction<unknown>, parse, onHash) as Promise<{ value: R; txHash: string; ledger: number }>;
+    const run = runner.run(tx as AssembledTransaction<unknown>, parse, onHash, () => assertNetworkCurrent?.(networkEpoch)) as Promise<{ value: R; txHash: string; ledger: number }>;
     if (!DEBUG_ENABLED) return run;
     const method = `submit:${String((tx as { options?: { method?: string } }).options?.method ?? "tx")}`;
     return run.then(
@@ -744,7 +750,7 @@ function useTxRunner(contract: ContractName) {
         throw err;
       },
     );
-  }, [runner, contract]);
+  }, [runner, contract, networkEpoch, assertNetworkCurrent]);
   return { phase, start };
 }
 
@@ -1912,6 +1918,7 @@ export function useImportMultisig() {
 export function useSubmitMultisig() {
   const queryClient = useQueryClient();
   const tracker = useTxTracker();
+  const { networkEpoch, assertNetworkCurrent } = useWalletNetwork();
   return useMutation({
     mutationFn: async ({ session }: { session: MultisigSession }): Promise<{ txHash: string; ledger: number }> => {
       const tx = TransactionBuilder.fromXDR(session.xdr, NETWORK_PASSPHRASE) as import("@stellar/stellar-sdk").Transaction;
@@ -1962,6 +1969,7 @@ export function useSubmitMultisig() {
       }
       let sendRes: import("@stellar/stellar-sdk").rpc.Api.SendTransactionResponse;
       try {
+        assertNetworkCurrent?.(networkEpoch);
         sendRes = await server.sendTransaction(tx);
       } catch (err) {
         throw new UserFacingError(describeError(err), err);

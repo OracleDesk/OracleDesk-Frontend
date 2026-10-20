@@ -12,6 +12,10 @@ import { apiClient, clearAuthSession, getStoredSessionWallet, storeAuthSession }
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("../tx-tracker", () => ({ TransactionTrackerProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("../ledger-invalidation", () => ({ LedgerInvalidator: class { start() { return () => {}; } } }));
+vi.mock("../network-check", async (original) => ({
+  ...await original<typeof import("../network-check")>(),
+  checkRpcNetwork: async () => ({ status: "ok", protocolVersion: 23 }),
+}));
 vi.mock("@/lib/notifications/push", () => ({ storedPushWallet: () => null, unsubscribe: async () => {} }));
 vi.mock("@/lib/api/cross-tab-sync", () => ({ broadcastWalletDisconnect: vi.fn(), createCrossTabSync: () => ({ unsubscribe() {} }) }));
 vi.mock("@/lib/api/auth", async (original) => ({

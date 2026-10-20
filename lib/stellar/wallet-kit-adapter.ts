@@ -81,7 +81,9 @@ export function loadStellarWalletsKit(): Promise<WalletKitAdapter> {
       // The kit's `on` returns the unsubscribe function.
       onStateUpdated: (cb) =>
         StellarWalletsKit.on(KitEventType.STATE_UPDATED, ({ payload }) =>
-          cb({ address: payload.address ?? null, passphrase: payload.networkPassphrase || null }),
+          // payload.networkPassphrase is the kit's selected network, not the
+          // extension's network. Only getNetwork can attest to the wallet.
+          cb({ address: payload.address ?? null, passphrase: null }),
         ),
       onDisconnect: (cb) => StellarWalletsKit.on(KitEventType.DISCONNECT, () => cb()),
       // Read defensively: the selected-module getter's shape is not part of the

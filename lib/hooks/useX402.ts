@@ -6,7 +6,7 @@ import { useUserScope } from "@/lib/query/scope";
 import { userKeys } from "@/lib/query/keys";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { currentRpcUrl, rpcServer } from "@/lib/stellar/clients";
-import { NETWORK_PASSPHRASE, STELLAR_NETWORK_ID, X402_URL } from "@/lib/stellar/config";
+import { NETWORK_LABEL, NETWORK_PASSPHRASE, STELLAR_NETWORK_ID, X402_URL } from "@/lib/stellar/config";
 import { UserFacingError } from "@/lib/stellar/errors";
 import { fetchVerifiedTrace } from "@/lib/stellar/verified-trace";
 import { createPaymentHeader, requestRequirements, type UnlockDeps, type X402Transport } from "@/lib/x402/client";
@@ -39,7 +39,7 @@ export function useX402UnlockDeps(): UnlockDeps | null {
       verify: (onChainTraceId) => fetchVerifiedTrace(onChainTraceId),
       transport: x402Transport(),
       sign: async (paymentRequired, requirement) => {
-        if (isWrongNetwork) throw new UserFacingError({ kind: "wrong-network", message: "Switch your wallet to the app's network and try again." });
+        if (isWrongNetwork) throw new UserFacingError({ kind: "wrong-network", message: `Switch your wallet to ${NETWORK_LABEL} and try again.` });
         if (!signer.signAuthEntry) {
           throw new UserFacingError({ kind: "unknown", message: "Your wallet can't sign Soroban authorization entries, which x402 payments need." });
         }

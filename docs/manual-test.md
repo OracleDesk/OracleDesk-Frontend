@@ -68,6 +68,17 @@ Needs `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` set and this origin allowed in the 
 
 ## 6. See your balance
 
+- [ ] Start a copy-trade quote, switch Freighter to Mainnet while its signature
+  prompt is open, wait for the network check (or return to the tab), and approve.
+  The app refuses submission and purges old chain results. No buy is sent.
+- [ ] Use a wallet that cannot report its network. The menu says **Network:
+  unknown**; signing is blocked until **I confirm my wallet is on Stellar Testnet**
+  is selected. Disconnect and reconnect: confirmation is required again.
+- [ ] Point the configured RPC at a different network. A non-dismissable banner
+  blocks reads/signing. Restore the RPC and click **Retry network check**.
+- [ ] Return a login challenge with a different network passphrase. Sign-in
+  explains the server mismatch without opening a wallet signature prompt.
+
 - [ ] Open the wallet menu (top right). It says **Stellar Testnet** and shows **100.00 USDC**.
 - [ ] Switch Freighter to Mainnet: the menu shows **Wrong network** in red. Switch back to Testnet.
 - [ ] "Copy address" copies your G-address; "View on Stellar Expert" opens your testnet account page.
