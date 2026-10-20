@@ -13,7 +13,7 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
-          include: ["lib/**/*.test.ts"],
+          include: ["lib/**/*.test.ts", "components/**/*.test.ts"],
           typecheck: { enabled: true, include: ["lib/**/*.test-d.ts"], tsconfig: "./tsconfig.json" },
         },
       },
