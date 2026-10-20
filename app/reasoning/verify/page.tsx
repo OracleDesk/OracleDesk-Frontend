@@ -301,7 +301,7 @@ function VerifyTraceContent() {
                 </button>
               </div>
               <Link href="/reasoning" aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-variant transition-colors">
-                <span className="material-symbols-outlined text-on-surface-variant">close</span>
+                <Icon name="close" className="text-on-surface-variant" />
               </Link>
             </div>
           </div>
@@ -396,7 +396,7 @@ function VerifyTraceContent() {
                     className={`transform ${verificationResult.verified ? 'bg-primary-container border-secondary text-on-primary-container' : 'bg-error-container/20 border-error text-error'} border p-4 rounded-lg flex items-center gap-4`}
                   >
                     <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center">
-                      <span className="material-symbols-outlined text-on-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
+                      <Icon name="verified_user" filled className="text-on-primary-container" />
                     </div>
                     <div className="flex-1">
                       <h3 className="font-headline-sm text-headline-sm">
@@ -413,12 +413,12 @@ function VerifyTraceContent() {
                     <div className="flex flex-col gap-2">
                       {verificationResult.ipfsCid && (
                         <a className={`flex items-center gap-2 px-4 py-2 bg-white border ${verificationResult.verified ? 'border-secondary text-secondary' : 'border-error text-error'} font-label-caps rounded hover:brightness-95 transition-all text-xs`} href={ipfsUrl(verificationResult.ipfsCid)} target="_blank" rel="noopener noreferrer">
-                          <span className="material-symbols-outlined text-sm">link</span>
+                          <Icon name="link" className="text-sm" />
                           View IPFS
                         </a>
                       )}
                       <a className={`flex items-center gap-2 px-4 py-2 bg-white border ${verificationResult.verified ? 'border-secondary text-secondary' : 'border-error text-error'} font-label-caps rounded hover:brightness-95 transition-all text-xs`} href={explorerAccount(CONTRACTS.reasoningRegistry)} target="_blank" rel="noopener noreferrer">
-                        <span className="material-symbols-outlined text-sm">search</span>
+                        <Icon name="search" className="text-sm" />
                         View on Stellar Expert
                       </a>
                     </div>
@@ -426,7 +426,7 @@ function VerifyTraceContent() {
                 )}
               </AnimatePresence>
 
-              {isComplete && verificationResult?.verified && verificationResult.content && (
+              {isComplete && verificationResult?.verified && Boolean(verificationResult.content) && (
                 <SafeTraceViewer
                   content={verificationResult.content}
                   verified={true}

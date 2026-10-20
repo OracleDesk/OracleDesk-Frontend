@@ -34,6 +34,7 @@ export function tradeInvalidationKeys(marketId: string, holder: string) {
     ["stellar", "markets"] as const,
     ["stellar", "position", marketId, holder] as const,
     ["stellar", "usdcBalance", holder] as const,
+    ["stellar", "equity", holder] as const,
   ];
 }
 

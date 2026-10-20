@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/ui/icon";
 
 import React, { useRef, useState } from "react";
 import {
@@ -117,7 +118,7 @@ export function MarketTraceAudit({
       <div className="p-6 bg-surface-container-low border-b border-outline-variant flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="material-symbols-outlined text-primary text-xl">fact_check</span>
+            <Icon name="verified" className="text-primary text-xl" />
             <span className="font-label-caps text-label-caps text-primary font-bold">
               MARKET INTEGRITY AUDIT · ON-CHAIN #{onChainMarketId}
             </span>
@@ -138,7 +139,7 @@ export function MarketTraceAudit({
               onClick={pauseAudit}
               className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-label-caps text-label-caps font-bold transition-all flex items-center gap-2 shadow-sm"
             >
-              <span className="material-symbols-outlined text-sm">pause</span>
+              <Icon name="hourglass_top" className="text-sm" />
               Pause Audit
             </button>
           ) : progress.phase === "paused" ? (
@@ -147,7 +148,7 @@ export function MarketTraceAudit({
               onClick={startOrResumeAudit}
               className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg font-label-caps text-label-caps font-bold transition-all flex items-center gap-2 shadow-sm"
             >
-              <span className="material-symbols-outlined text-sm">play_arrow</span>
+              <Icon name="bolt" className="text-sm" />
               Resume Audit
             </button>
           ) : (
@@ -156,7 +157,7 @@ export function MarketTraceAudit({
               onClick={startOrResumeAudit}
               className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg font-label-caps text-label-caps font-bold transition-all flex items-center gap-2 shadow-sm"
             >
-              <span className="material-symbols-outlined text-sm">security_update_good</span>
+              <Icon name="verified" className="text-sm" />
               {progress.phase === "completed" ? "Re-run Audit" : "Begin Batch Audit"}
             </button>
           )}
@@ -178,7 +179,7 @@ export function MarketTraceAudit({
         <div className="p-4 bg-surface-container-lowest border-b border-outline-variant space-y-2">
           <div className="flex justify-between items-center text-xs font-label-caps">
             <span className="text-primary font-bold flex items-center gap-1.5">
-              <span className="animate-spin material-symbols-outlined text-sm">sync</span>
+              <Icon name="sync" className="animate-spin text-sm" />
               {progress.phase === "enumerating"
                 ? "Reading on-chain index from reasoning-registry…"
                 : `Verifying trace #${progress.currentTraceId ?? ""} (${progress.verified + progress.mismatches + progress.unavailable} of ${progress.total})`}
@@ -200,7 +201,7 @@ export function MarketTraceAudit({
           role="alert"
           className="p-4 bg-error-container/20 border-b border-error text-error flex items-start gap-3"
         >
-          <span className="material-symbols-outlined text-xl shrink-0 mt-0.5 animate-pulse">warning</span>
+          <Icon name="error" className="text-xl shrink-0 mt-0.5 animate-pulse" />
           <div className="space-y-1">
             <h4 className="font-headline-sm text-sm font-bold uppercase tracking-wide">
               Critical Integrity Warning: {summary.criticalDisagreementsCount} Disagreement{summary.criticalDisagreementsCount > 1 ? "s" : ""} Found
@@ -352,22 +353,22 @@ export function MarketTraceAudit({
                   <td className="px-4 py-3">
                     {item.status === "verified" ? (
                       <span className="inline-flex items-center gap-1 text-secondary font-bold">
-                        <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                        <Icon name="check_circle" className="text-[14px]" />
                         Verified
                       </span>
                     ) : item.status === "mismatch" ? (
                       <span className="inline-flex items-center gap-1 text-error font-bold">
-                        <span className="material-symbols-outlined text-[14px]">cancel</span>
+                        <Icon name="cancel" className="text-[14px]" />
                         Mismatch
                       </span>
                     ) : item.status === "unavailable" ? (
                       <span className="inline-flex items-center gap-1 text-on-surface-variant">
-                        <span className="material-symbols-outlined text-[14px]">cloud_off</span>
+                        <Icon name="cloud_off" className="text-[14px]" />
                         Unavailable
                       </span>
                     ) : item.status === "running" ? (
                       <span className="inline-flex items-center gap-1 text-primary">
-                        <span className="animate-spin material-symbols-outlined text-[14px]">sync</span>
+                        <Icon name="sync" className="animate-spin text-[14px]" />
                         Checking…
                       </span>
                     ) : (
@@ -410,7 +411,7 @@ export function MarketTraceAudit({
         </div>
       ) : items.length === 0 && !isRunning ? (
         <div className="p-12 text-center text-on-surface-variant space-y-3">
-          <span className="material-symbols-outlined text-4xl text-outline">fact_check</span>
+          <Icon name="verified" className="text-4xl text-outline" />
           <p className="font-medium text-sm">No trace audit run yet for this market.</p>
           <p className="text-xs text-outline max-w-md mx-auto">
             Click &ldquo;Begin Batch Audit&rdquo; to query reasoning-registry and verify all published traces against IPFS.
@@ -419,7 +420,7 @@ export function MarketTraceAudit({
       ) : null}
 
       {/* Expanded SafeTraceViewer Modal / Drawer for selected trace */}
-      {selectedTrace && selectedTrace.content && (
+      {selectedTrace && Boolean(selectedTrace.content) && (
         <div className="p-6 border-t border-outline-variant bg-surface-container-low">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-headline-sm text-headline-sm text-on-surface">

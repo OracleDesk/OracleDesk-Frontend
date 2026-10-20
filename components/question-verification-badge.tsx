@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/ui/icon";
 
 import React from "react";
 import type { QuestionIntegrityCheck, QuestionIntegrityStatus } from "@/lib/stellar/market-question";
@@ -22,9 +23,7 @@ export function QuestionVerificationBadge({
         title={`Verified: Text matches on-chain question_hash commitment (${result?.committedHash?.slice(0, 8)}…)`}
         className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-secondary bg-secondary/10 px-2 py-0.5 rounded border border-secondary/20 shrink-0 ${className}`}
       >
-        <span className="material-symbols-outlined text-[13px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-          verified
-        </span>
+        <Icon name="verified" filled className="text-[13px]" />
         Question Verified
       </span>
     );
@@ -37,7 +36,7 @@ export function QuestionVerificationBadge({
         title={result?.reason ?? "Displayed question text differs from on-chain committed question"}
         className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-error bg-error/15 px-2.5 py-1 rounded-md border border-error shadow-sm ${className}`}
       >
-        <span className="material-symbols-outlined text-[16px] animate-pulse">warning</span>
+        <Icon name="error" className="text-[16px] animate-pulse" />
         <span>QUESTION MISMATCH: Do not trade without verifying chain!</span>
       </div>
     );
@@ -50,7 +49,7 @@ export function QuestionVerificationBadge({
         title={result?.reason ?? "Question commitment could not be verified (IPFS unavailable)"}
         className={`inline-flex items-center gap-1 text-[10px] font-medium text-on-surface-variant bg-surface-container px-2 py-0.5 rounded border border-outline-variant/50 shrink-0 ${className}`}
       >
-        <span className="material-symbols-outlined text-[13px]">cloud_off</span>
+        <Icon name="cloud_off" className="text-[13px]" />
         Unverified
       </span>
     );
@@ -63,7 +62,7 @@ export function QuestionVerificationBadge({
       title="This market was created without an on-chain question_hash commitment"
       className={`inline-flex items-center gap-1 text-[10px] font-medium text-on-surface-variant bg-surface-container px-2 py-0.5 rounded border border-outline-variant/50 shrink-0 ${className}`}
     >
-      <span className="material-symbols-outlined text-[13px]">info</span>
+      <Icon name="info" className="text-[13px]" />
       Not Committed
     </span>
   );

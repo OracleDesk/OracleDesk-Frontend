@@ -12,6 +12,8 @@
     "sync:bindings": "node scripts/sync-bindings.mjs",
     "check:bindings": "node scripts/sync-bindings.mjs --check",
     "e2e:testnet": "vitest run --config vitest.e2e.config.mts",
+    "e2e:x402": "vitest run --config vitest.x402.config.mts",
+    "check:x402": "node scripts/check-x402-versions.mjs",
     "bench:clients": "node scripts/bench-clients.mjs",
     "test:scripts": "node --test scripts/__tests__/",
     "perf:lhci": "node scripts/run-lhci.mjs"

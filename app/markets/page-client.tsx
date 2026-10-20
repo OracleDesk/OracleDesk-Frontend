@@ -123,11 +123,10 @@ const MarketCard = ({ href, category, onChainMarketId, reasoningTraces, expiry, 
   const aiStatus = latestTrace ? `${Math.abs(latestTrace.edge * 100).toFixed(1)}% EDGE` : "STABLE";
   const volume24h = chainStatusLabel(view);
   const questionIntegrity = useMarketQuestionIntegrity({
-    marketId,
-    onChainMarketId,
+    onChainMarketId: onChainMarketId === null ? null : String(onChainMarketId),
     displayedQuestion: title,
-    metaUri: view?.market.meta_uri ?? metaUri,
-    questionHash: view?.market.question_hash ?? questionHash,
+    metaUri: view?.market.meta_uri,
+    questionHash: view?.market.question_hash,
   });
 
   const cardContent = (

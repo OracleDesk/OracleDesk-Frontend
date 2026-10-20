@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/ui/icon";
 
 import React, { useEffect, useState } from "react";
 import type { ResolutionSpec } from "@/lib/api/markets";
@@ -61,26 +62,22 @@ export function ResolverStatusPanel({
         className="w-full p-4 flex items-center justify-between bg-surface-container-low hover:bg-surface-container transition-colors text-left"
       >
         <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-base">rule</span>
+          <Icon name="policy" className="text-primary text-base" />
           <h3 className="font-headline-sm text-headline-sm text-on-surface">Market Resolution & Commitment</h3>
           {verification?.status === "verified" && (
             <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold text-secondary bg-secondary/10 px-2 py-0.5 rounded border border-secondary/20">
-              <span className="material-symbols-outlined text-[13px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                verified
-              </span>
+              <Icon name="verified" filled className="text-[13px]" />
               Commitment Verified
             </span>
           )}
           {verification?.status === "mismatch" && (
             <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold text-error bg-error/15 px-2 py-0.5 rounded border border-error animate-pulse">
-              <span className="material-symbols-outlined text-[13px]">warning</span>
+              <Icon name="error" className="text-[13px]" />
               Spec Hash Mismatch
             </span>
           )}
         </div>
-        <span className="material-symbols-outlined text-on-surface-variant text-sm">
-          {isOpen ? "expand_less" : "expand_more"}
-        </span>
+        <Icon name={isOpen ? "expand_less" : "expand_more"} className="text-on-surface-variant text-sm" />
       </button>
 
       {/* Panel Content */}
@@ -117,14 +114,12 @@ export function ResolverStatusPanel({
               </span>
               {verification?.status === "verified" ? (
                 <span className="text-[11px] font-bold text-secondary flex items-center gap-1">
-                  <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>
-                    check_circle
-                  </span>
+                  <Icon name="check_circle" filled className="text-xs" />
                   Matches on-chain commitment
                 </span>
               ) : verification?.status === "mismatch" ? (
                 <span className="text-[11px] font-bold text-error flex items-center gap-1">
-                  <span className="material-symbols-outlined text-xs">error</span>
+                  <Icon name="error" className="text-xs" />
                   Hash mismatch (do not trust!)
                 </span>
               ) : null}
@@ -176,7 +171,7 @@ export function ResolverStatusPanel({
               role="alert"
               className="p-3 bg-error-container/20 border border-error rounded-lg text-error text-xs flex items-center gap-2"
             >
-              <span className="material-symbols-outlined text-base">warning</span>
+              <Icon name="error" className="text-base" />
               <div>
                 <span className="font-bold">CRITICAL WARNING: </span>
                 The backend&apos;s displayed resolution spec does not hash to the on-chain commitment hash.
