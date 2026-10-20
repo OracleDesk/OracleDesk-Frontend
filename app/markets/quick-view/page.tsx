@@ -22,6 +22,9 @@ import { BuyTicket } from "@/components/market/buy-ticket";
 import { DevProfiler } from "@/lib/dev/profiler";
 import { PushVerifiedStatus } from "@/components/push-verified-status";
 import { SourceTag } from "@/components/ui/source-tag";
+import { CreatorPanel } from "@/components/market/CreatorPanel";
+import { backendSeed } from "@/lib/stellar/lp";
+import { ledgerClock, useLedgerClock } from "@/lib/stellar/ledger-clock";
 import {
   Dialog,
   DialogClose,
@@ -337,6 +340,8 @@ function MarketQuickViewContent() {
             {onChainMarketId !== null && (
               <BuyTicket onChainMarketId={onChainMarketId} side={side} amountInputRef={amountInputRef} />
             )}
+
+            {view && <CreatorPanel view={view} seed={backendSeed(view.market, market)} />}
 
             {onChainMarketId !== null && <TradeTape onChainMarketId={onChainMarketId} limit={20} compact />}
 

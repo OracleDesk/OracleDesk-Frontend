@@ -137,6 +137,28 @@ which the backend handles idempotently. A saved hash can never be replaced.
 - Writes (`useBuy`, `useSell`, `useRedeem`, `useUsdcTransfer`) check that a wallet is connected and on the right network, run fresh contract preflight checks, simulate, then `signAndSend`. A per-address queue serializes complete build/sign/send jobs in this tab and coordinates browser tabs with Web Locks (or a local-storage lease fallback); stale-sequence errors receive one fresh-build retry. The buy, sell, redeem, and USDC-transfer paths can decode the final simulated contract invocation and show its arguments and transaction envelope for review before the wallet prompt.
 - `useBuy` quotes again immediately before building the transaction and sets `min_shares_out = minOut(quote, slippageBps)`, so slippage is enforced on-chain.
 
+### Creator liquidity claims
+
+Quick-view shows a creator panel only for a matching connected G-address, and
+hides it on a network mismatch. `lpView` computes all values in bigint from the
+same on-chain market snapshot: the winning reserve for YES/NO, or floor of half
+the reserve sum for Void. Open pool value is a labelled spot-price estimate.
+Accrued fees belong to the treasury and never increase the creator's payout.
+
+Backend seed metadata is displayed only when its integer seed calculation
+reproduces the on-chain reserves and sets minted. After trades, or without
+matching metadata, seed figures are omitted. A MarketCreated event would be the
+authoritative historical seed source, but RPC event retention limits discovery.
+The fixtures record outputs from the pinned contracts Python model using the
+Rust creation and Void-claim test inputs.
+
+Claiming re-reads the market through simulation, checks creator, finality and
+`lp_claimed` before prompting, then signs/submits through the existing guarded
+queue and transaction lifecycle. Success invalidates market, position, USDC and
+account balances. A zero payout still marks the pool claimed. Normal creator
+seed shares must be redeemed separately; fees are swept separately by the
+treasury flow.
+
 ### Batched market reads
 
 `useOnChainMarkets` and `fetchOnChainMarket` coalesce calls made in the same tick through `lib/stellar/market-batch.ts`. Each request asks `getLedgerEntries` for at most 200 market keys (spec-driven `DataKey::Market(u64)` encoding from `lib/stellar/ledger-keys.ts`), maps entries back by `LedgerKey` rather than response order, and decodes `Market` with the cached binding spec. The result carries the entry's ledger, persistent-entry TTL (`liveUntilLedgerSeq`) and read method (`ledger-entry` or `simulation`). An entry the RPC omits, or an archived one, falls back to the existing simulation read. Resolved and void markets with no reserves stay readable with `yesBps: 0` instead of failing the whole batch.

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNetworkMutation as useMutation } from "@/lib/query/useNetworkMutation";
 import { recheckRpcAfterSimulation } from "@/lib/stellar/rpc-network-guard";
+import { isWalletCreator, settlementOf } from "@/lib/stellar/lp";
 import { Keypair, scValToNative, TransactionBuilder, xdr } from "@stellar/stellar-sdk";
 import type { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import { useWalletAddress, useWalletNetwork, useWalletSigner } from "@/lib/contexts/WalletContext";
@@ -246,7 +247,7 @@ export async function fetchOnChainMarketBySimulation(id: bigint | string): Promi
   const tx = await measured("get_market", () => marketCore().get_market({ market_id: toId(id) }));
   const market = read(tx);
   const ledger = tx.simulation?.latestLedger;
-  return { id: String(id), market, yesBps: Number(priceYesBps(market.reserve_yes, market.reserve_no)), ledger: typeof ledger === "number" ? ledger : null };
+  return { id: String(id), market, yesBps: market.reserve_yes + market.reserve_no > 0n ? Number(priceYesBps(market.reserve_yes, market.reserve_no)) : 0, ledger: typeof ledger === "number" ? ledger : null };
 }
 
 const marketBatcher = createMarketBatcher({
@@ -1316,6 +1317,29 @@ export function useRedeem() {
     ...mutation,
     phase: runner.phase,
   };
+}
+
+/** The creator's LP pool is separate from their ordinary YES/NO position. */
+export function useClaimPoolRemainder() {
+  const guard = useWriteGuard();
+  const invalidate = useInvalidateAfterTrade();
+  const runner = useTxRunner("marketCore");
+  const mutation = useMutation({
+    mutationFn: async ({ marketId }: { marketId: bigint | string }) => {
+      const signer = guard();
+      return runQueuedWrite(signer, `Claim pool #${marketId}`, dedupeValue("claim-pool", marketId), guard, async () => {
+        const { market } = await fetchOnChainMarketBySimulation(marketId);
+        if (!isWalletCreator(market, signer.publicKey)) throw new UserFacingError({ kind: "contract", message: "Only this market's creator can claim its pool." });
+        if (market.lp_claimed) throw new UserFacingError({ kind: "contract", code: "AlreadyClaimed", message: "This pool has already been claimed." });
+        if (settlementOf(market.status) === null) throw new UserFacingError({ kind: "contract", code: "NotFinal", message: "Available after the market resolves or is voided." });
+        const tx = await marketCore(signer).claim_pool_remainder({ market_id: toId(marketId) });
+        const { value, txHash } = await runner.start(tx, confirmedAmount);
+        return { payout: value, txHash, holder: signer.publicKey };
+      });
+    },
+    onSuccess: (data, variables) => invalidate(String(variables.marketId), data.holder),
+  });
+  return { ...mutation, phase: runner.phase };
 }
 
 export interface UsdcTransferParams {

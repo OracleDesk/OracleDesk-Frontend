@@ -110,6 +110,23 @@ To try the same on market 0 (resolved): the buy button is disabled and the panel
 - [ ] On the same page: "Your position: N YES · 0 NO" with a `chain` tag.
 - [ ] The YES price moved up from 50%.
 
+## 8a. Claim the pool remainder
+
+- [ ] Create a market with `seed-market.sh` using your own tester key as creator.
+  Open its quick view with the same wallet. **Your market liquidity** shows
+  on-chain reserves, an explicitly estimated value while Open, and fees labelled
+  as going to the treasury. Other wallets and treasury-created markets have no
+  creator panel. Seed figures appear only when the backend metadata exactly
+  reproduces the on-chain initial reserves and sets minted.
+- [ ] While Open, **Claim pool remainder** is disabled. Have a maintainer resolve
+  or void the market, then refresh. Claimable USDC equals the winning reserve
+  (or floor of half the reserve sum for Void); it excludes fees.
+- [ ] Claim, approve the wallet prompt, and follow the transaction link. The
+  panel changes to **Claimed**, balances refresh, and claiming again is refused.
+  An empty final pool can still be claimed to mark it settled with a zero payout.
+- [ ] Redeem ordinary seed YES/NO shares separately. A pool claim does not redeem
+  positions or sweep treasury fees.
+
 ## 9. Verify a trace
 
 - [ ] Open `http://localhost:3000/reasoning/verify?onChainTraceId=1` and click **Begin verification**.
