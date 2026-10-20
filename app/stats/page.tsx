@@ -1,8 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { usePlatformStats } from "@/lib/hooks/usePortfolio";
 import { DemoBadge } from "@/components/ui/demo-badge";
+import { CalibrationChart } from "@/components/charts/calibration-chart";
+import { handleMessage } from "@/lib/analytics/calibration.worker";
+import type { GroupStats } from "@/lib/analytics/calibration";
+import { useCalibrationData, useInView, type Policy } from "@/lib/analytics/useCalibrationData";
 
 const KPIStats = () => {
   const { data: statsData, isLoading } = usePlatformStats();
@@ -195,6 +199,178 @@ const LiveTerminal = () => {
   );
 };
 
+const POLICIES: Array<{ value: Policy; label: string }> = [
+  { value: "lastPreClose", label: "Last pre-close trace" },
+  { value: "all", label: "All traces" },
+];
+
+const agentLabel = (group: string) =>
+  group
+    .split("_")
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(" ");
+
+const fmt = (value: number) => (Number.isFinite(value) ? value.toFixed(4) : "—");
+
+const CalibrationPanel = () => {
+  const [policy, setPolicy] = useState<Policy>("lastPreClose");
+  const { forecasts, counts, nMarkets, isLoading, error } = useCalibrationData(policy);
+  const [result, setResult] = useState<{ forecasts: typeof forecasts; perGroup: Record<string, GroupStats> } | null>(null);
+  const requestId = useRef(0);
+  const stats = result && result.forecasts === forecasts ? result.perGroup : null;
+
+  useEffect(() => {
+    const id = ++requestId.current;
+    if (forecasts.length === 0) return;
+    const accept = (perGroup: Record<string, GroupStats>) => {
+      if (id === requestId.current) setResult({ forecasts, perGroup });
+    };
+    let worker: Worker | null = null;
+    try {
+      if (typeof Worker === "undefined") throw new Error("Worker unavailable");
+      worker = new Worker(new URL("../../lib/analytics/calibration.worker.ts", import.meta.url), { type: "module" });
+      worker.onmessage = (event: MessageEvent<{ id?: number; perGroup?: Record<string, GroupStats> }>) => {
+        if (event.data?.id === id && event.data.perGroup) accept(event.data.perGroup);
+      };
+      worker.postMessage({ id, forecasts, policy, seed: 42 });
+    } catch {
+      queueMicrotask(() => accept(handleMessage({ id, forecasts, policy, seed: 42 }).perGroup));
+    }
+    return () => {
+      requestId.current += 1;
+      worker?.terminate();
+    };
+  }, [forecasts, policy]);
+
+  const marketsByGroup = React.useMemo(() => {
+    const seen = new Map<string, Set<string>>();
+    for (const f of forecasts) {
+      const markets = seen.get(f.group) ?? new Set<string>();
+      markets.add(f.marketId);
+      seen.set(f.group, markets);
+    }
+    return Object.fromEntries([...seen].map(([group, markets]) => [group, markets.size]));
+  }, [forecasts]);
+
+  const excluded = counts.voided + counts.open + counts.rejected + counts.notOnChain;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap justify-between items-center gap-4">
+        <div className="flex gap-2 bg-surface-container-low p-1 rounded-lg border border-outline-variant">
+          {POLICIES.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setPolicy(option.value)}
+              className={`px-4 py-1.5 font-label-caps text-label-caps rounded transition-all ${
+                policy === option.value ? "bg-white text-primary shadow-sm" : "text-on-surface-variant hover:bg-white/50"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="font-label-caps text-label-caps text-on-surface-variant">
+          {policy === "lastPreClose"
+            ? "DEFAULT: LAST TRACE PER MARKET + AGENT PUBLISHED BEFORE close_time"
+            : "EVERY TRACE PUBLISHED BEFORE close_time"}
+        </p>
+      </div>
+
+      <p className="text-on-surface-variant font-body-md">
+        Brier score is the mean squared error of the probability forecasts: lower is better, 0.25 is a coin flip. Log loss
+        penalises confident wrong calls. Outcomes come only from the on-chain <span className="font-data-mono">get_market</span>{" "}
+        status — voided and open markets are excluded and counted below; the backend status field is never used. Skill compares
+        each agent against the backend opening price when available.
+      </p>
+
+      {!isLoading && excluded > 0 && (
+        <p className="font-label-caps text-label-caps text-on-surface-variant">
+          EXCLUDED: {counts.voided} VOIDED, {counts.open} OPEN, {counts.rejected} REJECTED, {counts.notOnChain} NOT ON-CHAIN
+        </p>
+      )}
+
+      {isLoading ? (
+        <p className="text-on-surface-variant font-body-md">Loading calibration…</p>
+      ) : error ? (
+        <p className="text-destructive font-body-md">Couldn&apos;t load calibration data.</p>
+      ) : nMarkets === 0 ? (
+        <p className="text-on-surface-variant font-body-md">No resolved markets with traces yet.</p>
+      ) : !stats ? (
+        <p className="text-on-surface-variant font-body-md">Scoring forecasts…</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(stats).map(([group, groupStats]) => {
+              const markets = marketsByGroup[group] ?? 0;
+              return (
+                <div key={group} className="border border-outline-variant rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="font-label-caps text-label-caps text-on-surface uppercase tracking-wider">
+                      {agentLabel(group)}
+                    </span>
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">
+                      {markets} market{markets === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {markets < 20 ? (
+                    <p className="text-on-surface-variant font-body-md">Not enough resolved markets yet (n = {markets})</p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-baseline gap-3 border-b border-outline-variant pb-2">
+                        <span className="text-on-surface-variant font-label-caps text-label-caps">Brier (lower better)</span>
+                        <span className="font-data-mono text-data-mono">
+                          {fmt(groupStats.brier)}{" "}
+                          <span className="text-on-surface-variant">
+                            [{fmt(groupStats.brierCi.lo)}, {fmt(groupStats.brierCi.hi)}]
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-baseline gap-3 border-b border-outline-variant pb-2">
+                        <span className="text-on-surface-variant font-label-caps text-label-caps">Log loss (lower better)</span>
+                        <span className="font-data-mono text-data-mono">
+                          {fmt(groupStats.logLoss)}{" "}
+                          <span className="text-on-surface-variant">
+                            [{fmt(groupStats.logLossCi.lo)}, {fmt(groupStats.logLossCi.hi)}]
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-baseline gap-3">
+                        <span className="text-on-surface-variant font-label-caps text-label-caps">Skill vs opening price</span>
+                        <span className="font-data-mono text-data-mono">{groupStats.skill === null ? "—" : groupStats.skill.toFixed(3)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {Object.values(stats).some((groupStats) => groupStats.n >= 1) && <CalibrationChart groups={stats} />}
+        </>
+      )}
+    </div>
+  );
+};
+
+const ForecastCalibration = () => {
+  const containerRef = useRef<HTMLElement>(null);
+  const inView = useInView(containerRef);
+  return (
+    <section
+      ref={containerRef}
+      className="bg-white border border-outline-variant rounded-lg p-6 hover:shadow-md transition-all"
+    >
+      <div className="mb-6">
+        <h3 className="font-headline-sm text-headline-sm text-on-surface">Forecast calibration</h3>
+        <p className="text-on-surface-variant font-label-caps text-label-caps uppercase tracking-wider">
+          ARE AGENT PROBABILITIES ANY GOOD?
+        </p>
+      </div>
+      {inView ? <CalibrationPanel /> : <p className="text-on-surface-variant font-body-md">Loading calibration…</p>}
+    </section>
+  );
+};
+
 export default function StatsPage() {
   return (
     <main className="mt-16 pt-8 pb-16 px-gutter max-w-container-max-width mx-auto space-y-8">
@@ -219,6 +395,8 @@ export default function StatsPage() {
       </section>
 
       <KPIStats />
+
+      <ForecastCalibration />
 
       {/* Main Chart & Top Trades */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
