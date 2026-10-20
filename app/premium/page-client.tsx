@@ -6,8 +6,15 @@ import type { ReviewModel } from "@/lib/stellar/tx-decode";
 import { useSubmitQueueState } from "@/lib/stellar/submit-queue";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { LiveRegion } from "@/components/ui/live-region";
 
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useUsdcTransfer, useAccountReserve, usePrepareUsdcTransfer, useAccountAuth, usePrepareMultisig } from "@/lib/hooks/useStellar";
@@ -121,6 +128,9 @@ export default function PremiumPageClient() {
   const hasUnfinishedPayment = pendingPayments.some(isUnfinishedPayment);
 
   const [selectedTier, setSelectedTier] = useState<Tier | null>(null);
+  const tierButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const lastSelectedTierNameRef = useRef<string | null>(null);
+  const [escapeBlockedAnnouncement, setEscapeBlockedAnnouncement] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"usdc" | "card">("usdc");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -205,6 +215,8 @@ export default function PremiumPageClient() {
     if (!tier.priceRaw) return;
     if (!isConnected && !(await openModal())) return;
     setStatusMessage(null);
+    setEscapeBlockedAnnouncement("");
+    lastSelectedTierNameRef.current = tier.name;
     setSelectedTier(tier);
   };
 
@@ -370,6 +382,9 @@ export default function PremiumPageClient() {
                 ))}
               </ul>
               <button
+                ref={(el) => {
+                  tierButtonRefs.current[tier.name] = el;
+                }}
                 onClick={() => openCheckout(tier)}
                 disabled={tier.priceRaw === null || (Boolean(tier.priceRaw) && hasUnfinishedPayment)}
                 className={`w-full py-3 rounded-lg font-label-caps text-label-caps transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -442,105 +457,138 @@ export default function PremiumPageClient() {
         </div>
       </section>
 
-      <AnimatePresence>
-        {selectedTier && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-on-background/40 backdrop-blur-sm"
-              onClick={() => setSelectedTier(null)}
-            />
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden z-10"
-            >
-              <div className="p-6 md:p-8 border-b border-outline-variant flex justify-between items-center">
-                <h2 className="font-headline-md text-headline-md">Confirm Subscription</h2>
-                <button aria-label="Close" className="text-on-surface-variant hover:text-error transition-colors cursor-pointer" onClick={() => setSelectedTier(null)}>
-  <Icon name="close" />
-</button>
-              </div>
-              <div className="p-6 md:p-8">
-                <div className="bg-surface-container-low p-4 rounded-xl mb-8 flex justify-between items-center border border-outline-variant">
-                  <div>
-                    <p className="font-label-caps text-label-caps text-primary font-bold">
-                      {selectedTier.name.toUpperCase()} TIER
-                    </p>
-                    <p className="font-body-md text-on-surface-variant">One payment, 24 hours of access</p>
-                  </div>
-                  <p className="font-headline-md text-headline-md text-on-surface text-2xl">
-                    {selectedTier.priceStr}
-                  </p>
-                </div>
-
-                <div className="space-y-6">
-                  <h4 className="font-label-caps text-label-caps text-on-surface-variant border-b border-outline-variant pb-2">
-                    PAYMENT METHOD
-                  </h4>
-                  <label 
-                    className={`relative flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                      paymentMethod === 'usdc' ? "border-primary bg-primary-container/5" : "border-outline-variant hover:bg-surface-container-low"
-                    }`}
-                    onClick={() => setPaymentMethod('usdc')}
-                  >
-                    <div className="w-10 h-10 bg-surface rounded-full flex items-center justify-center mr-4 border border-outline-variant overflow-hidden p-2">
-                      <img
-                        alt="USDC"
-                        className="w-full h-full object-contain"
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBvpQJwosd2Frufdsjv33xmFEaqtUyhsE7FZ71B5HnGDdKxuZG6lxUBHLUN_72b5kg8Agl5q3-hEH2fEuAb-_pLcvFyXnM2K9saaM5DGU8S2lDvNZOLVEDFLm5SZ9m-oysbN474n7-m_f-fQPvR6m4aDDh2HeL4e_wKmfjwe5QkDRKk08h6N-QM6DBGHrMYIomFLujEFtdcTyccMq0i3ccnRBg7U4tC0Ig0D_KgAfB-bt_2ZdSeXk_I5gkzYAQszAvYnfg5lpgPA"
-                      />
-                    </div>
-                    <div className="flex-grow">
-                      <p className="font-body-md font-bold">Pay with USDC</p>
-                      <p className="text-xs text-on-surface-variant">From your wallet on Stellar Testnet</p>
-                    </div>
-                    {paymentMethod === 'usdc' && (
-                      <Icon name="check_circle" filled className="text-primary" />
-                    )}
-                  </label>
-
-                  <div className="rounded-xl border border-outline-variant bg-surface-container-low p-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="font-label-caps text-label-caps text-on-surface-variant">Status</span>
-                      <span className="font-data-mono text-secondary text-sm">{statusMessage ?? "Ready"}</span>
-                    </div>
-                    {isWrongNetwork && <p className="text-error text-sm">Wrong network; switch to Stellar Testnet.</p>}
-                    {isUnfunded && <p className="text-warning text-sm">This account cannot cover the transaction fee.</p>}
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <button
-                      onClick={() => void handlePayment()}
-                      disabled={isSubmitting || !selectedTier.priceRaw || !address || isWrongNetwork}
-                      className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-label-caps text-label-caps hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {isSubmitting ? "Processing…" : `Pay ${selectedTier.priceStr}`}
-                    </button>
-                    {isMultisig && (
-                      <button
-                        onClick={() => void handlePrepareMultisigTransfer()}
-                        className="w-full border border-outline-variant py-3 rounded-lg font-label-caps text-label-caps"
-                      >
-                        Prepare multisig transfer
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setSelectedTier(null)}
-                      className="w-full border border-outline-variant py-3 rounded-lg font-label-caps text-label-caps"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+      <LiveRegion message={escapeBlockedAnnouncement} />
+      <Dialog
+        open={Boolean(selectedTier)}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (isSubmitting) {
+              setEscapeBlockedAnnouncement("Payment is in flight. Please wait for the transaction to complete.");
+              return;
+            }
+            setSelectedTier(null);
+          }
+        }}
+      >
+        <DialogContent
+          onEscapeKeyDown={(e) => {
+            if (isSubmitting) {
+              e.preventDefault();
+              setEscapeBlockedAnnouncement("Payment is in flight. Please wait for the transaction to complete.");
+            }
+          }}
+          onPointerDownOutside={(e) => {
+            if (isSubmitting) {
+              e.preventDefault();
+              setEscapeBlockedAnnouncement("Payment is in flight. Please wait for the transaction to complete.");
+            }
+          }}
+          onCloseAutoFocus={(e) => {
+            if (lastSelectedTierNameRef.current && tierButtonRefs.current[lastSelectedTierNameRef.current]) {
+              e.preventDefault();
+              tierButtonRefs.current[lastSelectedTierNameRef.current]?.focus();
+            }
+          }}
+          className="relative bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden z-10 p-0 max-h-[90vh] overflow-y-auto"
+        >
+          <div className="p-6 md:p-8 border-b border-outline-variant flex justify-between items-center">
+            <div>
+              <DialogTitle className="font-headline-md text-headline-md">Confirm Subscription</DialogTitle>
+              <DialogDescription className="sr-only">One payment, 24 hours of access to {selectedTier?.name} tier</DialogDescription>
+            </div>
+            <DialogClose asChild disabled={isSubmitting}>
+              <button
+                aria-label="Close"
+                disabled={isSubmitting}
+                className="text-on-surface-variant hover:text-error transition-colors cursor-pointer disabled:opacity-50"
+                onClick={() => {
+                  if (isSubmitting) return;
+                  setSelectedTier(null);
+                }}
+              >
+                <Icon name="close" />
+              </button>
+            </DialogClose>
           </div>
-        )}
-      </AnimatePresence>
+          <div className="p-6 md:p-8">
+            <div className="bg-surface-container-low p-4 rounded-xl mb-8 flex justify-between items-center border border-outline-variant">
+              <div>
+                <p className="font-label-caps text-label-caps text-primary font-bold">
+                  {selectedTier?.name.toUpperCase()} TIER
+                </p>
+                <p className="font-body-md text-on-surface-variant">One payment, 24 hours of access</p>
+              </div>
+              <p className="font-headline-md text-headline-md text-on-surface text-2xl">
+                {selectedTier?.priceStr}
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              <h4 className="font-label-caps text-label-caps text-on-surface-variant border-b border-outline-variant pb-2">
+                PAYMENT METHOD
+              </h4>
+              <label 
+                className={`relative flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                  paymentMethod === 'usdc' ? "border-primary bg-primary-container/5" : "border-outline-variant hover:bg-surface-container-low"
+                }`}
+                onClick={() => setPaymentMethod('usdc')}
+              >
+                <div className="w-10 h-10 bg-surface rounded-full flex items-center justify-center mr-4 border border-outline-variant overflow-hidden p-2">
+                  <img
+                    alt="USDC"
+                    className="w-full h-full object-contain"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBvpQJwosd2Frufdsjv33xmFEaqtUyhsE7FZ71B5HnGDdKxuZG6lxUBHLUN_72b5kg8Agl5q3-hEH2fEuAb-_pLcvFyXnM2K9saaM5DGU8S2lDvNZOLVEDFLm5SZ9m-oysbN474n7-m_f-fQPvR6m4aDDh2HeL4e_wKmfjwe5QkDRKk08h6N-QM6DBGHrMYIomFLujEFtdcTyccMq0i3ccnRBg7U4tC0Ig0D_KgAfB-bt_2ZdSeXk_I5gkzYAQszAvYnfg5lpgPA"
+                  />
+                </div>
+                <div className="flex-grow">
+                  <p className="font-body-md font-bold">Pay with USDC</p>
+                  <p className="text-xs text-on-surface-variant">From your wallet on Stellar Testnet</p>
+                </div>
+                {paymentMethod === 'usdc' && (
+                  <Icon name="check_circle" filled className="text-primary" />
+                )}
+              </label>
+
+              <div className="rounded-xl border border-outline-variant bg-surface-container-low p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="font-label-caps text-label-caps text-on-surface-variant">Status</span>
+                  <span className="font-data-mono text-secondary text-sm">{statusMessage ?? "Ready"}</span>
+                </div>
+                {isWrongNetwork && <p className="text-error text-sm">Wrong network; switch to Stellar Testnet.</p>}
+                {isUnfunded && <p className="text-warning text-sm">This account cannot cover the transaction fee.</p>}
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => void handlePayment()}
+                  disabled={isSubmitting || !selectedTier?.priceRaw || !address || isWrongNetwork}
+                  className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-label-caps text-label-caps hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? "Processing…" : `Pay ${selectedTier?.priceStr}`}
+                </button>
+                {isMultisig && (
+                  <button
+                    onClick={() => void handlePrepareMultisigTransfer()}
+                    className="w-full border border-outline-variant py-3 rounded-lg font-label-caps text-label-caps"
+                  >
+                    Prepare multisig transfer
+                  </button>
+                )}
+                <button
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    if (isSubmitting) return;
+                    setSelectedTier(null);
+                  }}
+                  className="w-full border border-outline-variant py-3 rounded-lg font-label-caps text-label-caps disabled:opacity-50"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {reviewModel && (
         <TxReview

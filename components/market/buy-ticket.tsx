@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MultisigReview } from "@/components/multisig-review";
 import { PendingValue } from "@/components/pending-value";
 import { SourceTag } from "@/components/ui/source-tag";
 import { TxReview, shouldSkipTxReview } from "@/components/tx-review";
+import { LiveRegion } from "@/components/ui/live-region";
+import { quoteAnnouncement } from "@/lib/ui/quote-announcement";
 import { useHealth } from "@/lib/health/HealthProvider";
 import {
   useAccountAuth,
@@ -44,7 +46,15 @@ export interface BuyTicketProps {
   onChainMarketId: string;
   /** Which side the ticket is buying. */
   side: "Yes" | "No";
+  /** Optional ref to amount input for focus management */
+  amountInputRef?: React.RefObject<HTMLInputElement | null>;
 }
+
+export type BuyResultState = {
+  kind: "pending" | "success" | "error";
+  message: string;
+  txHash?: string;
+};
 
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -84,7 +94,7 @@ function renderTxPhase(phase: TxPhase): string | null {
  * wallet is read through the narrow context hooks, so a wallet change that
  * does not affect the trade does not re-render the ticket either.
  */
-export function BuyTicket({ onChainMarketId, side }: BuyTicketProps) {
+export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketProps) {
   const { address, isConnected } = useWalletAddress();
   const { isWrongNetwork } = useWalletNetwork();
   const { openModal } = useWalletActions();
@@ -125,7 +135,15 @@ export function BuyTicket({ onChainMarketId, side }: BuyTicketProps) {
 
   const [buyMode, setBuyMode] = useState<"usdc" | "shares">("usdc");
   const [amountInput, setAmountInput] = useState("10");
-  const [buyStatus, setBuyStatus] = useState<string | null>(null);
+  const [buyResult, setBuyResult] = useState<BuyResultState | null>(null);
+  const resultContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (buyResult?.kind === "success") {
+      resultContainerRef.current?.focus();
+    }
+  }, [buyResult]);
+
   const [reviewModel, setReviewModel] = useState<{ model: ReviewModel; changedFrom?: ReviewModel } | null>(null);
   const reviewResolver = useRef<((approved: boolean) => void) | null>(null);
   const [portalReady, setPortalReady] = useState(false);
@@ -148,6 +166,23 @@ export function BuyTicket({ onChainMarketId, side }: BuyTicketProps) {
   const exactQuote = useExactBuyQuote(onChainMarketId, side, buyMode === "shares" ? debouncedAmount : null);
   const spendRaw = buyMode === "shares" ? exactQuote.data?.collateralIn ?? null : amountRaw;
   const quote = useQuoteBuy(onChainMarketId, side, buyMode === "usdc" ? debouncedAmount : spendRaw);
+
+  const quoteAnnouncementText = useMemo(() => {
+    return (
+      quoteAnnouncement({
+        side,
+        amountRaw,
+        debouncedAmount,
+        quote: {
+          data: quote.data,
+          isSuccess: quote.isSuccess,
+          isFetching: quote.isFetching,
+        },
+        slippageBps,
+      }) ?? ""
+    );
+  }, [side, amountRaw, debouncedAmount, quote.data, quote.isSuccess, quote.isFetching, slippageBps]);
+
   const prepareBuy = usePrepareBuy({ marketId: onChainMarketId, outcome: side, collateralIn: spendRaw, slippageBps, holder: address });
   const fees = prepareBuy.data?.fees;
   const isUnfunded = reserve.data?.funded === false;
@@ -183,38 +218,41 @@ export function BuyTicket({ onChainMarketId, side }: BuyTicketProps) {
       return;
     }
     if (trustlineMissing) {
-      setBuyStatus("Enable your USDC trustline below, then click Buy again.");
+      setBuyResult({ kind: "error", message: "Enable your USDC trustline below, then click Buy again." });
       return;
     }
     if (trustlineUnauthorized) {
-      setBuyStatus("The issuer hasn't authorized your USDC trustline.");
+      setBuyResult({ kind: "error", message: "The issuer hasn't authorized your USDC trustline." });
       return;
     }
     if (isWrongNetwork) {
-      setBuyStatus("Switch your wallet to Stellar Testnet to place this trade.");
+      setBuyResult({ kind: "error", message: "Switch your wallet to Stellar Testnet to place this trade." });
       return;
     }
     if (!amountRaw || amountRaw <= 0n) {
-      setBuyStatus(buyMode === "usdc" ? "Enter an amount like 10 or 2.5." : "Enter a share amount greater than zero.");
+      setBuyResult({
+        kind: "error",
+        message: buyMode === "usdc" ? "Enter an amount like 10 or 2.5." : "Enter a share amount greater than zero.",
+      });
       return;
     }
     if (ledger.now === null) {
-      setBuyStatus("Checking market time…");
+      setBuyResult({ kind: "pending", message: "Checking market time…" });
       return;
     }
     if (!safeToTrade) {
-      setBuyStatus("This market closes too soon to safely place a trade.");
+      setBuyResult({ kind: "error", message: "This market closes too soon to safely place a trade." });
       return;
     }
     if (health.rpc.status === "down") {
-      setBuyStatus("Stellar RPC isn't responding; the trade can't be simulated.");
+      setBuyResult({ kind: "error", message: "Stellar RPC isn't responding; the trade can't be simulated." });
       return;
     }
     if (now !== null && view && isStale(chain.dataUpdatedAt, now, MARKET_STALE_AFTER_SEC)) {
-      setBuyStatus("Refreshing the price before you trade…");
+      setBuyResult({ kind: "pending", message: "Refreshing the price before you trade…" });
       await chain.refetch();
     }
-    setBuyStatus(null);
+    setBuyResult(null);
     try {
       const result = await buy.mutateAsync({
         marketId: onChainMarketId,
@@ -224,22 +262,32 @@ export function BuyTicket({ onChainMarketId, side }: BuyTicketProps) {
         slippageBps,
         prepared: prepareBuy.data,
       });
-      setBuyStatus(
-        `Bought ${formatUsdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.` +
-          (result.txHash ? ` View: ${explorerTx(result.txHash)}` : ""),
-      );
+      setBuyResult({
+        kind: "success",
+        message: `Bought ${formatUsdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.`,
+        txHash: result.txHash,
+      });
     } catch (err) {
-      setBuyStatus(err instanceof Error ? err.message : "The trade didn't go through.");
+      setBuyResult({
+        kind: "error",
+        message: err instanceof Error ? err.message : "The trade didn't go through.",
+      });
     }
   };
 
   const handleEnableUsdc = async () => {
-    setBuyStatus("Checking XLM reserve, then opening your wallet…");
+    setBuyResult({ kind: "pending", message: "Checking XLM reserve, then opening your wallet…" });
     try {
       await enableUsdc.mutateAsync();
-      setBuyStatus("USDC is enabled. Review your amount and click Buy to submit the trade.");
+      setBuyResult({
+        kind: "success",
+        message: "USDC is enabled. Review your amount and click Buy to submit the trade.",
+      });
     } catch (err) {
-      setBuyStatus(err instanceof Error ? err.message : "Couldn't enable USDC.");
+      setBuyResult({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Couldn't enable USDC.",
+      });
     }
   };
 
@@ -288,6 +336,7 @@ export function BuyTicket({ onChainMarketId, side }: BuyTicketProps) {
           Amount ({buyMode === "usdc" ? "USDC" : `${side.toUpperCase()} shares`})
         </label>
         <input
+          ref={amountInputRef}
           id="buy-amount"
           inputMode="decimal"
           value={amountInput}
@@ -394,6 +443,10 @@ export function BuyTicket({ onChainMarketId, side }: BuyTicketProps) {
         </p>
       )}
 
+      {/* Live regions for polite quote updates and trade results */}
+      <LiveRegion message={quoteAnnouncementText} />
+      <LiveRegion message={buyResult?.message ?? ""} />
+
       {/* Observable tx lifecycle phase */}
       {buy.isPending && (
         <div className="text-xs text-on-surface-variant flex items-center gap-1.5" role="status">
@@ -412,8 +465,27 @@ export function BuyTicket({ onChainMarketId, side }: BuyTicketProps) {
       )}
 
       {/* Status message */}
-      {!buy.isPending && buyStatus && (
-        <p className="text-xs text-on-surface-variant break-all" role="status">{buyStatus}</p>
+      {!buy.isPending && buyResult && (
+        <div
+          ref={resultContainerRef}
+          tabIndex={-1}
+          className="text-xs text-on-surface-variant break-all outline-none space-y-1"
+          role="status"
+        >
+          <p>{buyResult.message}</p>
+          {buyResult.kind === "success" && buyResult.txHash && (
+            <div>
+              <a
+                href={explorerTx(buyResult.txHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-data-mono inline-block"
+              >
+                View transaction on Stellar Expert (opens in a new tab)
+              </a>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Multisig path */}

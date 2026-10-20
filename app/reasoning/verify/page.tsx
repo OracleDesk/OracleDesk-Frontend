@@ -13,6 +13,14 @@ import { read, bytesToHex } from "@/lib/stellar/typed-call";
 import { ipfsUrl, verifyTraceInWorker, type GatewayAttempt, type CidCheck, type TraceCheck } from "@/lib/stellar/trace";
 import { SafeTraceViewer } from "@/components/safe-trace-viewer";
 import { MarketTraceAudit } from "@/components/market-trace-audit";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { LiveRegion } from "@/components/ui/live-region";
 
 interface VerificationResult {
   verified: boolean;
@@ -95,6 +103,7 @@ function VerifyTraceContent() {
   const [isComplete, setIsComplete] = useState(false);
   const [statusLabel, setStatusLabel] = useState("Ready to check this trace against the chain");
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+  const [verifyAnnouncement, setVerifyAnnouncement] = useState("");
   const terminalRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -116,6 +125,7 @@ function VerifyTraceContent() {
     setIsVerifying(false);
     setStatusLabel("Verification Failed");
     setTerminalLogs((prev) => [...prev, `>> [ERROR] ${message}`]);
+    setVerifyAnnouncement(`Trace verification failed: ${message}`);
   };
 
   const startVerification = async () => {
@@ -123,6 +133,7 @@ function VerifyTraceContent() {
     setIsVerifying(true);
     setStatusLabel("Checking…");
     setTerminalLogs([]);
+    setVerifyAnnouncement("Verification started.");
 
     try {
       // 1. Which on-chain trace?
@@ -194,6 +205,13 @@ function VerifyTraceContent() {
     setStatusLabel(
       result.status === "verified" ? "Verification Complete" : result.status === "mismatch" ? "Verification Failed" : "Content Unavailable",
     );
+    if (result.status === "verified") {
+      setVerifyAnnouncement("Trace verification succeeded. The cryptographic hash matches the on-chain record.");
+    } else if (result.status === "mismatch") {
+      setVerifyAnnouncement("Trace verification failed: The content does not match the on-chain hash.");
+    } else {
+      setVerifyAnnouncement("Trace verification failed: The content could not be fetched.");
+    }
     setTerminalLogs((prev) => [
       ...prev,
       result.status === "verified"
@@ -239,7 +257,7 @@ function VerifyTraceContent() {
         }
       `}</style>
 
-      <div className="grid grid-cols-12 gap-6 opacity-40 pointer-events-none filter blur-sm transition-all duration-700">
+      <div aria-hidden="true" inert className="grid grid-cols-12 gap-6 opacity-40 pointer-events-none filter blur-sm transition-all duration-700">
         <div className="col-span-12 md:col-span-8 bg-surface-container-lowest border border-outline-variant p-6 rounded-xl">
           <div className="h-6 w-48 bg-surface-container rounded mb-4"></div>
           <div className="h-32 bg-surface-container rounded mb-4"></div>
@@ -260,11 +278,10 @@ function VerifyTraceContent() {
         </div>
       </div>
 
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-on-background/10 backdrop-blur-sm overflow-y-auto">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          className={`bg-white w-full ${activeTab === "market" ? "max-w-5xl" : "max-w-2xl"} my-8 rounded-xl border border-outline-variant shadow-2xl overflow-hidden flex flex-col max-h-[90vh]`}
+      <LiveRegion message={verifyAnnouncement} />
+      <Dialog open onOpenChange={(open) => !open && router.push("/reasoning")}>
+        <DialogContent
+          className={`bg-white w-full ${activeTab === "market" ? "max-w-5xl" : "max-w-2xl"} my-8 rounded-xl border border-outline-variant shadow-2xl overflow-hidden flex flex-col p-0 max-h-[90vh]`}
         >
           <div className="p-6 border-b border-outline-variant flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-surface-container-low shrink-0">
             <div className="flex items-center gap-3">
@@ -272,14 +289,14 @@ function VerifyTraceContent() {
                 <Icon name="verified_user" filled className="text-on-primary-container" />
               </div>
               <div>
-                <h2 className="font-headline-sm text-headline-sm text-on-surface">
+                <DialogTitle className="font-headline-sm text-headline-sm text-on-surface">
                   {activeTab === "market" ? "Market Trace Integrity Audit" : "Verify Trace Integrity"}
-                </h2>
-                <p className="font-label-caps text-label-caps text-on-surface-variant">
+                </DialogTitle>
+                <DialogDescription className="font-label-caps text-label-caps text-on-surface-variant">
                   {activeTab === "market"
                     ? `MARKET #${marketIdInput}`
                     : onChainTraceIdParam ? `ON-CHAIN TRACE #${onChainTraceIdParam}` : traceId ? `TRACE-ID: ${traceId.substring(0, 12)}…` : "NO TRACE SELECTED"}
-                </p>
+                </DialogDescription>
               </div>
             </div>
 
@@ -300,9 +317,11 @@ function VerifyTraceContent() {
                   Market Audit
                 </button>
               </div>
-              <Link href="/reasoning" aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-variant transition-colors">
-                <Icon name="close" className="text-on-surface-variant" />
-              </Link>
+              <DialogClose asChild>
+                <button aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-variant transition-colors" type="button">
+                  <Icon name="close" className="text-on-surface-variant" />
+                </button>
+              </DialogClose>
             </div>
           </div>
 
@@ -502,8 +521,8 @@ function VerifyTraceContent() {
               </button>
             </div>
           )}
-        </motion.div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
