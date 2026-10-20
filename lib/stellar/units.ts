@@ -4,6 +4,26 @@ export const USDC_UNIT = 10n ** BigInt(USDC_DECIMALS);
 export const BPS = 10_000n;
 
 /**
+ * Floor of `(a * b) / c` in integer arithmetic. Throws RangeError when
+ * `a < 0n`, `b < 0n` or `c <= 0n`.
+ */
+export function mulDivFloor(a: bigint, b: bigint, c: bigint): bigint {
+  if (a < 0n || b < 0n || c <= 0n) throw new RangeError("mulDivFloor requires a >= 0, b >= 0 and c > 0");
+  return (a * b) / c;
+}
+
+/**
+ * Ceiling of `(a * b) / c` in integer arithmetic. Throws RangeError when
+ * `a < 0n`, `b < 0n` or `c <= 0n`.
+ */
+export function mulDivCeil(a: bigint, b: bigint, c: bigint): bigint {
+  if (a < 0n || b < 0n || c <= 0n) throw new RangeError("mulDivCeil requires a >= 0, b >= 0 and c > 0");
+  const p = a * b;
+  const q = p / c;
+  return p % c !== 0n ? q + 1n : q;
+}
+
+/**
  * Parses a decimal USDC string into base units. Accepts "1", "1.5", "0.0000001".
  * Rejects exponents ("1e5"), signs, spaces inside, empty strings and more
  * than 7 decimal places. Never goes through a float.

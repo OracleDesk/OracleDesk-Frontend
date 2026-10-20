@@ -10,11 +10,11 @@ import { useGenerateMarket, useMarketGenerationStatus } from "@/lib/hooks/useMar
 import { isTerminalStatus } from "@/lib/hooks/generation-status";
 import { ApiError } from "@/lib/api/client";
 import { UserFacingError } from "@/lib/stellar/errors";
+import type { MarketCategory } from "@/lib/api/markets";
+import { formatUsdcDisplay } from "@/lib/format/money";
 import { isAdminAddress } from "@/lib/stellar/config";
-import { DEFAULTS, serializeDiscovery } from "@/lib/markets/discovery-params";
-import { runsInLastHour, saveJob, useAdminJobs, type StoredJob } from "@/lib/admin/job-store";
-import { completedWithoutChain, elapsedFor, formatElapsed, jobFeed, shortJobId, type JobEventTone } from "@/lib/admin/job-events";
-import { JobStatusChip } from "@/components/admin/job-status-chip";
+import { tryParseUsdc } from "@/lib/stellar/units";
+import { BACKEND_CATEGORIES, BACKEND_CATEGORY_LABELS, BACKEND_TO_CONTRACT_CATEGORY } from "@/lib/stellar/categories";
 
 /** Backend limit on POST /markets/generate (per IP; each run calls paid LLM APIs). */
 const RUNS_PER_HOUR = 5;
@@ -257,7 +257,10 @@ function AdminCreateContent() {
                 <div className="space-y-1">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block">LIQUIDITY</span>
                   <span className="font-data-mono text-data-mono text-on-surface">
-                    {liquidity ? `${parseFloat(liquidity).toLocaleString()} USDC` : "0.00 USDC"}
+                    {(() => {
+                      const parsed = tryParseUsdc(liquidity);
+                      return parsed !== null ? formatUsdcDisplay(parsed) : "0.00 USDC";
+                    })()}
                   </span>
                 </div>
                 <div className="space-y-1">

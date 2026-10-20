@@ -3,6 +3,7 @@ import { Icon, type IconName } from "@/components/ui/icon";
 
 import React, { useState, useEffect, useRef } from "react";
 import { usePlatformStats } from "@/lib/hooks/usePortfolio";
+import { floatUsdcToRaw, formatUsdcDisplay } from "@/lib/format/money";
 import { DemoBadge } from "@/components/ui/demo-badge";
 import { CalibrationChart } from "@/components/charts/calibration-chart";
 import { handleMessage } from "@/lib/analytics/calibration.worker";
@@ -13,9 +14,14 @@ const KPIStats = () => {
   const { data: statsData, isLoading } = usePlatformStats();
   
   const show = (v: string | undefined) => (isLoading ? "..." : v ?? "—");
+  const copyVolumeRaw = statsData ? floatUsdcToRaw(statsData.totalCopyVolume) : null;
   const stats: Array<{ label: string; value: string; change?: string; status?: string }> = [
     { label: "Subscriber Count", value: show(statsData?.subscriberCount.toLocaleString()) },
-    { label: "Total Copy Volume", value: show(statsData ? `$${statsData.totalCopyVolume.toLocaleString()}` : undefined) },
+    {
+      label: "Total Copy Volume",
+      value: show(copyVolumeRaw !== null ? formatUsdcDisplay(copyVolumeRaw) : undefined),
+      status: statsData ? "backend record" : undefined,
+    },
     { label: "Markets", value: show(statsData?.marketCount.toLocaleString()), status: statsData ? `${statsData.onChainMarketCount} on-chain` : undefined },
     { label: "Reasoning Traces", value: show(statsData?.traceCount.toLocaleString()) },
   ];
@@ -169,7 +175,7 @@ const LiveTerminal = () => {
       const newLogs = [
         { time, type: "INFO", message: `Node 0x${Math.random().toString(16).slice(2, 6)} synchronized successfully`, typeColor: "text-primary" },
         { time, type: "EVENT", message: `New consensus reached on block ${Math.floor(Math.random() * 20000000)}`, typeColor: "text-secondary" },
-        { time, type: "INFO", message: `Transaction verified: ${ (Math.random() * 10).toFixed(2) } USDC`, typeColor: "text-primary" }
+        { time, type: "INFO", message: "Transaction batch verified on-chain", typeColor: "text-primary" }
       ];
       
       setLogs(prev => [...prev.slice(-6), newLogs[Math.floor(Math.random() * newLogs.length)]]);
@@ -182,7 +188,8 @@ const LiveTerminal = () => {
       <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
-          <span className="text-white/70 font-bold uppercase tracking-widest text-[10px]">Network Trace (demo data)</span>
+          <span className="text-white/70 font-bold uppercase tracking-widest text-[10px]">Network Trace</span>
+          <DemoBadge />
         </div>
         <span className="text-white/30 text-[9px]">v4.2.1-STABLE</span>
       </div>

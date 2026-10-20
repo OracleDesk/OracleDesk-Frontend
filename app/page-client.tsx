@@ -7,9 +7,9 @@ import { motion } from "framer-motion";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useMarkets } from "@/lib/hooks/useMarkets";
 import { useFeaturedMarket } from "@/lib/hooks/useFeaturedMarket";
-import { formatLiquidity, yesProb } from "@/lib/markets/featured";
+import { yesProb } from "@/lib/markets/featured";
 import { tickerItems } from "@/lib/markets/ticker";
-import { formatUsdc } from "@/lib/stellar/units";
+import { floatUsdcToRaw, formatBps, formatUsdcDisplay } from "@/lib/format/money";
 import { useBurstFeed } from "@/lib/realtime/useBurst";
 import { type RealtimeEvent, eventKey } from "@/lib/realtime/types";
 import { formatFeedTime } from "@/lib/realtime/format";
@@ -21,7 +21,7 @@ const AgentActivityRow = React.memo(function AgentActivityRow({ event }: { event
   const time = formatFeedTime(data.closedAt ?? event.receivedAt);
   const item = event.type === "TRADE_EXECUTED" ? {
     key: eventKey(event), time, receipt: !data.closedAt, agent: "Trader", action: event.payload.isBuy ? "BUY" : "SELL",
-    details: `${event.payload.direction} ${formatUsdc(BigInt(event.payload.collateralRaw), { maxDecimals: 2, grouping: true })} USDC on #${data.onChainMarketId} · YES ${(event.payload.priceYesBps / 100).toFixed(1)}%`,
+    details: `${event.payload.direction} ${formatUsdcDisplay(BigInt(event.payload.collateralRaw))} on #${data.onChainMarketId} · YES ${formatBps(event.payload.priceYesBps)}`,
     chain: "Stellar", color: "text-secondary",
   } : {
     key: eventKey(event), time, receipt: !data.closedAt, agent: "Reasoner", action: "PUBLISH_TRACE",
@@ -116,7 +116,15 @@ const Ticker = () => {
 
 const Hero = () => {
   const { market, isLoading } = useFeaturedMarket();
-  const prob = market ? Math.round(yesProb(market) * 1000) / 10 : null;
+  const yesBps = market ? Math.round(yesProb(market) * 10_000) : null;
+  const prob = yesBps !== null ? yesBps / 100 : null;
+  const heroLiquidity = market
+    ? (() => {
+        const hasSeed = Boolean(market.seedAmountRaw);
+        const raw = hasSeed ? BigInt(market.seedAmountRaw!) : floatUsdcToRaw(market.totalLiquidity);
+        return raw !== null ? `${formatUsdcDisplay(raw, { compact: true })}${hasSeed ? " (seed)" : ""}` : "—";
+      })()
+    : "—";
 
   return (
     <section className="relative overflow-hidden bg-surface py-20 border-b border-outline-variant">
@@ -191,14 +199,14 @@ const Hero = () => {
                     />
                   </div>
                   <div className="flex justify-between text-label-caps font-bold">
-                    <span className="text-secondary">YES ${(prob/100).toFixed(2)}</span>
-                    <span className="text-tertiary">NO ${(1 - prob/100).toFixed(2)}</span>
+                    <span className="text-secondary">YES {formatBps(yesBps ?? 5000)}</span>
+                    <span className="text-tertiary">NO {formatBps(10_000 - (yesBps ?? 5000))}</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
                     <div className="text-label-caps text-on-surface-variant mb-1">LIQUIDITY</div>
-                    <div className="font-headline-sm text-on-surface">{formatLiquidity(market.totalLiquidity)}</div>
+                    <div className="font-headline-sm text-on-surface">{heroLiquidity}</div>
                   </div>
                   <div className="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
                     <div className="text-label-caps text-on-surface-variant mb-1">ON-CHAIN</div>
@@ -323,6 +331,9 @@ const MarketsGrid = () => {
               color = 'secondary';
             }
 
+            const hasSeed = Boolean(m.seedAmountRaw);
+            const rawLiq = hasSeed ? BigInt(m.seedAmountRaw!) : floatUsdcToRaw(m.totalLiquidity);
+
             return (
               <MarketCard 
                 key={m.id}
@@ -333,7 +344,7 @@ const MarketsGrid = () => {
                 change=""
                 title={m.question}
                 prob={Math.round((m.currentYesProb ?? m.initialYesProb) * 100)}
-                volume={`$${(m.totalLiquidity / 1000).toFixed(1)}K`}
+                volume={rawLiq !== null ? `${formatUsdcDisplay(rawLiq, { compact: true })}${hasSeed ? " (seed)" : ""}` : "—"}
                 color={color}
               />
             );

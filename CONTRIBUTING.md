@@ -152,6 +152,33 @@ filed.
   (`lib/stellar/units.ts`), never floats, for anything that reaches a
   transaction.
 
+## Number and money formatting
+
+All money, basis-point, and probability display strings in `app/` must go
+through [`lib/format/money.ts`](lib/format/money.ts):
+
+- **USDC amounts (`formatUsdcDisplay`)**: 2 decimal places by default,
+  truncating toward zero (never rounding up money the user does not have),
+  always grouped (`en-US` commas), with a ` USDC` suffix and no `$` symbol.
+  Non-zero dust below `0.01 USDC` renders as `< 0.01 USDC`. Compact notation
+  (`{ compact: true }`) uses integer `bigint` division (`1.23M USDC`, `14.1K USDC`).
+- **Signed USDC PnL (`formatSignedUsdc`)**: explicit `+` or `−` (U+2212) sign
+  for non-zero displayed amounts, and `0.00 USDC` without a sign when zero or
+  truncated to zero.
+- **Basis points (`formatBps`) and probabilities (`formatProbability`)**:
+  probabilities render with 1 decimal place and a `%` suffix; signed basis-point
+  changes render with 2 decimal places by default.
+- **Backend float records (`floatUsdcToRaw`)**: always prefer `*Raw` decimal
+  string fields when the API provides them (`availableCapitalRaw`,
+  `seedAmountRaw`, `collateralRaw`, `amountRaw`). Remaining backend float-only
+  fields are converted once at the boundary via `floatUsdcToRaw` and labelled as
+  `backend record` in the UI.
+- **Lint enforcement**: `eslint.config.mjs` bans `.toFixed` and
+  `.toLocaleString` on money-named identifiers and `$`-prefixed template
+  literals in `app/**/*.tsx`. If a non-money value matches the naming
+  heuristic, rename the identifier or add
+  `// eslint-disable-next-line no-restricted-syntax -- not money: <reason>`.
+
 ## Never commit secrets
 
 No `.env*` files (only `.env.example`), no Stellar secret seeds (`S…`), no

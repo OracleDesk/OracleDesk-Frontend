@@ -7,6 +7,7 @@ import { RequireWallet } from "@/components/require-wallet";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useMarkets } from "@/lib/hooks/useMarkets";
 import { usePlatformStats } from "@/lib/hooks/usePortfolio";
+import { floatUsdcToRaw, formatUsdcDisplay } from "@/lib/format/money";
 import { isAdminAddress } from "@/lib/stellar/config";
 import { DiagnosticsPanel } from "@/components/admin/diagnostics-panel";
 import { JobStatusChip } from "@/components/admin/job-status-chip";
@@ -57,7 +58,7 @@ const AdminStat = ({ label, value, change }: { label: string, value: string, cha
   </div>
 );
 
-const MarketItem = ({ title, status, volume }: { title: string, status: string, volume: string }) => (
+const MarketItem = ({ title, status, volume, volumeLabel = "Liquidity" }: { title: string, status: string, volume: string, volumeLabel?: string }) => (
   <div className="flex items-center justify-between p-4 hover:bg-surface-container-low transition-colors border-b border-outline-variant last:border-0">
     <div>
       <p className="font-body-md font-bold text-on-surface">{title}</p>
@@ -68,7 +69,7 @@ const MarketItem = ({ title, status, volume }: { title: string, status: string, 
     </div>
     <div className="text-right">
       <p className="font-data-mono text-data-mono text-on-surface">{volume}</p>
-      <p className="text-[11px] text-on-surface-variant uppercase font-label-caps text-[10px]">Liquidity</p>
+      <p className="text-[11px] text-on-surface-variant uppercase font-label-caps text-[10px]">{volumeLabel}</p>
     </div>
   </div>
 );
@@ -149,7 +150,18 @@ function AdminContent() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <AdminStat label="Copy-trade volume" value={stats ? `$${stats.totalCopyVolume.toLocaleString()}` : "—"} />
+        <AdminStat
+          label="Copy-trade volume"
+          value={
+            stats
+              ? (() => {
+                  const raw = floatUsdcToRaw(stats.totalCopyVolume);
+                  return raw !== null ? formatUsdcDisplay(raw) : "—";
+                })()
+              : "—"
+          }
+          change={stats ? "backend record" : undefined}
+        />
         <AdminStat label="Markets (backend db)" value={stats ? String(stats.marketCount) : "—"} change={stats ? `${stats.onChainMarketCount} on-chain ids` : undefined} />
         <AdminStat label="Users" value={stats ? String(stats.subscriberCount) : "—"} />
       </div>
@@ -165,14 +177,19 @@ function AdminContent() {
               {isLoading ? (
                 <div className="p-8 text-center text-on-surface-variant animate-pulse">Loading markets...</div>
               ) : markets.length > 0 ? (
-                markets.map((m) => (
-                  <MarketItem 
-                    key={m.id}
-                    title={m.question} 
-                    status={m.status === 'ACTIVE' ? 'Active' : m.status.charAt(0) + m.status.slice(1).toLowerCase()} 
-                    volume={`$${(m.totalLiquidity).toLocaleString()}`} 
-                  />
-                ))
+                markets.map((m) => {
+                  const hasSeed = Boolean(m.seedAmountRaw);
+                  const rawLiq = hasSeed ? BigInt(m.seedAmountRaw!) : floatUsdcToRaw(m.totalLiquidity);
+                  return (
+                    <MarketItem 
+                      key={m.id}
+                      title={m.question} 
+                      status={m.status === 'ACTIVE' ? 'Active' : m.status.charAt(0) + m.status.slice(1).toLowerCase()} 
+                      volume={rawLiq !== null ? formatUsdcDisplay(rawLiq) : "—"}
+                      volumeLabel={hasSeed ? "Liquidity (seed)" : "Liquidity (backend record)"}
+                    />
+                  );
+                })
               ) : (
                 <div className="p-8 text-center text-on-surface-variant italic">No markets found. Deploy one to get started.</div>
               )}

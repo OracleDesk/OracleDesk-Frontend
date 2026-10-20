@@ -13,6 +13,7 @@ import { getMarketByOnChainId, getResolution } from "@/lib/api/markets";
 import { ApiError } from "@/lib/api/client";
 import { useOnChainMarket, usePosition } from "@/lib/hooks/useStellar";
 import { useWalletAddress } from "@/lib/contexts/WalletContext";
+import { floatUsdcToRaw, formatBps, formatUsdcDisplay } from "@/lib/format/money";
 import { ledgerClock, useLedgerNow as useLedgerClock } from "@/lib/stellar/ledger-clock";
 import { formatUsdc, bpsToPercent } from "@/lib/stellar/units";
 import { useRecentPriceWindow } from "@/lib/hooks/usePriceHistory";
@@ -250,7 +251,7 @@ function MarketQuickViewContent() {
                   <button type="button" aria-pressed={side === 'Yes'} onClick={() => setSide('Yes')} className={`group relative bg-surface-container-lowest border ${side === 'Yes' ? 'border-secondary border-2' : 'border-secondary/30'} hover:border-secondary hover:bg-secondary-container/10 p-4 rounded-lg transition-all duration-200`}>
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-label-caps text-label-caps text-secondary font-bold">YES</span>
-                      <span className="font-data-mono text-data-mono text-on-surface">${(yesProb/100).toFixed(2)}</span>
+                      <span className="font-data-mono text-data-mono text-on-surface">{formatBps(view ? view.yesBps : yesProb * 100)}</span>
                     </div>
                     <div className="w-full bg-surface-container h-1 rounded-full overflow-hidden">
                       <div className="bg-secondary h-full transition-all duration-500" style={{ width: `${yesProb}%` }}></div>
@@ -259,7 +260,7 @@ function MarketQuickViewContent() {
                   <button type="button" aria-pressed={side === 'No'} onClick={() => setSide('No')} className={`group relative bg-surface-container-lowest border ${side === 'No' ? 'border-tertiary border-2' : 'border-tertiary/30'} hover:border-tertiary hover:bg-tertiary-container/10 p-4 rounded-lg transition-all duration-200`}>
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-label-caps text-label-caps text-tertiary font-bold">NO</span>
-                      <span className="font-data-mono text-data-mono text-on-surface">${(noProb/100).toFixed(2)}</span>
+                      <span className="font-data-mono text-data-mono text-on-surface">{formatBps(view ? 10_000 - view.yesBps : noProb * 100)}</span>
                     </div>
                     <div className="w-full bg-surface-container h-1 rounded-full overflow-hidden">
                       <div className="bg-tertiary h-full transition-all duration-500" style={{ width: `${noProb}%` }}></div>

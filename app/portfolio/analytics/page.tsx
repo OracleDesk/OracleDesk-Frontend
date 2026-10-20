@@ -109,11 +109,17 @@ export default function PortfolioAnalytics() {
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
           <div>
             <h1 className="font-display-lg text-display-lg text-on-surface">Portfolio Analytics</h1>
-            <p className="text-on-surface-variant font-body-lg">Your wallet · mark-to-mid</p>
-            <p className="text-on-surface-variant font-data-mono text-xs mt-1">
-              Treasury agent portfolio lives on{" "}
-              <Link href="/portfolio" className="text-primary hover:underline">/portfolio</Link>
-            </p>
+            <p className="text-on-surface-variant font-body-lg">Institutional trading analytics and performance tracking.</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setExportOpen(true)}
+              className="px-4 py-2 bg-surface-container-highest border border-outline-variant rounded text-on-surface font-medium text-body-md hover:bg-surface-variant transition-colors"
+            >
+              Export Report
+            </button>
+            <button className="px-4 py-2 bg-primary text-primary-foreground rounded text-body-md font-bold hover:opacity-90 active:opacity-80 transition-opacity">Trade Now</button>
           </div>
           <Link
             href="/markets"
@@ -281,8 +287,9 @@ export default function PortfolioAnalytics() {
                 </table>
               </div>
             </div>
-          </>
-        )}
+          </div>
+        </div>
+        <ExportHistoryDialog open={exportOpen} onClose={() => setExportOpen(false)} />
       </main>
     </div>
   );
