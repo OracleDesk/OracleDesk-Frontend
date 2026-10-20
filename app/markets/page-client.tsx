@@ -1,7 +1,7 @@
 "use client";
 import { Icon } from "@/components/ui/icon";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useBurstFeed } from "@/lib/realtime/useBurst";
 import { formatFeedTime } from "@/lib/realtime/format";
@@ -348,14 +348,21 @@ export default function MarketsPageClient() {
     [marketsData]
   );
 
+  // Stable callback: avoids a new function identity on every render so the
+  // React Compiler (and manual memoization on FilterBar) can optimise correctly.
+  const handleSetStatus = useCallback(
+    (s: string) => setStatus(s as MarketStatus),
+    [],
+  );
+
   return (
     <div className="min-h-screen bg-surface">
       <main className="pt-24 pb-12 px-gutter max-w-container-max-width mx-auto">
-        <FilterBar 
-          status={status} 
-          setStatus={(s) => setStatus(s as MarketStatus)} 
-          category={category} 
-          setCategory={setCategory} 
+        <FilterBar
+          status={status}
+          setStatus={handleSetStatus}
+          category={category}
+          setCategory={setCategory}
         />
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

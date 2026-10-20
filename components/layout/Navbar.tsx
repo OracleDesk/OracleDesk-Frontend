@@ -98,6 +98,21 @@ const Navbar = () => {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            type="button"
+            aria-label="Open command palette (Ctrl+K)"
+            aria-keyshortcuts="Control+k Meta+k"
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-surface-container border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary text-body-sm transition-colors"
+            onClick={() => {
+              window.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true })
+              );
+            }}
+          >
+            <Icon name="search" className="text-[16px]" />
+            <span className="font-body-sm">Search</span>
+            <kbd className="font-mono text-[10px] px-1 bg-surface border border-outline-variant">⌘K</kbd>
+          </button>
           <HealthIndicator />
           <Link aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} className={`${
               pathname === "/notifications" ? "text-primary" : "text-on-surface-variant"
