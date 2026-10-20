@@ -92,6 +92,8 @@ export interface PaymentEvent {
   walletAddress?: string;
   currency?: SettlementCurrency;
   createdAt: string;
+  status?: string;
+  confirmedAt?: string | null;
 }
 
 export async function listTraces(params: ListTracesParams = {}) {
@@ -150,16 +152,6 @@ export async function setSpendingAllowance(allowance: {
 }) {
   const { data } = await apiClient.put<SpendingAllowance>("/traces/access/allowance", allowance);
   return data;
-}
-
-export interface PaymentEvent {
-  id: string;
-  txHash: string;
-  type: string;
-  amountRaw: string;
-  status: string;
-  createdAt: string;
-  confirmedAt: string | null;
 }
 
 export async function getPaymentEvents() {

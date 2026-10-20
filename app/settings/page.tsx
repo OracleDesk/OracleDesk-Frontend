@@ -2,7 +2,13 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { PushSettings } from "@/components/settings/push-settings";
+import { useWallet } from "@/lib/contexts/WalletContext";
+import { shortAddress } from "@/lib/stellar/units";
+import { NETWORK_LABEL } from "@/lib/stellar/config";
+import { SLIPPAGE_PRESET_BPS, MAX_SLIPPAGE_BPS, parseSlippagePercent, type NotificationSettings } from "@/lib/settings/settings";
+import { useSettings } from "@/lib/settings/useSettings";
 
 const SettingsSection = ({ title, icon, children, className = "" }: { title: string; icon: string; children: React.ReactNode; className?: string }) => (
   <section className={`bg-surface-container-lowest border border-outline-variant p-6 rounded-lg transition-all hover:shadow-sm ${className}`}>
@@ -29,9 +35,32 @@ const ToggleSwitch = ({ checked, onChange, label, sublabel }: { checked: boolean
   </div>
 );
 
+const NOTIFICATION_ROWS: Array<{ key: keyof NotificationSettings; label: string; sublabel: string }> = [
+  { key: "execution", label: "Trade execution", sublabel: "Confirmations and failures of submitted trades." },
+  { key: "news", label: "Market news", sublabel: "New reasoning traces and market updates." },
+  { key: "shifts", label: "Probability shifts", sublabel: "Alerts when a probability moves more than 5%." },
+];
+
 export default function SettingsPage() {
-  const [slippage, setSlippage] = useState("0.5%");
-  const [autoApprove, setAutoApprove] = useState(false);
+  const wallet = useWallet();
+  const { settings, setSlippageBps, setNotifications } = useSettings(wallet.address);
+  const [customInput, setCustomInput] = useState("");
+  const [customError, setCustomError] = useState<string | null>(null);
+
+  const applyCustomSlippage = (input: string) => {
+    setCustomInput(input);
+    const bps = parseSlippagePercent(input);
+    if (input.trim() === "") {
+      setCustomError(null);
+      return;
+    }
+    if (bps === null) {
+      setCustomError(`Enter 0–${MAX_SLIPPAGE_BPS / 100}% with at most two decimals.`);
+      return;
+    }
+    setCustomError(null);
+    setSlippageBps(bps);
+  };
 
   return (
     <main className="flex-grow pt-8 pb-20 px-gutter max-w-container-max-width mx-auto w-full">
@@ -137,7 +166,7 @@ export default function SettingsPage() {
           {/* Notifications Section */}
           <SettingsSection title="Notifications" icon="notifications_active">
             <div className="space-y-4">
-              {notificationRows.map((row) => (
+              {NOTIFICATION_ROWS.map((row) => (
                 <ToggleSwitch
                   key={row.key}
                   label={row.label}

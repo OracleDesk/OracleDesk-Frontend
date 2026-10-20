@@ -35,7 +35,7 @@ function fakeEntry(
   } as FakeEntry;
 }
 
-const openMarket = { close_time: 0n, sets_minted: 1n, reserve_yes: 1n, reserve_no: 1n, status: { tag: "Open" } };
+const openMarket = { close_time: 0n, sets_minted: 1n, reserve_yes: 1n, reserve_no: 1n, status: { tag: "Open" } } as unknown as import("../generated/market-core").Market;
 
 describe("my-positions scan", () => {
   beforeEach(() => {
@@ -157,9 +157,9 @@ describe("my-positions valuation", () => {
   it("marks open positions at the live price and settled positions at their payout", () => {
     const open = { ...openMarket, reserve_yes: 1n, reserve_no: 3n };
     expect(positionValue({ yes: 2n, no: 2n }, open)).toEqual({ valueRaw: 2_500n, yesBps: 7500 });
-    const resolvedNo = { ...openMarket, status: { tag: "Resolved", values: [{ tag: "No", values: undefined }] } };
+    const resolvedNo = { ...openMarket, status: { tag: "Resolved", values: [{ tag: "No", values: undefined }] } } as unknown as import("../generated/market-core").Market;
     expect(positionValue({ yes: 2n, no: 2n }, resolvedNo)).toEqual({ valueRaw: 2n, yesBps: null });
-    const voided = { ...openMarket, status: { tag: "Void" } };
+    const voided = { ...openMarket, status: { tag: "Void" } } as unknown as import("../generated/market-core").Market;
     expect(positionValue({ yes: 2n, no: 2n }, voided)).toEqual({ valueRaw: 2n, yesBps: null });
   });
 });
