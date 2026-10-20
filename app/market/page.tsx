@@ -13,6 +13,8 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import { DepthChart } from "@/components/charts/depth-chart";
+import { DemoBadge } from "@/components/ui/demo-badge";
 
 const MarketHeader = () => {
   return (
@@ -282,26 +284,25 @@ const ProbabilityChart = () => {
   );
 };
 
+// 500k USDC each side at 50/50, 0.30% fee — stand-in until this page is keyed by on-chain id.
+const DEPTH_FIXTURE = {
+  reserve_yes: 500_000_0000000n,
+  reserve_no: 500_000_0000000n,
+  fee_bps: 30,
+  sets_minted: 0n,
+} as const;
+
 const MarketDepth = () => {
   return (
     <div className="bg-surface-container-lowest border border-outline-variant p-6 rounded h-full">
-      <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 uppercase tracking-widest">Market Depth</h3>
-      <div className="h-48 flex items-end gap-[2px]">
-        <div className="flex-1 bg-secondary opacity-20 h-[30%]"></div>
-        <div className="flex-1 bg-secondary opacity-30 h-[45%]"></div>
-        <div className="flex-1 bg-secondary opacity-50 h-[60%]"></div>
-        <div className="flex-1 bg-secondary opacity-80 h-[85%]"></div>
-        <div className="w-[1px] bg-outline mx-2 h-full opacity-30"></div>
-        <div className="flex-1 bg-tertiary opacity-80 h-[75%]"></div>
-        <div className="flex-1 bg-tertiary opacity-50 h-[50%]"></div>
-        <div className="flex-1 bg-tertiary opacity-30 h-[35%]"></div>
-        <div className="flex-1 bg-tertiary opacity-20 h-[20%]"></div>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Market Depth</h3>
+        <DemoBadge />
       </div>
-      <div className="flex justify-between mt-4 font-data-mono text-[10px] text-on-surface-variant">
-        <span>$0.62</span>
-        <span>$0.64</span>
-        <span>$0.66</span>
-      </div>
+      <p className="font-data-mono text-[10px] text-on-surface-variant mb-4">
+        Fixture reserves — no market id on this page yet.
+      </p>
+      <DepthChart market={DEPTH_FIXTURE} />
     </div>
   );
 };
