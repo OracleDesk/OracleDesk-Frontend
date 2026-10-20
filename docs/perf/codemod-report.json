@@ -1,0 +1,272 @@
+{
+  "totalFilesScanned": 8,
+  "modifiedFilesCount": 8,
+  "totalIconsConverted": 38,
+  "labeledControls": [],
+  "dynamicCasesReported": [
+    {
+      "file": "components/resolver-status-panel.tsx",
+      "line": 81,
+      "code": "<span className=\"material-symbols-outlined text-on-surface-variant text-sm\">\n   ",
+      "reason": "Dynamic or expression child"
+    },
+    {
+      "file": "components/safe-trace-viewer.tsx",
+      "line": 109,
+      "code": "<span className=\"material-symbols-outlined text-sm\">{copied ? \"check\" : \"content",
+      "reason": "Dynamic or expression child"
+    },
+    {
+      "file": "components/safe-trace-viewer.tsx",
+      "line": 276,
+      "code": "<span className=\"material-symbols-outlined text-sm\">\n              {showRaw ? \"e",
+      "reason": "Dynamic or expression child"
+    }
+  ],
+  "convertedPerFile": {
+    "app/markets/quick-view/page.tsx": [
+      {
+        "file": "app/markets/quick-view/page.tsx",
+        "line": 306,
+        "type": "span",
+        "icon": "fact_check"
+      }
+    ],
+    "app/reasoning/verify/page.tsx": [
+      {
+        "file": "app/reasoning/verify/page.tsx",
+        "line": 304,
+        "type": "span",
+        "icon": "close"
+      },
+      {
+        "file": "app/reasoning/verify/page.tsx",
+        "line": 399,
+        "type": "span",
+        "icon": "verified_user"
+      },
+      {
+        "file": "app/reasoning/verify/page.tsx",
+        "line": 416,
+        "type": "span",
+        "icon": "link"
+      },
+      {
+        "file": "app/reasoning/verify/page.tsx",
+        "line": 421,
+        "type": "span",
+        "icon": "search"
+      }
+    ],
+    "app/reasoning/detail/page.tsx": [
+      {
+        "file": "app/reasoning/detail/page.tsx",
+        "line": 79,
+        "type": "span",
+        "icon": "arrow_back"
+      }
+    ],
+    "app/market/[id]/trace-history/page.tsx": [
+      {
+        "file": "app/market/[id]/trace-history/page.tsx",
+        "line": 87,
+        "type": "span",
+        "icon": "fact_check"
+      }
+    ],
+    "components/resolver-status-panel.tsx": [
+      {
+        "file": "components/resolver-status-panel.tsx",
+        "line": 64,
+        "type": "span",
+        "icon": "rule"
+      },
+      {
+        "file": "components/resolver-status-panel.tsx",
+        "line": 68,
+        "type": "span",
+        "icon": "verified"
+      },
+      {
+        "file": "components/resolver-status-panel.tsx",
+        "line": 76,
+        "type": "span",
+        "icon": "warning"
+      },
+      {
+        "file": "components/resolver-status-panel.tsx",
+        "line": 120,
+        "type": "span",
+        "icon": "check_circle"
+      },
+      {
+        "file": "components/resolver-status-panel.tsx",
+        "line": 127,
+        "type": "span",
+        "icon": "error"
+      },
+      {
+        "file": "components/resolver-status-panel.tsx",
+        "line": 179,
+        "type": "span",
+        "icon": "warning"
+      }
+    ],
+    "components/question-verification-badge.tsx": [
+      {
+        "file": "components/question-verification-badge.tsx",
+        "line": 25,
+        "type": "span",
+        "icon": "verified"
+      },
+      {
+        "file": "components/question-verification-badge.tsx",
+        "line": 40,
+        "type": "span",
+        "icon": "warning"
+      },
+      {
+        "file": "components/question-verification-badge.tsx",
+        "line": 53,
+        "type": "span",
+        "icon": "cloud_off"
+      },
+      {
+        "file": "components/question-verification-badge.tsx",
+        "line": 66,
+        "type": "span",
+        "icon": "info"
+      }
+    ],
+    "components/safe-trace-viewer.tsx": [
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 40,
+        "type": "span",
+        "icon": "warning"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 85,
+        "type": "span",
+        "icon": "verified"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 92,
+        "type": "span",
+        "icon": "visibility"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 118,
+        "type": "span",
+        "icon": "info"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 180,
+        "type": "span",
+        "icon": "psychology"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 193,
+        "type": "span",
+        "icon": "balance"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 233,
+        "type": "span",
+        "icon": "open_in_new"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 247,
+        "type": "span",
+        "icon": "verified_user"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 256,
+        "type": "span",
+        "icon": "check_circle"
+      },
+      {
+        "file": "components/safe-trace-viewer.tsx",
+        "line": 273,
+        "type": "span",
+        "icon": "data_object"
+      }
+    ],
+    "components/market-trace-audit.tsx": [
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 120,
+        "type": "span",
+        "icon": "fact_check"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 141,
+        "type": "span",
+        "icon": "pause"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 150,
+        "type": "span",
+        "icon": "play_arrow"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 159,
+        "type": "span",
+        "icon": "security_update_good"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 181,
+        "type": "span",
+        "icon": "sync"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 203,
+        "type": "span",
+        "icon": "warning"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 355,
+        "type": "span",
+        "icon": "check_circle"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 360,
+        "type": "span",
+        "icon": "cancel"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 365,
+        "type": "span",
+        "icon": "cloud_off"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 370,
+        "type": "span",
+        "icon": "sync"
+      },
+      {
+        "file": "components/market-trace-audit.tsx",
+        "line": 413,
+        "type": "span",
+        "icon": "fact_check"
+      }
+    ]
+  }
+}

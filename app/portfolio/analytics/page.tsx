@@ -1,4 +1,5 @@
 "use client";
+import { Icon, type IconName } from "@/components/ui/icon";
 
 import React, { useState } from "react";
 import Link from "next/link";
@@ -30,7 +31,7 @@ const RANGES: { label: string; seconds: number }[] = [
 interface KPIItemProps {
   label: string;
   value: string;
-  icon: string;
+  icon: IconName;
 }
 
 const KPIItem = ({ label, value, icon }: KPIItemProps) => (
@@ -41,7 +42,7 @@ const KPIItem = ({ label, value, icon }: KPIItemProps) => (
   >
     <div className="flex items-center justify-between mb-2">
       <span className="font-label-caps text-label-caps text-on-surface-variant">{label}</span>
-      <span className="material-symbols-outlined text-primary">{icon}</span>
+      <Icon name={icon} className="text-primary" />
     </div>
     <div className="font-headline-md text-headline-md text-on-surface font-data-mono">{value}</div>
   </motion.div>
@@ -80,7 +81,7 @@ export default function PortfolioAnalytics() {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center px-gutter">
         <StateCard>
-          <span className="material-symbols-outlined text-primary text-[40px]">account_balance_wallet</span>
+          <Icon name="account_balance_wallet" className="text-primary text-[40px]" />
           <h1 className="font-headline-md text-headline-md text-on-surface mt-4">
             Connect a wallet to see your trading history
           </h1>
@@ -124,14 +125,14 @@ export default function PortfolioAnalytics() {
 
         {equity.status === "pending" && (
           <StateCard>
-            <span className="material-symbols-outlined text-on-surface-variant text-[40px]">progress_activity</span>
+            <Icon name="activity" className="text-on-surface-variant text-[40px]" />
             <p className="text-on-surface-variant font-body-lg mt-4">Loading your trading history…</p>
           </StateCard>
         )}
 
         {equity.status === "error" && (
           <StateCard>
-            <span className="material-symbols-outlined text-error text-[40px]">error</span>
+            <Icon name="error" className="text-error text-[40px]" />
             <p className="text-on-surface-variant font-body-lg mt-4">
               Couldn&apos;t load your trading history. Refresh to try again.
             </p>
@@ -140,7 +141,7 @@ export default function PortfolioAnalytics() {
 
         {equity.status === "empty" && (
           <StateCard>
-            <span className="material-symbols-outlined text-on-surface-variant text-[40px]">history</span>
+            <Icon name="history" className="text-on-surface-variant text-[40px]" />
             <p className="text-on-surface-variant font-body-lg mt-4">
               No trades from this wallet in the available history (since ledger {coverage.fromLedger})
             </p>
@@ -158,7 +159,7 @@ export default function PortfolioAnalytics() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <KPIItem label="TOTAL PNL" value={usdcSigned(kpis.totalPnl)} icon="payments" />
               <KPIItem label="VOLUME TRADED" value={`$${formatUsdc(kpis.volume, { grouping: true, maxDecimals: 2 })}`} icon="swap_horiz" />
-              <KPIItem label="MARKETS TRADED" value={String(kpis.marketsTraded)} icon="donut_small" />
+              <KPIItem label="MARKETS TRADED" value={String(kpis.marketsTraded)} icon="analytics" />
               <KPIItem label="WIN RATE" value={kpis.winRateBps === null ? "—" : bpsToPercent(kpis.winRateBps)} icon="target" />
             </div>
 
