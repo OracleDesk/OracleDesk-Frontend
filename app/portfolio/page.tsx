@@ -22,6 +22,7 @@ import type { ReviewModel } from "@/lib/stellar/tx-decode";
 import { TreasuryRiskLimits } from "@/components/treasury-risk-limits";
 import { VirtualTableBody } from "@/components/ui/virtual-list";
 import { ExportHistoryDialog } from "@/components/portfolio/export-history-dialog";
+import { PendingCopyTrades } from "@/components/copy-trade/PendingCopyTrades";
 
 const TerminalLog = () => {
   const [logs, setLogs] = useState([
@@ -248,6 +249,7 @@ export default function PortfolioPage() {
 
   return (
     <main className="max-w-container-max-width mx-auto px-gutter py-8">
+      <PendingCopyTrades />
       {/* Portfolio Header / Summary */}
       <section className="mb-8 flex flex-col md:flex-row justify-between items-end gap-6">
         <div>

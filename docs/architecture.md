@@ -106,6 +106,30 @@ from the browser during development.
 
 ## Contract calls
 
+### Durable copy-trade recording
+
+Copy trades have a local outbox under `oracledesk_copy_outbox:<wallet>`, capped
+at 50 entries with terminal records pruned first. It saves the backend intent
+before the wallet prompt and the immutable hash immediately after signing,
+before submission. It survives reloads; if storage is blocked, the trade still
+works with an in-memory outbox and the page asks the user to keep the tab open.
+
+One root reconciler verifies RPC SUCCESS and decodes the exact market-core buy
+(contract, trader, market, outcome and collateral amount from the backend
+payload) before confirming. Failed/mismatched transactions never confirm.
+Retries start at 5 seconds and cap at 10 minutes; entries older than 26 hours
+are abandoned because RPC history may have expired. Missing hashes are shown
+with account-history links and are never guessed. Auth errors pause until an
+explicit fresh sign-in; they never open a repeating wallet prompt.
+
+The copy-trade and portfolio panels expose recording state, Retry and Dismiss.
+Dismiss is local only: there is no backend cancellation endpoint, so rejected
+or abandoned intents can remain PENDING there. Per-tab in-flight locking avoids
+duplicate confirms in one tab; two tabs may PATCH the same immutable hash,
+which the backend handles idempotently. A saved hash can never be replaced.
+
+### Contract reads and writes
+
 - `lib/stellar/clients.ts` builds a generated binding `Client` per contract, optionally with the wallet as signer. The USDC Stellar Asset Contract has no Wasm and so no bindings; `token.balance` and `token.transfer` are built with `AssembledTransaction.build`.
 - Read-only clients are memoised by contract, RPC URL, passphrase and timeout. Each generated constructor decodes every base64 spec entry, so the first factory call caches the parsed `Spec`; signer-bound clients are then built with the base `contract.Client` from that spec, keyed by the signer object and `publicKey` in a `WeakMap`. All clients share one `rpc.Server` per URL (`rpcServer`), so quote and simulation calls reuse one HTTP client. `__resetClientCaches()` and `__specBuildCount()` exist only for the cache tests and benchmark.
 - Reads are simulations (no fee, no signature), except the batched market list described below. Write-adjacent reads deliberately stay on simulation so they cannot observe a ledger entry older than the write they are preparing.

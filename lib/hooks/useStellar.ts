@@ -755,6 +755,8 @@ function useTxRunner(contract: ContractName) {
 }
 
 export interface BuyParams {
+  /** Persist the immutable hash after signing and before submission. */
+  onSigned?: (hash: string) => void;
   marketId: bigint | string;
   outcome: OutcomeTag;
   collateralIn: bigint;
@@ -1067,8 +1069,11 @@ export function useBuy() {
         const { prepared } = await reviewPreparedWrite(initial, params.review, () => prepareBuy(signer, params));
         const quote = prepared.quote!;
         const minSharesOut = BigInt(prepared.intent.min_shares_out);
-        const onHash = (hash: string) => tracker.track({ hash, kind: "buy", holder: signer.publicKey, marketId: String(marketId), outcome,
-          amounts: { collateralIn: collateralIn.toString(), minSharesOut: minSharesOut.toString() }, networkPassphrase: NETWORK_PASSPHRASE });
+        const onHash = (hash: string) => {
+          params.onSigned?.(hash);
+          tracker.track({ hash, kind: "buy", holder: signer.publicKey, marketId: String(marketId), outcome,
+            amounts: { collateralIn: collateralIn.toString(), minSharesOut: minSharesOut.toString() }, networkPassphrase: NETWORK_PASSPHRASE });
+        };
         const { value, txHash, ledger } = await runner.start(prepared.tx, confirmedAmount, onHash);
         return { sharesOut: value, quotedShares: quote, minSharesOut, txHash, ledger, collateralIn, holder: signer.publicKey };
       });

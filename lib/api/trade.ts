@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, type ApiRequestOptions } from "./client";
 
 /** What the wallet must sign to copy a trace: market_core.buy. */
 export interface CopyTradePayload {
@@ -29,20 +29,20 @@ export interface CopyTradeRecord {
   txHash?: string | null;
 }
 
-export async function initiateCopyTrade(params: InitiateCopyTradeParams) {
+export async function initiateCopyTrade(params: InitiateCopyTradeParams, options?: ApiRequestOptions) {
   const { data } = await apiClient.post<{
     copyTradeId: string;
     transactionPayload: CopyTradePayload;
     instructions: string;
-  }>("/trade/copy", params);
+  }>("/trade/copy", params, undefined, options);
 
   return data;
 }
 
-export async function confirmCopyTrade(id: string, txHash: string) {
+export async function confirmCopyTrade(id: string, txHash: string, options?: ApiRequestOptions) {
   const { data } = await apiClient.patch<CopyTradeRecord>(`/trade/copy/${id}/confirm`, {
     txHash,
-  });
+  }, options);
 
   return data;
 }

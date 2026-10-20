@@ -132,6 +132,13 @@ To try the same on market 0 (resolved): the buy button is disabled and the panel
 
 ## Also worth clicking
 
+- [ ] Copy a trade while blocking `/trade/copy/*/confirm` in DevTools. The buy
+  succeeds and the unconfirmed-trades panel retains its hash. Reload onto
+  `/portfolio`, unblock the route, and verify the trade becomes recorded
+  without a second buy or signature. Expire the JWT during recording: only the
+  explicit sign-in button should request one new login. Switch wallets during
+  reconciliation: the old wallet's entries disappear and never use the new JWT.
+
 - [ ] `/premium` → **Get a daily pass** → **Pay with wallet**. Freighter shows a USDC `transfer` to the treasury (`CBTFA3EP…`) for 0.50 USDC. After approval the backend verifies it on-chain and says the pass is active. Note: until `PAYMENTS_RECIPIENT` is decided, this payment becomes treasury trading capital (see docs/STATUS.md).
 - [ ] `/copy-trade?marketId=<backend market id>&traceId=<trace id>`: the side comes from the trace's edge. With no trace or zero edge the confirm button is disabled and the page explains why.
 - [ ] `/admin` with an address not in `NEXT_PUBLIC_ADMIN_ADDRESSES` shows "Access Denied".
