@@ -65,3 +65,15 @@ reachable from raw storage today: how much of `max_market` a market has used
 treasury is paused. Read-only getters `market_exposure(market_id) ->
 MarketExposure` and `paused() -> bool` would let the frontend show both
 without reading storage keys that the contract may change.
+
+## 7. Merge complete sets (`merge` entrypoint)
+
+A holder who owns both `YES` and `NO` shares on an open market cannot merge
+`min(yes, no)` pairs back into `1` base unit of collateral per complete set.
+Instead, exiting both legs requires calling `sell` on one side and then `sell`
+on the other against the post-trade reserves (`lib/portfolio/valuation.ts`).
+Because each `sell` pays `fee_bps` into the pool and increases the FPMM
+constant product, sequential two-sided exits lose value to fees and curve
+rounding compared with a direct `merge(trader, market_id, sets)` entrypoint
+that burns `sets` of `YES` and `NO` from the trader's position and returns
+`sets` of collateral.

@@ -7,7 +7,9 @@ import { useWallet } from "@/lib/contexts/WalletContext";
 import { useGenerateMarket } from "@/lib/hooks/useMarkets";
 import { UserFacingError } from "@/lib/stellar/errors";
 import type { MarketCategory } from "@/lib/api/markets";
+import { formatUsdcDisplay } from "@/lib/format/money";
 import { isAdminAddress } from "@/lib/stellar/config";
+import { tryParseUsdc } from "@/lib/stellar/units";
 import { BACKEND_CATEGORIES, BACKEND_CATEGORY_LABELS, BACKEND_TO_CONTRACT_CATEGORY } from "@/lib/stellar/categories";
 
 export default function AdminPage() {
@@ -267,7 +269,10 @@ function AdminCreateContent() {
                 <div className="space-y-1">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block">LIQUIDITY</span>
                   <span className="font-data-mono text-data-mono text-on-surface">
-                    {liquidity ? `${parseFloat(liquidity).toLocaleString()} USDC` : "0.00 USDC"}
+                    {(() => {
+                      const parsed = tryParseUsdc(liquidity);
+                      return parsed !== null ? formatUsdcDisplay(parsed) : "0.00 USDC";
+                    })()}
                   </span>
                 </div>
                 <div className="space-y-1">

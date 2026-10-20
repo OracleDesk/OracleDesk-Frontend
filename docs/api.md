@@ -45,6 +45,22 @@ one is present.
 | Stellar addresses | string | `"GABC…"` / `"CABC…"` | `G…` accounts, `C…` contracts. Case-sensitive (StrKey is uppercase). |
 | Hashes | lowercase hex, no `0x` | `"9f86…"` | sha256, 64 chars. Stellar tx hashes are also 64 hex chars. |
 
+#### Gaps: float-only money fields (backend follow-ups)
+
+Several legacy backend responses still expose money values only as 2-decimal
+rounded JS floats without a companion `*Raw` 7-decimal string field:
+
+- `GET /portfolio`: `totalUsdc`, `dailyPnl`, `totalPnl`, `deployedCapital`,
+  `builderFeesEarned` (only `availableCapitalRaw` has a raw companion today).
+- `GET /portfolio/positions`: `Position.size`, `Position.pnl`, and nested
+  `Position.trade.amount`.
+- `GET /portfolio/stats`: `totalCopyVolume`, `builderFees`.
+- `GET /markets`: `totalLiquidity` (prefer `seedAmountRaw` when present).
+
+Until the backend adds `*Raw` string fields for these endpoints, the frontend
+converts them once at the display boundary via `floatUsdcToRaw` in
+`lib/format/money.ts` and labels them as `backend record`.
+
 ### Categories
 
 The backend keeps its finer categories for display and filtering. Markets go

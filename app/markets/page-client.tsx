@@ -7,11 +7,12 @@ import { useBurstFeed } from "@/lib/realtime/useBurst";
 import { formatFeedTime } from "@/lib/realtime/format";
 import { RealtimeProfiler } from "@/components/realtime-profiler";
 import Link from "next/link";
-import { useMarkets, useInfiniteMarkets } from "@/lib/hooks/useMarkets";
+import { useMarkets, useInfiniteMarkets, useMarketQuestionIntegrity } from "@/lib/hooks/useMarkets";
+import { QuestionVerificationBadge } from "@/components/question-verification-badge";
 import { useOnChainMarket, useOnChainMarkets, type OnChainMarketView } from "@/lib/hooks/useStellar";
 import type { Market, MarketStatus, MarketTracePreview } from "@/lib/api/markets";
+import { floatUsdcToRaw, formatBps, formatUsdcDisplay } from "@/lib/format/money";
 import { BACKEND_CATEGORIES, BACKEND_CATEGORY_LABELS } from "@/lib/stellar/categories";
-import { formatUsdc } from "@/lib/stellar/units";
 import { NETWORK_LABEL } from "@/lib/stellar/config";
 import { VirtualList } from "@/components/ui/virtual-list";
 
@@ -100,9 +101,12 @@ interface MarketCardProps {
   backendYesProb: number | null;
   backendLiquidity: string | null;
   disableEntrance?: boolean;
+  marketId?: string | null;
+  metaUri?: string | null;
+  questionHash?: string | null;
 }
 
-const MarketCard = ({ href, category, onChainMarketId, reasoningTraces, expiry, title, backendYesProb, backendLiquidity, disableEntrance }: MarketCardProps) => {
+const MarketCard = ({ href, category, onChainMarketId, reasoningTraces, expiry, title, backendYesProb, backendLiquidity, disableEntrance, marketId, metaUri, questionHash }: MarketCardProps) => {
   const reduceMotion = useReducedMotion();
   const shouldAnimate = !disableEntrance && !reduceMotion;
   const chain = useOnChainMarket(onChainMarketId);
@@ -111,13 +115,20 @@ const MarketCard = ({ href, category, onChainMarketId, reasoningTraces, expiry, 
   const yesProb = view ? Math.round(view.yesBps / 100) : backendYesProb ?? 50;
   const noProb = 100 - yesProb;
   const liquidity = view
-    ? `$${formatUsdc(view.market.sets_minted, { maxDecimals: 2, grouping: true })}`
+    ? formatUsdcDisplay(view.market.sets_minted)
     : backendLiquidity ?? "—";
   const platform = onChainMarketId !== null ? `On-chain #${onChainMarketId}` : "Not on-chain yet";
   const latestTrace = reasoningTraces?.[0];
   const aiSignal = latestTrace ? (latestTrace.edge > 0.05 ? "BULLISH" : latestTrace.edge < -0.05 ? "BEARISH" : "NEUTRAL") : "ANALYZING";
   const aiStatus = latestTrace ? `${Math.abs(latestTrace.edge * 100).toFixed(1)}% EDGE` : "STABLE";
   const volume24h = chainStatusLabel(view);
+  const questionIntegrity = useMarketQuestionIntegrity({
+    marketId,
+    onChainMarketId,
+    displayedQuestion: title,
+    metaUri: view?.market.meta_uri ?? metaUri,
+    questionHash: view?.market.question_hash ?? questionHash,
+  });
 
   const cardContent = (
     <>
@@ -238,9 +249,9 @@ const TradingFeed = () => {
       key: data.eventId,
       time: formatFeedTime(data.closedAt ?? event.receivedAt) + (data.closedAt ? "" : " received"),
       market: data.marketQuestion || `Market #${data.onChainMarketId}`,
-      size: `$${formatUsdc(BigInt(data.collateralRaw), { maxDecimals: 2, grouping: true })}`,
+      size: formatUsdcDisplay(BigInt(data.collateralRaw)),
       bet: `${data.isBuy ? "BUY" : "SELL"} ${data.direction}`,
-      prob: `YES ${(data.priceYesBps / 100).toFixed(1)}%`,
+      prob: `YES ${formatBps(data.priceYesBps)}`,
       color: data.direction === "YES" ? "text-secondary" : "text-tertiary",
     }];
   });
@@ -404,6 +415,8 @@ export default function MarketsPageClient() {
               }}
               renderItem={(m, _idx, a11y) => {
                 const rawProb = m.currentYesProb ?? m.initialYesProb;
+                const hasSeed = Boolean(m.seedAmountRaw);
+                const rawLiq = hasSeed ? BigInt(m.seedAmountRaw!) : floatUsdcToRaw(m.totalLiquidity);
                 return (
                   <div {...a11y}>
                     <MarketCard 
@@ -414,8 +427,11 @@ export default function MarketsPageClient() {
                       expiry={new Date(m.expiryTimestamp).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase()}
                       title={m.question}
                       backendYesProb={Math.round(rawProb * 100)}
-                      backendLiquidity={`$${(m.totalLiquidity).toLocaleString()}`}
+                      backendLiquidity={rawLiq !== null ? `${formatUsdcDisplay(rawLiq)}${hasSeed ? " (seed)" : " (backend record)"}` : "—"}
                       disableEntrance
+                      marketId={m.id}
+                      metaUri={m.metaUri}
+                      questionHash={m.questionHash}
                     />
                   </div>
                 );

@@ -3,6 +3,7 @@ import { Icon, type IconName } from "@/components/ui/icon";
 
 import React from "react";
 import { motion } from "framer-motion";
+import { ExportHistoryDialog } from "@/components/portfolio/export-history-dialog";
 import { 
   AreaChart, 
   Area, 
@@ -138,6 +139,7 @@ export default function PortfolioAnalytics() {
   // Chart mounts only on the client so the prerender never measures a
   // zero-size ResponsiveContainer (silences the width(-1) build warning).
   const [chartMounted, setChartMounted] = React.useState(false);
+  const [exportOpen, setExportOpen] = React.useState(false);
   React.useEffect(() => {
     const frame = requestAnimationFrame(() => setChartMounted(true));
     return () => cancelAnimationFrame(frame);
@@ -151,7 +153,13 @@ export default function PortfolioAnalytics() {
             <p className="text-on-surface-variant font-body-lg">Institutional trading analytics and performance tracking.</p>
           </div>
           <div className="flex gap-2">
-            <button className="px-4 py-2 bg-surface-container-highest border border-outline-variant rounded text-on-surface font-medium text-body-md hover:bg-surface-variant transition-colors">Export Report</button>
+            <button
+              type="button"
+              onClick={() => setExportOpen(true)}
+              className="px-4 py-2 bg-surface-container-highest border border-outline-variant rounded text-on-surface font-medium text-body-md hover:bg-surface-variant transition-colors"
+            >
+              Export Report
+            </button>
             <button className="px-4 py-2 bg-primary text-primary-foreground rounded text-body-md font-bold hover:opacity-90 active:opacity-80 transition-opacity">Trade Now</button>
           </div>
         </div>
@@ -270,6 +278,7 @@ export default function PortfolioAnalytics() {
             </div>
           </div>
         </div>
+        <ExportHistoryDialog open={exportOpen} onClose={() => setExportOpen(false)} />
       </main>
     </div>
   );

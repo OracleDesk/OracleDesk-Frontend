@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useInbox } from "@/lib/notifications/InboxProvider";
 import type { InboxItem } from "@/lib/notifications/store";
 import { useWallet } from "@/lib/contexts/WalletContext";
+import { formatUsdcDisplay } from "@/lib/format/money";
 import { explorerTx, NETWORK_LABEL } from "@/lib/stellar/config";
 import { formatUsdc } from "@/lib/stellar/units";
 
@@ -15,9 +16,9 @@ const title: Record<InboxItem["kind"], string> = { fill: "Trade confirmed", rede
 function message(item: InboxItem) {
   const d = item.data;
   switch (item.kind) {
-    case "fill": return `${d.action} ${formatUsdc(BigInt(d.sharesRaw), { maxDecimals: 2 })} ${d.direction} shares for ${formatUsdc(BigInt(d.collateralRaw), { maxDecimals: 7, grouping: true })} USDC.`;
+    case "fill": return `${d.action} ${formatUsdc(BigInt(d.sharesRaw), { maxDecimals: 2 })} ${d.direction} shares for ${formatUsdcDisplay(BigInt(d.collateralRaw))}.`;
     case "redeemable": return `Market #${item.marketId} ${d.outcome === "Void" ? "was voided" : `resolved ${d.outcome}`}. Review your payout and redeem your shares.`;
-    case "redeemed": return `${formatUsdc(BigInt(d.payoutRaw), { maxDecimals: 7, grouping: true })} USDC paid to your wallet.`;
+    case "redeemed": return `${formatUsdcDisplay(BigInt(d.payoutRaw))} paid to your wallet.`;
     case "trace": return `New reasoning on market #${item.marketId}: ${d.action}.`;
     default: return `${d.action}: ${d.message}`;
   }
