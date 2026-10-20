@@ -1,0 +1,120 @@
+name: Preview deployment
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  build-preview:
+    name: Build & deploy preview
+    runs-on: ubuntu-latest
+
+    env:
+      # Enable the MSW mock layer for this build.
+      NEXT_PUBLIC_PREVIEW_MODE: "1"
+      # Signal that this is a preview, not a real production build.
+      PREVIEW_BUILD: "1"
+      # Stub values so the build doesn't fail on missing env vars.
+      NEXT_PUBLIC_API_URL: "http://localhost:8000/api/v1"
+      NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE: ""
+      NEXT_PUBLIC_STELLAR_RPC_URL: ""
+      NEXT_PUBLIC_STELLAR_EXPLORER_URL: ""
+      NEXT_PUBLIC_MARKET_CORE_CONTRACT_ID: ""
+      NEXT_PUBLIC_TREASURY_CONTRACT_ID: ""
+      NEXT_PUBLIC_RESOLVER_CONTRACT_ID: ""
+      NEXT_PUBLIC_REASONING_REGISTRY_CONTRACT_ID: ""
+      NEXT_PUBLIC_USDC_CONTRACT_ID: ""
+      NEXT_PUBLIC_ADMIN_ADDRESSES: ""
+      NEXT_PUBLIC_DAILY_PASS_PRICE_USDC: "0.5"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Safety check – mock must not ship to production
+        run: npx tsx scripts/check-preview-not-in-prod.ts
+
+      - name: Build (static export)
+        run: npx next build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-${{ github.event.pull_request.number }}
+          path: out/
+          retention-days: 7
+
+      # ── Optional: deploy to a static host ────────────────────────────────
+      # Uncomment and fill in when a static host (Cloudflare Pages, Netlify,
+      # Vercel, …) is configured. The deploy step should output a URL, which
+      # is then posted as a PR comment below.
+      #
+      # - name: Deploy to Cloudflare Pages
+      #   id: deploy
+      #   uses: cloudflare/pages-action@v1
+      #   with:
+      #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      #     projectName: oracledesk-preview
+      #     directory: out
+      #     branch: pr-${{ github.event.pull_request.number }}
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const sha = context.payload.pull_request.head.sha.slice(0, 7);
+
+            const body = [
+              '## Preview build',
+              '',
+              `Built from ${sha} with mock backend (MSW) and fake Stellar RPC.`,
+              '',
+              'The build artifact is attached to this workflow run. ' +
+              'To explore it locally: download, unzip and serve with `npx serve out/`.',
+              '',
+              '> **Note:** All data is mocked. No real transactions occur.',
+            ].join('\n');
+
+            // Find an existing comment and update it, or create a new one.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existing = comments.find(
+              (c) => c.user?.type === 'Bot' && c.body?.startsWith('## Preview build'),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }

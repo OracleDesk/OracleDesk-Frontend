@@ -11,6 +11,7 @@ import { PwaRegistrar } from "@/components/pwa/pwa-registrar";
 import { DebugMount } from "@/components/debug/debug-mount";
 import { RpcDegradedBanner } from "@/components/debug/RpcPanel";
 import { WebVitals } from "@/app/web-vitals";
+import { CommandPalette } from "@/components/command-palette/CommandPalette";
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -66,6 +67,7 @@ export default function RootLayout({
                   {children}
                   <Footer />
                   <DebugMount />
+                  <CommandPalette />
                   <WebVitals />
                 </InboxProvider>
               </HealthProvider>
