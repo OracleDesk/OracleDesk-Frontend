@@ -15,6 +15,10 @@ import { viewOf } from "./wallet-machine";
 import { TransactionTrackerProvider } from "./tx-tracker";
 import { storedPushWallet, unsubscribe as unsubscribePush } from "@/lib/notifications/push";
 import { LedgerInvalidator } from "./ledger-invalidation";
+import { getStoredSessionId, onAuthInvalid, onAuthSessionChanged } from "@/lib/api/client";
+import { UserScopeContext, UserScopeStore } from "@/lib/query/scope";
+import { WalletNetworkStore, type WalletNetwork } from "./wallet-network";
+import type { RpcNetworkState } from "./network-check";
 
 export interface OpenModalOptions {
   /**
@@ -25,6 +29,12 @@ export interface OpenModalOptions {
 }
 
 export interface WalletContextValue {
+  walletNetwork: WalletNetwork;
+  rpcNetwork: RpcNetworkState;
+  networkEpoch: number;
+  confirmUnknownNetwork: () => void;
+  retryRpcNetwork: () => Promise<RpcNetworkState>;
+  assertNetworkCurrent: (epoch: number) => void;
   address: string | null;
   isConnected: boolean;
   isConnecting: boolean;
@@ -63,6 +73,12 @@ export interface WalletIdentityValue {
 }
 
 export interface WalletNetworkValue {
+  walletNetwork: WalletNetwork;
+  rpcNetwork: RpcNetworkState;
+  networkEpoch: number;
+  confirmUnknownNetwork: () => void;
+  retryRpcNetwork: () => Promise<RpcNetworkState>;
+  assertNetworkCurrent: (epoch: number) => void;
   walletNetworkPassphrase: string | null;
   isWrongNetwork: boolean;
 }
@@ -159,9 +175,11 @@ export interface WalletProviderProps {
   children: ReactNode;
   /** Replaces the real kit in tests. Defaults to loading Stellar Wallets Kit in the browser. */
   kitLoader?: () => Promise<WalletKitAdapter>;
+  /** Replaces the RPC consistency probe in isolated rendering tests. */
+  rpcNetworkChecker?: () => Promise<RpcNetworkState>;
 }
 
-export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: WalletProviderProps) {
+export function WalletProvider({ children, kitLoader = loadStellarWalletsKit, rpcNetworkChecker }: WalletProviderProps) {
   const router = useRouter();
   const routerRef = useRef(router);
   useEffect(() => {
@@ -174,6 +192,11 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
         defaultOptions: { queries: { staleTime: 1000 * 60 * 2, refetchOnWindowFocus: false } },
       }),
   );
+  const [scopeStore] = useState(() => new UserScopeStore(queryClient));
+  const [networkStore] = useState(() => new WalletNetworkStore(() => {
+    void queryClient.cancelQueries({ queryKey: ["stellar"] });
+    queryClient.removeQueries({ queryKey: ["stellar"] });
+  }, rpcNetworkChecker));
 
   // All wallet logic lives in the state machine; this component only renders it.
   // The initializer stores deferred navigation callbacks; it never reads the ref.
@@ -181,14 +204,18 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
     // eslint-disable-next-line react-hooks/refs
     () =>
       new WalletInterpreter({
+        beforeSign: async (address) => {
+          const epoch = await networkStore.beforeSign(address);
+          return () => networkStore.assertCurrent(epoch, address);
+        },
         loadKit: kitLoader,
         storedSessionWallet: getStoredSessionWallet,
         clearBackendSession: clearAuthSession,
-        signIn: async (address, sign) => {
+        signIn: async (address, sign, isCurrent) => {
           const session = await signInWithWallet(address, async (xdr, networkPassphrase) => {
             const { signedTxXdr } = await sign(xdr, { networkPassphrase, address });
             return signedTxXdr;
-          });
+          }, isCurrent);
           return session.walletAddress;
         },
         purgeStellarQueries: () => queryClient.removeQueries({ queryKey: ["stellar"] }),
@@ -197,6 +224,33 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
         broadcastDisconnect: broadcastWalletDisconnect,
       }),
   );
+
+  // Subscribe before starting the kit: clear the old cache in the same tick as
+  // every identity/session transition, before React can render a new account.
+  useEffect(() => {
+    const syncScope = () => {
+      const current = viewOf(interpreter.getState());
+      const previous = scopeStore.getSnapshot();
+      const next = {
+        wallet: current.address,
+        sessionId: current.address && getStoredSessionWallet() === current.address ? getStoredSessionId() : null,
+      };
+      scopeStore.resetUserScope(next,
+        !next.wallet ? "disconnect" : previous.wallet !== next.wallet ? "account-change" :
+          next.sessionId ? "signed-in" : "token-invalid");
+    };
+    const offState = interpreter.subscribe(syncScope);
+    const offSession = onAuthSessionChanged(() => {
+      syncScope();
+      if (!getStoredSessionWallet()) interpreter.send({ type: "SESSION_SYNCED", wallet: null });
+    });
+    const offInvalid = onAuthInvalid(() => {
+      interpreter.send({ type: "SESSION_SYNCED", wallet: null });
+      syncScope();
+    });
+    syncScope();
+    return () => { offState(); offSession(); offInvalid(); };
+  }, [interpreter, scopeStore]);
 
   // Starts the kit, restores a session the kit persisted (never redirects or
   // prompts), and tears the kit subscriptions down on unmount.
@@ -211,6 +265,21 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
   const state = useSyncExternalStore(interpreter.subscribe, interpreter.getState, interpreter.getState);
   const view = useMemo(() => viewOf(state), [state]);
   const { address } = view;
+  const networkSnapshot = useSyncExternalStore(networkStore.subscribe, networkStore.getSnapshot, networkStore.getSnapshot);
+
+  useEffect(() => { void networkStore.checkRpc(); }, [networkStore]);
+  useEffect(() => {
+    let live = true;
+    if (!address) { networkStore.connect(null, null); return; }
+    void kitLoader().then((kit) => { if (live) networkStore.connect(address, kit); });
+    const probe = () => {
+      if (!document.hidden && networkStore.getSnapshot().walletNetwork.state !== "unknown") void networkStore.refreshWallet();
+    };
+    const onVisible = () => { if (!document.hidden) void networkStore.refreshWallet(); };
+    const timer = window.setInterval(probe, 15_000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { live = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); networkStore.connect(null, null); };
+  }, [address, kitLoader, networkStore]);
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   useEffect(() => {
@@ -256,7 +325,7 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
   // their identities can stay stable for the lifetime of the provider.
   const actions = useMemo<WalletActionsValue>(
     () => ({
-      openModal: (opts) => interpreter.openModal(safeReturnTo(opts?.returnTo)),
+      openModal: (opts) => { networkStore.resetConfirmation(); return interpreter.openModal(safeReturnTo(opts?.returnTo)); },
       ensureSession: () => interpreter.ensureSession(),
       withSession: async (fn, why) => {
         if (!(await interpreter.ensureSession())) {
@@ -273,7 +342,7 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
         await interpreter.disconnect();
       },
     }),
-    [interpreter],
+    [interpreter, networkStore],
   );
 
   // One slice per concern. Each value only changes when its own fields do, so
@@ -284,10 +353,15 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
   );
   const network = useMemo<WalletNetworkValue>(
     () => ({
-      walletNetworkPassphrase: view.walletNetworkPassphrase,
-      isWrongNetwork: Boolean(view.walletNetworkPassphrase) && view.walletNetworkPassphrase !== NETWORK_PASSPHRASE,
+      ...networkSnapshot,
+      confirmUnknownNetwork: networkStore.confirmUnknownNetwork,
+      retryRpcNetwork: () => networkStore.checkRpc(),
+      assertNetworkCurrent: (epoch) => networkStore.assertCurrent(epoch),
+      walletNetworkPassphrase: networkSnapshot.walletNetwork.state === "match" ? NETWORK_PASSPHRASE :
+        networkSnapshot.walletNetwork.state === "mismatch" ? networkSnapshot.walletNetwork.passphrase : null,
+      isWrongNetwork: networkSnapshot.walletNetwork.state === "mismatch",
     }),
-    [view.walletNetworkPassphrase],
+    [networkSnapshot, networkStore],
   );
   const session = useMemo<WalletSessionValue>(
     () => ({ isAuthenticated: view.isAuthenticated, isConnecting: view.isConnecting, error: view.error }),
@@ -300,6 +374,7 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
 
   return (
     <QueryClientProvider client={queryClient}>
+      <UserScopeContext.Provider value={scopeStore}>
       <ActionsContext.Provider value={actions}>
         <IdentityContext.Provider value={identity}>
           <NetworkContext.Provider value={network}>
@@ -313,6 +388,7 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit }: 
           </NetworkContext.Provider>
         </IdentityContext.Provider>
       </ActionsContext.Provider>
+      </UserScopeContext.Provider>
     </QueryClientProvider>
   );
 }

@@ -10,12 +10,13 @@ import React, { useState, useRef, useEffect, useCallback, Suspense } from "react
 import { useSearchParams, useRouter } from "next/navigation";
 import { useWalletActions, useWalletAddress, useWalletNetwork } from "@/lib/contexts/WalletContext";
 import { DevProfiler } from "@/lib/dev/profiler";
-import { getTrace, ReasoningTrace } from "@/lib/api/traces";
-import { confirmCopyTrade, initiateCopyTrade } from "@/lib/api/trade";
+import { useTrace } from "@/lib/hooks/useTraces";
+import { useCopyTrade } from "@/lib/hooks/useCopyTrade";
+import { PendingCopyTrades } from "@/components/copy-trade/PendingCopyTrades";
 import { ApiError } from "@/lib/api/client";
 import { useMarket } from "@/lib/hooks/useMarkets";
-import { useBuy, useQuoteBuy, useUsdcBalance, useAccountReserve, usePrepareBuy, useOnChainMarket, fetchOnChainMarketBySimulation, useUsdcTrustline, useEnableUsdc, useUsdcBalanceState, type PreparedWriteReview } from "@/lib/hooks/useStellar";
-import { explorerTx } from "@/lib/stellar/config";
+import { useQuoteBuy, useUsdcBalance, useAccountReserve, usePrepareBuy, useOnChainMarket, fetchOnChainMarketBySimulation, useUsdcTrustline, useEnableUsdc, useUsdcBalanceState, type PreparedWriteReview } from "@/lib/hooks/useStellar";
+import { explorerTx, NETWORK_LABEL } from "@/lib/stellar/config";
 import { formatUsdc, formatXlm, minOut, bpsToPercent, probabilityToBps, tryParseUsdc, BPS } from "@/lib/stellar/units";
 import { chooseCollateral, maxCollateralForEdge, quoteCopy, type CopyMarket, type CopyQuote, type SizingMode } from "@/lib/stellar/quote";
 import type { OutcomeTag } from "@/lib/stellar/clients";
@@ -116,8 +117,9 @@ function CopyTradeContent() {
   const traceId = searchParams.get("traceId");
   const marketIdParam = searchParams.get("marketId");
 
-  const [trace, setTrace] = useState<ReasoningTrace | null>(null);
-  const [traceError, setTraceError] = useState<string | null>(null);
+  const traceQuery = useTrace(traceId ?? undefined);
+  const trace = traceQuery.data ?? null;
+  const traceError = traceQuery.isError ? "We couldn't load this reasoning trace." : null;
   const { data: market } = useMarket(marketIdParam ?? trace?.marketId ?? undefined);
   const onChainMarketId = market?.onChainMarketId ?? null;
   const onChainMarket = useOnChainMarket(onChainMarketId);
@@ -131,7 +133,7 @@ function CopyTradeContent() {
   const trustlineReady = trustline.data?.kind === "native" || (trustline.data?.kind === "present" && trustline.data.authorized);
   const marketCanTrade = onChainMarket.data?.market.status.tag === "Open" && ledger.now !== null && Number(onChainMarket.data.market.close_time) - ledger.now > SAFETY_MARGIN_S + MIN_TX_TIMEOUT_S;
   const reserve = useAccountReserve(address);
-  const buy = useBuy();
+  const buy = useCopyTrade();
   const submitQueue = useSubmitQueueState(address);
 
   // Allocation as a share of the wallet's USDC balance, in basis points.
@@ -172,13 +174,6 @@ function CopyTradeContent() {
     },
     [],
   );
-
-  useEffect(() => {
-    if (!traceId) return;
-    getTrace(traceId)
-      .then(setTrace)
-      .catch(() => setTraceError("We couldn't load this reasoning trace."));
-  }, [traceId]);
 
   // Side comes from the trace's edge. No trace or zero edge means no trade.
   const side: "Yes" | "No" | null = trace && trace.edge !== 0 ? (trace.edge > 0 ? "Yes" : "No") : null;
@@ -269,7 +264,7 @@ function CopyTradeContent() {
       return;
     }
     if (isWrongNetwork) {
-      setStatusMessage("Switch your wallet to Stellar Testnet to place this trade.");
+      setStatusMessage(`Switch your wallet to ${NETWORK_LABEL} to place this trade.`);
       return;
     }
     if (!trace || !side) {
@@ -348,14 +343,9 @@ function CopyTradeContent() {
       }
 
       setStatusMessage("Recording your copy trade…");
-      const { copyTradeId } = await initiateCopyTrade({
+      const result = await buy.run({
         traceId: trace.id,
-        marketId: market.id,
-        amountRaw: amountRaw.toString(),
-      });
-
-      setStatusMessage(null);
-      const result = await buy.mutateAsync({
+        backendMarketId: market.id,
         marketId: onChainMarketId,
         outcome: side,
         collateralIn: amountRaw,
@@ -364,9 +354,9 @@ function CopyTradeContent() {
         review: reviewPreparedBuy,
       });
 
-      if (result.txHash) await confirmCopyTrade(copyTradeId, result.txHash).catch(() => undefined);
       setStatusMessage(
-        `Done. You received ${formatUsdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.` +
+        (result.durable ? "Trade done; recording will retry automatically. " : "Trade done; browser storage is unavailable, so keep this tab open to finish recording. ") +
+        `You received ${formatUsdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.` +
           (result.txHash ? ` Transaction ${result.txHash.slice(0, 10)}…` : ""),
       );
       if (result.txHash) window.open(explorerTx(result.txHash), "_blank", "noopener,noreferrer");
@@ -728,6 +718,7 @@ function CopyTradeContent() {
               )}
 
               {/* Status message when not pending */}
+              <PendingCopyTrades />
               {!buy.isPending && statusMessage && (
                 <div className="rounded-2xl border border-outline-variant bg-surface p-4 text-sm text-on-surface-variant">
                   {waitingForBuy ? "Waiting for your previous transaction to finish…" : statusMessage}

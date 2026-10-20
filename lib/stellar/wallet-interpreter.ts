@@ -4,17 +4,19 @@
  * No React here, so tests can drive it with a scripted adapter. WalletProvider
  * subscribes to it with useSyncExternalStore.
  */
-import { transition, initialWalletState, type WalletEffect, type WalletEvent, type WalletState } from "./wallet-machine";
+import { transition, initialWalletState, viewOf, type WalletEffect, type WalletEvent, type WalletState } from "./wallet-machine";
 import type { WalletKitAdapter } from "./wallet-kit-adapter";
 import type { SyncMessage } from "@/lib/api/cross-tab-sync";
 
 export interface WalletInterpreterDeps {
+  /** Re-probes the wallet and returns a validator for a late signature. */
+  beforeSign?: (address: string) => Promise<() => void>;
   /** Loads the kit. Called once, on start (browser only). */
   loadKit: () => Promise<WalletKitAdapter>;
   storedSessionWallet: () => string | null;
   clearBackendSession: () => void;
   /** Runs the backend challenge login for `address`; resolves with the wallet it signed in as. */
-  signIn: (address: string, signTransaction: WalletKitAdapter["signTransaction"]) => Promise<string>;
+  signIn: (address: string, signTransaction: WalletKitAdapter["signTransaction"], isCurrent?: () => boolean) => Promise<string>;
   purgeStellarQueries: () => void;
   navigate: (to: string) => void;
   /** Turns a thrown value into a plain message. */
@@ -123,14 +125,41 @@ export class WalletInterpreter {
   disconnect = (): void => this.send({ type: "DISCONNECT_REQUESTED" });
 
   /** Signs with the connected kit; used by the signer the provider exposes. */
-  signTransaction = async (xdr: string, opts: { networkPassphrase: string; address: string }) =>
-    (await this.kit()).signTransaction(xdr, opts);
+  signTransaction = async (xdr: string, opts: { networkPassphrase: string; address: string }) => {
+    const epoch = this.state.epoch;
+    const assertAccount = () => {
+      if (this.state.epoch !== epoch || viewOf(this.state).address !== opts.address) throw new Error("Your wallet changed before signing completed.");
+    };
+    assertAccount();
+    const validate = await this.deps.beforeSign?.(opts.address);
+    assertAccount();
+    const result = await (await this.kit()).signTransaction(xdr, opts);
+    validate?.();
+    // Kit 2.5 has no network-change event. Probe again to catch a switch that
+    // happened inside a short prompt before the visibility timer could run.
+    const validateAfter = await this.deps.beforeSign?.(opts.address);
+    validate?.(); validateAfter?.();
+    assertAccount();
+    return result;
+  };
 
   /** Signs a Soroban auth entry with the connected kit; rejects when the kit can't. */
   signAuthEntry = async (authEntry: string, opts: { networkPassphrase: string; address: string }) => {
+    const epoch = this.state.epoch;
+    const assertAccount = () => {
+      if (this.state.epoch !== epoch || viewOf(this.state).address !== opts.address) throw new Error("Your wallet changed before signing completed.");
+    };
+    assertAccount();
+    const validate = await this.deps.beforeSign?.(opts.address);
+    assertAccount();
     const kit = await this.kit();
     if (!kit.signAuthEntry) throw new Error("This wallet can't sign Soroban authorization entries.");
-    return kit.signAuthEntry(authEntry, opts);
+    const result = await kit.signAuthEntry(authEntry, opts);
+    validate?.();
+    const validateAfter = await this.deps.beforeSign?.(opts.address);
+    validate?.(); validateAfter?.();
+    assertAccount();
+    return result;
   };
 
   private kit(): Promise<WalletKitAdapter> {
@@ -186,7 +215,11 @@ export class WalletInterpreter {
 
       case "signIn":
         this.deps
-          .signIn(effect.address, (xdr, opts) => this.signTransaction(xdr, opts))
+          .signIn(effect.address, (xdr, opts) => this.signTransaction(xdr, opts), () => {
+            const state = this.state;
+            return state.tag === "authenticating" && state.epoch === effect.epoch &&
+              state.attempt === effect.attempt && state.address === effect.address;
+          })
           .then(
             (wallet) => this.send({ type: "SIGNIN_SUCCEEDED", epoch: effect.epoch, attempt: effect.attempt, wallet }),
             (err) =>

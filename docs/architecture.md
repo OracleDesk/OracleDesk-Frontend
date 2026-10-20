@@ -18,12 +18,57 @@ A backend market links to the chain through `onChainMarketId` (market-core's `u6
 
 ## Wallet and login
 
+### User-scoped data
+
+Backend routes using `requireAuth` or `optionalAuth` use `userKeys`, prefixed
+with `["scope", walletOrDash, sessionIdOrDash]`. Trace bodies and lists,
+allowances, payments, positions, portfolio and admin jobs follow this rule.
+Public markets and platform statistics keep `publicKeys` and survive sign-out.
+The session id is random per sign-in and stored beside the session; bearer
+tokens never appear in query keys.
+
+`UserScopeStore.resetUserScope` runs synchronously on wallet disconnect,
+account change, invalid/expired token and sign-in. It cancels and removes only
+the previous user scope, aborts its mutation requests, detaches their pending
+observers, and discards late results. Chain caches are also removed on account
+change, disconnect and token invalidation. Scoped API requests bind to the
+expected session before sending and after receiving, so an old response cannot
+clear or populate a new session. `TOKEN_EXPIRED`, `INVALID_TOKEN` and
+`UNAUTHORIZED` with a token clear the session and notify the provider.
+
+Copy-trade reads traces through `useTrace`; it never retains a trace in an
+independent component-state cache. Add new authenticated hooks through the same
+key factory and `useScopedMutation` guard.
+
 `lib/stellar/WalletProvider.tsx` wraps `@creit.tech/stellar-wallets-kit` 2.5.0 (pinned: the last release built on `@stellar/stellar-sdk` 16, the same major as the contract bindings). The application and bindings share SDK 16; hardware-wallet internals can carry separate transitive versions.
 
 - The kit is imported dynamically in an effect, because it reads `localStorage` when its module loads.
 - A session the kit persisted is restored without prompting and without redirecting. Only a connect completed in the modal redirects to `/markets`.
 - After connecting, the wallet signs the backend's SEP-10 style challenge transaction (`signTransaction`, which every Stellar wallet supports; `signMessage` is not universal). The backend returns a JWT. A stored session for a different address is cleared, never reused.
 - `useWallet()` exposes `address`, `isWrongNetwork`, a `signer` for the binding clients, `openModal`, `ensureSession` and `disconnect`.
+
+### Runtime network consistency
+
+The provider checks RPC `getNetwork` on startup (two retries for unreachable
+servers). A passphrase mismatch shows a blocking banner and blocks the shared
+RPC transport, including chain reads outside React Query. Retry can recover
+after the operator repairs the endpoint. An unreachable RPC is shown separately
+and rechecked before signing; it is never treated as a confirmed mismatch.
+
+Wallet network state is `match`, `mismatch`, or `unknown`. Kit STATE_UPDATED
+contains the kit-selected network, so it is deliberately ignored as network
+evidence. `getNetwork` is probed before transaction, auth-entry and login signing,
+every 15 seconds for reporting wallets while visible, and on returning to the
+tab. Unknown wallets require an explicit confirmation in the wallet menu, per
+address/module; disconnect/reconnect forgets it. Storage failures are harmless.
+
+Account changes or a transition to a mismatched network invalidate the network
+epoch and purge chain caches. Signing and submission are separate steps: late
+signatures are discarded, and the lifecycle checks its captured epoch immediately
+before submission. Transactions already submitted continue being monitored and
+are never reported as failed merely because the wallet network changed.
+SEP-10 checks the backend's advertised passphrase against the app configuration
+before parsing or signing the challenge.
 
 ### Wallet context slices
 
@@ -61,12 +106,58 @@ from the browser during development.
 
 ## Contract calls
 
+### Durable copy-trade recording
+
+Copy trades have a local outbox under `oracledesk_copy_outbox:<wallet>`, capped
+at 50 entries with terminal records pruned first. It saves the backend intent
+before the wallet prompt and the immutable hash immediately after signing,
+before submission. It survives reloads; if storage is blocked, the trade still
+works with an in-memory outbox and the page asks the user to keep the tab open.
+
+One root reconciler verifies RPC SUCCESS and decodes the exact market-core buy
+(contract, trader, market, outcome and collateral amount from the backend
+payload) before confirming. Failed/mismatched transactions never confirm.
+Retries start at 5 seconds and cap at 10 minutes; entries older than 26 hours
+are abandoned because RPC history may have expired. Missing hashes are shown
+with account-history links and are never guessed. Auth errors pause until an
+explicit fresh sign-in; they never open a repeating wallet prompt.
+
+The copy-trade and portfolio panels expose recording state, Retry and Dismiss.
+Dismiss is local only: there is no backend cancellation endpoint, so rejected
+or abandoned intents can remain PENDING there. Per-tab in-flight locking avoids
+duplicate confirms in one tab; two tabs may PATCH the same immutable hash,
+which the backend handles idempotently. A saved hash can never be replaced.
+
+### Contract reads and writes
+
 - `lib/stellar/clients.ts` builds a generated binding `Client` per contract, optionally with the wallet as signer. The USDC Stellar Asset Contract has no Wasm and so no bindings; `token.balance` and `token.transfer` are built with `AssembledTransaction.build`.
 - Read-only clients are memoised by contract, RPC URL, passphrase and timeout. Each generated constructor decodes every base64 spec entry, so the first factory call caches the parsed `Spec`; signer-bound clients are then built with the base `contract.Client` from that spec, keyed by the signer object and `publicKey` in a `WeakMap`. All clients share one `rpc.Server` per URL (`rpcServer`), so quote and simulation calls reuse one HTTP client. `__resetClientCaches()` and `__specBuildCount()` exist only for the cache tests and benchmark.
 - Reads are simulations (no fee, no signature), except the batched market list described below. Write-adjacent reads deliberately stay on simulation so they cannot observe a ledger entry older than the write they are preparing.
 - `npm run bench:clients` measures generated-client construction and quote building against the cached path without network calls.
 - Writes (`useBuy`, `useSell`, `useRedeem`, `useUsdcTransfer`) check that a wallet is connected and on the right network, run fresh contract preflight checks, simulate, then `signAndSend`. A per-address queue serializes complete build/sign/send jobs in this tab and coordinates browser tabs with Web Locks (or a local-storage lease fallback); stale-sequence errors receive one fresh-build retry. The buy, sell, redeem, and USDC-transfer paths can decode the final simulated contract invocation and show its arguments and transaction envelope for review before the wallet prompt.
 - `useBuy` quotes again immediately before building the transaction and sets `min_shares_out = minOut(quote, slippageBps)`, so slippage is enforced on-chain.
+
+### Creator liquidity claims
+
+Quick-view shows a creator panel only for a matching connected G-address, and
+hides it on a network mismatch. `lpView` computes all values in bigint from the
+same on-chain market snapshot: the winning reserve for YES/NO, or floor of half
+the reserve sum for Void. Open pool value is a labelled spot-price estimate.
+Accrued fees belong to the treasury and never increase the creator's payout.
+
+Backend seed metadata is displayed only when its integer seed calculation
+reproduces the on-chain reserves and sets minted. After trades, or without
+matching metadata, seed figures are omitted. A MarketCreated event would be the
+authoritative historical seed source, but RPC event retention limits discovery.
+The fixtures record outputs from the pinned contracts Python model using the
+Rust creation and Void-claim test inputs.
+
+Claiming re-reads the market through simulation, checks creator, finality and
+`lp_claimed` before prompting, then signs/submits through the existing guarded
+queue and transaction lifecycle. Success invalidates market, position, USDC and
+account balances. A zero payout still marks the pool claimed. Normal creator
+seed shares must be redeemed separately; fees are swept separately by the
+treasury flow.
 
 ### Batched market reads
 

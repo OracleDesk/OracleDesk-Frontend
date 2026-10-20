@@ -120,9 +120,16 @@ export function transition(s: WalletState, e: WalletEvent): Transition {
             error: null,
           }
         : { tag: "disconnected", epoch: s.epoch, error: null };
+      // A stale persisted JWT must not attach to anonymous preview requests
+      // when no wallet, or a different wallet, is restored.
+      const effects: WalletEffect[] = e.storedSessionWallet && e.storedSessionWallet !== e.address
+        ? [{ type: "clearBackendSession" }] : [];
       // A connect requested while the kit was still restoring runs now.
-      if (s.pendingConnect) return transition(restored, { type: "CONNECT_REQUESTED", returnTo: s.pendingConnect.returnTo });
-      return stay(restored);
+      if (s.pendingConnect) {
+        const next = transition(restored, { type: "CONNECT_REQUESTED", returnTo: s.pendingConnect.returnTo });
+        return { state: next.state, effects: [...effects, ...next.effects] };
+      }
+      return { state: restored, effects };
     }
 
     case "CONNECT_REQUESTED":

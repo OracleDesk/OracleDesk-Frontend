@@ -10,6 +10,8 @@ import { InboxProvider } from "@/lib/notifications/InboxProvider";
 import { PwaRegistrar } from "@/components/pwa/pwa-registrar";
 import { DebugMount } from "@/components/debug/debug-mount";
 import { RpcDegradedBanner } from "@/components/debug/RpcPanel";
+import { NetworkConsistencyBanner } from "@/components/layout/NetworkConsistencyBanner";
+import { CopyTradeReconciler } from "@/components/copy-trade/CopyTradeReconciler";
 import { WebVitals } from "@/app/web-vitals";
 
 const geistSans = Geist({
@@ -64,10 +66,12 @@ export default function RootLayout({
         </a>
         <PwaRegistrar>
           <WalletProvider>
+            <CopyTradeReconciler />
             <RealtimeProvider>
               <HealthProvider>
                 <InboxProvider>
                   <Navbar />
+                  <NetworkConsistencyBanner />
                   <RpcDegradedBanner />
                   <div id="main-content" tabIndex={-1} className="flex-1 flex flex-col outline-none">
                     {children}

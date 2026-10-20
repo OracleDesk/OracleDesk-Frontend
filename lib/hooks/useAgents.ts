@@ -1,11 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNetworkMutation as useMutation } from "@/lib/query/useNetworkMutation";
 import { scValToNative } from "@stellar/stellar-sdk";
 import deployments from "@/lib/stellar/generated/deployments.testnet.json";
 import { eventWindow, fetchContractEvents, type EventWindow } from "@/lib/stellar/events";
 import { reasoningRegistry } from "@/lib/stellar/clients";
-import { CONTRACTS, KNOWN_AGENTS } from "@/lib/stellar/config";
+import { CONTRACTS, KNOWN_AGENTS, NETWORK_LABEL } from "@/lib/stellar/config";
 import { UserFacingError } from "@/lib/stellar/errors";
 import { read, submit } from "@/lib/stellar/typed-call";
 import { readRegistryAdmin } from "@/lib/stellar/registry-admin";
@@ -235,7 +236,7 @@ function useAgentMutation(action: AgentAction) {
     mutationFn: async ({ agent }: { agent: string }): Promise<{ txHash: string | null }> => {
       if (!signer) throw new UserFacingError({ kind: "disconnected", message: "Connect your wallet first." });
       if (isWrongNetwork) {
-        throw new UserFacingError({ kind: "wrong-network", message: "Switch your wallet to Stellar Testnet and try again." });
+        throw new UserFacingError({ kind: "wrong-network", message: `Switch your wallet to ${NETWORK_LABEL} and try again.` });
       }
       const client = reasoningRegistry(signer);
       const tx = action === "register"

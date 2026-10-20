@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, type ApiRequestOptions } from "./client";
 
 export type MarketCategory = "FED" | "ECB" | "ELECTION" | "GEOPOLITICAL" | "CRYPTO" | "MACRO" | "SPORTS" | "ENTERTAINMENT" | "POLITICS";
 export type MarketStatus = "PENDING" | "ACTIVE" | "RESOLVING" | "RESOLVED" | "CANCELLED";
@@ -129,10 +129,10 @@ export interface GenerateMarketResponse {
  * The route requires an `Idempotency-Key`: one key per logical run, reused on
  * retries, so a repeated request can never start a second paid LLM run.
  */
-export async function triggerMarketGeneration(params: GenerateMarketParams, idempotencyKey: string) {
+export async function triggerMarketGeneration(params: GenerateMarketParams, idempotencyKey: string, options?: ApiRequestOptions) {
   const { data } = await apiClient.post<GenerateMarketResponse>("/markets/generate", params, {
     "Idempotency-Key": idempotencyKey,
-  });
+  }, options);
 
   return data;
 }
@@ -162,7 +162,7 @@ export interface GenerationJob {
   hint?: string;
 }
 
-export async function getMarketGenerationStatus(jobId: string) {
-  const { data } = await apiClient.get<GenerationJob>(`/markets/generation-status/${encodeURIComponent(jobId)}`);
+export async function getMarketGenerationStatus(jobId: string, options?: ApiRequestOptions) {
+  const { data } = await apiClient.get<GenerationJob>(`/markets/generation-status/${encodeURIComponent(jobId)}`, undefined, options);
   return data;
 }

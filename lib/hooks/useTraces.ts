@@ -1,6 +1,9 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUserScope } from "@/lib/query/scope";
+import { userKeys } from "@/lib/query/keys";
+import { useScopedMutation } from "@/lib/query/useScopedMutation";
 import {
   getPaymentEvents,
   getSpendingAllowance,
@@ -11,13 +14,13 @@ import {
   verifyTrace,
   type ListTracesParams,
 } from "@/lib/api/traces";
-import { getStoredSessionWallet } from "@/lib/api/client";
 import { useWallet } from "@/lib/contexts/WalletContext";
 
 export function useTraces(params: ListTracesParams = {}) {
+  const scope = useUserScope();
   return useQuery({
-    queryKey: ["traces", params],
-    queryFn: () => listTraces(params),
+    queryKey: userKeys.traces(scope, params),
+    queryFn: ({ signal }) => listTraces(params, { expectScope: scope, signal }),
     staleTime: 15_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -27,9 +30,10 @@ export function useTraces(params: ListTracesParams = {}) {
 /** Newest-first trace feed with cursorless page-number pagination; stops when
  * the backend omits pagination meta or the last page is exhausted. */
 export function useInfiniteTraces(params: Omit<ListTracesParams, "page"> = {}) {
+  const scope = useUserScope();
   return useInfiniteQuery({
-    queryKey: ["traces", "infinite", params],
-    queryFn: ({ pageParam }) => listTraces({ ...params, page: pageParam }),
+    queryKey: userKeys.infiniteTraces(scope, params),
+    queryFn: ({ pageParam, signal }) => listTraces({ ...params, page: pageParam }, { expectScope: scope, signal }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const meta = lastPage.meta;
@@ -42,72 +46,56 @@ export function useInfiniteTraces(params: Omit<ListTracesParams, "page"> = {}) {
 }
 
 export function useTrace(id: string | undefined) {
+  const scope = useUserScope();
   return useQuery({
-    queryKey: ["trace", id],
-    queryFn: () => getTrace(id!),
+    queryKey: userKeys.trace(scope, id),
+    queryFn: ({ signal }) => getTrace(id!, { expectScope: scope, signal }),
     enabled: Boolean(id),
   });
 }
 
 export function useVerifyTrace() {
-  return useMutation({
-    mutationFn: (traceId: string) => verifyTrace(traceId),
-  });
+  return useScopedMutation((traceId: string, options) => verifyTrace(traceId, options));
 }
 
 export function useUnlockTrace() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (params: { traceId: string; txHash: string; amountRaw: string }) =>
-      unlockDailyPass(params.traceId, params.txHash, params.amountRaw),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["trace", variables.traceId] });
-      queryClient.invalidateQueries({ queryKey: ["traces"] });
-      queryClient.invalidateQueries({ queryKey: ["trace-payments"] });
+  return useScopedMutation(
+    (params: { traceId: string; txHash: string; amountRaw: string }, options) =>
+      unlockDailyPass(params.traceId, params.txHash, params.amountRaw, options),
+    (_data, variables, scope) => {
+      void queryClient.invalidateQueries({ queryKey: userKeys.trace(scope, variables.traceId) });
+      void queryClient.invalidateQueries({ queryKey: userKeys.traces(scope) });
+      void queryClient.invalidateQueries({ queryKey: userKeys.payments(scope) });
     },
-  });
+  );
 }
 
 export function useSpendingAllowance() {
+  const scope = useUserScope();
   const { address, isAuthenticated } = useWallet();
   return useQuery({
-    queryKey: ["trace-allowance", address],
-    queryFn: getSpendingAllowance,
+    queryKey: userKeys.allowance(scope),
+    queryFn: ({ signal }) => getSpendingAllowance({ expectScope: scope, signal }),
     enabled: Boolean(address && isAuthenticated),
   });
 }
 
 export function useSetSpendingAllowance() {
   const queryClient = useQueryClient();
-  const { address } = useWallet();
-
-  return useMutation({
-    mutationFn: setSpendingAllowance,
-    onMutate: async (next) => {
-      const key = ["trace-allowance", address] as const;
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData(key);
-      queryClient.setQueryData(key, { ...next, currency: next.currency ?? "USDC" });
-      return { key, previous };
-    },
-    onError: (_error, _next, context) => {
-      if (context) queryClient.setQueryData(context.key, context.previous);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["trace-allowance", address] });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["trace-allowance", address] });
-    },
-  });
+  return useScopedMutation(
+    (next: Parameters<typeof setSpendingAllowance>[0], options) => setSpendingAllowance(next, options),
+    (_data, _next, scope) => { void queryClient.invalidateQueries({ queryKey: userKeys.allowance(scope) }); },
+  );
 }
 
 export function usePaymentEvents() {
+  const scope = useUserScope();
   const { address, isAuthenticated } = useWallet();
   return useQuery({
-    queryKey: ["trace-payments", address ?? getStoredSessionWallet()],
-    queryFn: getPaymentEvents,
+    queryKey: userKeys.payments(scope),
+    queryFn: ({ signal }) => getPaymentEvents({ expectScope: scope, signal }),
     enabled: Boolean(address && isAuthenticated),
   });
 }

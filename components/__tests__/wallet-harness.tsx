@@ -1,6 +1,6 @@
 "use client";
 
-import React, { type ReactNode } from "react";
+import React, { useCallback, type ReactNode } from "react";
 import { Profiler } from "react";
 import { WalletProvider } from "@/lib/stellar/WalletProvider";
 import type { WalletKitAdapter } from "@/lib/stellar/wallet-kit-adapter";
@@ -65,7 +65,8 @@ export function createFakeKit(options: { address?: string | null } = {}): FakeKi
 
 /** Renders `children` inside a WalletProvider driven by a fake kit. */
 export function WalletHarness({ children, kit }: { children: ReactNode; kit: FakeKit }) {
-  return <WalletProvider kitLoader={async () => kit.adapter}>{children}</WalletProvider>;
+  const loadKit = useCallback(async () => kit.adapter, [kit]);
+  return <WalletProvider kitLoader={loadKit} rpcNetworkChecker={async () => ({ status: "ok", protocolVersion: 23 })}>{children}</WalletProvider>;
 }
 
 /**

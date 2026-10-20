@@ -14,6 +14,7 @@ import {
 } from "@/lib/format/money";
 import { useTreasuryValuation } from "@/lib/portfolio/useValuation";
 import { formatUsdc } from "@/lib/stellar/units";
+import { NETWORK_LABEL } from "@/lib/stellar/config";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useRedeemAll, type PreparedWriteReview } from "@/lib/hooks/useStellar";
 import { shouldSkipTxReview, TxReview, TxReviewPreferenceControl } from "@/components/tx-review";
@@ -21,6 +22,7 @@ import type { ReviewModel } from "@/lib/stellar/tx-decode";
 import { TreasuryRiskLimits } from "@/components/treasury-risk-limits";
 import { VirtualTableBody } from "@/components/ui/virtual-list";
 import { ExportHistoryDialog } from "@/components/portfolio/export-history-dialog";
+import { PendingCopyTrades } from "@/components/copy-trade/PendingCopyTrades";
 
 const TerminalLog = () => {
   const [logs, setLogs] = useState([
@@ -247,6 +249,7 @@ export default function PortfolioPage() {
 
   return (
     <main className="max-w-container-max-width mx-auto px-gutter py-8">
+      <PendingCopyTrades />
       {/* Portfolio Header / Summary */}
       <section className="mb-8 flex flex-col md:flex-row justify-between items-end gap-6">
         <div>
@@ -519,7 +522,7 @@ export default function PortfolioPage() {
         </div>
 
         {!wallet.isConnected && <p className="mt-4 text-sm text-on-surface-variant">Connect a Stellar wallet to scan your positions.</p>}
-        {wallet.isWrongNetwork && <p className="mt-4 text-sm text-error">Switch your wallet to Stellar Testnet to redeem positions.</p>}
+        {wallet.isWrongNetwork && <p className="mt-4 text-sm text-error">Switch your wallet to {NETWORK_LABEL} to redeem positions.</p>}
         {redeemBatch.error && <p className="mt-4 text-sm text-error" role="alert">{redeemBatch.error}</p>}
 
         {redeemBatch.discovery && redeemBatch.discovery.redeemables.length > 0 && (
