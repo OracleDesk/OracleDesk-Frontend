@@ -27,6 +27,14 @@ import { MIN_TX_TIMEOUT_S, SAFETY_MARGIN_S } from "@/lib/stellar/deadline";
 import { PendingValue } from "@/components/pending-value";
 import { SLIPPAGE_PRESET_BPS } from "@/lib/settings/settings";
 import { useSettings } from "@/lib/settings/useSettings";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { LiveRegion } from "@/components/ui/live-region";
 import Link from "next/link";
 const QUOTE_DEBOUNCE_MS = 400;
 /** Below this remaining edge (1 point) the user must tick a box before copying. */
@@ -141,6 +149,7 @@ function CopyTradeContent() {
   const [reviewModel, setReviewModel] = useState<{ model: ReviewModel; changedFrom?: ReviewModel } | null>(null);
   const reviewResolver = useRef<((approved: boolean) => void) | null>(null);
   const sliderRef = useRef<HTMLDivElement>(null);
+  const allocationControlRef = useRef<HTMLButtonElement | null>(null);
   const reviewPreparedBuy = useCallback<PreparedWriteReview>(async (_prepared, model, changedFrom, forceReview = false) => {
     if (!forceReview && shouldSkipTxReview()) return true;
     return new Promise<boolean>((resolve) => {
@@ -402,18 +411,23 @@ function CopyTradeContent() {
       `}</style>
 
       <main className="flex-grow flex items-center justify-center p-4 sm:p-margin relative">
-        <div className="fixed inset-0 bg-on-background/10 backdrop-blur-sm z-[55]"></div>
-
-        <div className="relative bg-surface border border-outline-variant w-full max-w-[640px] shadow-xl rounded-xl overflow-hidden z-[60] animate-in fade-in zoom-in duration-300">
-          <div className="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-white">
-            <div>
-              <h2 className="font-headline-md text-headline-md text-on-surface">Confirm Copy Trade</h2>
-              <p className="font-body-md text-body-md text-on-surface-variant text-sm">Copy the agent&apos;s side on this market</p>
+        <LiveRegion message={statusMessage ?? ""} />
+        <Dialog open onOpenChange={(open) => !open && router.back()}>
+          <DialogContent
+            initialFocusRef={allocationControlRef}
+            className="relative bg-surface border border-outline-variant w-full max-w-[640px] shadow-xl rounded-xl overflow-hidden p-0 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-white">
+              <div>
+                <DialogTitle className="font-headline-md text-headline-md text-on-surface">Confirm Copy Trade</DialogTitle>
+                <DialogDescription className="font-body-md text-body-md text-on-surface-variant text-sm">Copy the agent&apos;s side on this market</DialogDescription>
+              </div>
+              <DialogClose asChild>
+                <button aria-label="Close" className="p-2 hover:bg-surface-container rounded-full transition-colors" type="button">
+                  <Icon name="close" />
+                </button>
+              </DialogClose>
             </div>
-            <button aria-label="Close" className="p-2 hover:bg-surface-container rounded-full transition-colors" type="button" onClick={() => router.back()}>
-  <Icon name="close" />
-</button>
-          </div>
 
           <div className="bg-[#f0f9fa] border-b border-outline-variant p-6 relative overflow-hidden ai-shimmer text-xs sm:text-sm">
             <div className="flex items-start gap-4">
@@ -477,9 +491,10 @@ function CopyTradeContent() {
                 </span>
               </div>
               <div role="radiogroup" aria-label="How much to copy" className="grid grid-cols-3 gap-2">
-                {SIZING_OPTIONS.map((option) => (
+                {SIZING_OPTIONS.map((option, idx) => (
                   <button
                     key={option.kind}
+                    ref={idx === 0 ? allocationControlRef : undefined}
                     type="button"
                     role="radio"
                     aria-checked={sizingKind === option.kind}
@@ -758,8 +773,9 @@ function CopyTradeContent() {
               </div>
             </div>
           </div>
-        </div>
-      </main>
+        </DialogContent>
+      </Dialog>
+    </main>
       {reviewModel && (
         <TxReview
           model={reviewModel.model}
