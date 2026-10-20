@@ -8,13 +8,14 @@ import { formatFeedTime } from "@/lib/realtime/format";
 import { RealtimeProfiler } from "@/components/realtime-profiler";
 import Link from "next/link";
 import { useMarkets, useInfiniteMarkets, useMarketQuestionIntegrity } from "@/lib/hooks/useMarkets";
-import { QuestionVerificationBadge } from "@/components/question-verification-badge";
 import { useOnChainMarket, useOnChainMarkets, type OnChainMarketView } from "@/lib/hooks/useStellar";
 import type { Market, MarketStatus, MarketTracePreview } from "@/lib/api/markets";
 import { floatUsdcToRaw, formatBps, formatUsdcDisplay } from "@/lib/format/money";
 import { BACKEND_CATEGORIES, BACKEND_CATEGORY_LABELS } from "@/lib/stellar/categories";
 import { NETWORK_LABEL } from "@/lib/stellar/config";
 import { VirtualList } from "@/components/ui/virtual-list";
+import { QuestionVerificationBadge } from "@/components/question-verification-badge";
+import { bytesToHex } from "@/lib/stellar/typed-call";
 
 const SourceTag = ({ source }: { source: "chain" | "backend" }) => (
   <span
@@ -100,6 +101,9 @@ interface MarketCardProps {
   title: string;
   backendYesProb: number | null;
   backendLiquidity: string | null;
+  marketId?: string;
+  metaUri?: string | null;
+  questionHash?: string | null;
   disableEntrance?: boolean;
   marketId?: string | null;
   metaUri?: string | null;
@@ -127,6 +131,14 @@ const MarketCard = ({ href, category, onChainMarketId, reasoningTraces, expiry, 
     displayedQuestion: title,
     metaUri: view?.market.meta_uri,
     questionHash: view?.market.question_hash,
+  });
+
+  const questionIntegrity = useMarketQuestionIntegrity({
+    marketId,
+    onChainMarketId,
+    displayedQuestion: title,
+    metaUri: view?.market.meta_uri ?? metaUri,
+    questionHash: view?.market.question_hash ?? questionHash,
   });
 
   const cardContent = (
@@ -316,13 +328,15 @@ function OnChainOnlyMarkets({ knownIds }: { knownIds: Set<string> }) {
         {orphans.map((v) => (
           <MarketCard
             key={v.id}
-            href={`/markets/quick-view?onChainId=${v.id}`}
+            href={`/markets/quick-view?onChainId=${v.id}&from=markets`}
             category={v.market.category.tag}
             onChainMarketId={v.id}
             expiry={new Date(Number(v.market.close_time) * 1000).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase()}
             title={`Market #${v.id} · ${v.market.meta_uri}`}
             backendYesProb={null}
             backendLiquidity={null}
+            metaUri={v.market.meta_uri}
+            questionHash={v.market.question_hash ? bytesToHex(v.market.question_hash) : null}
           />
         ))}
       </div>
@@ -361,6 +375,9 @@ export default function MarketsPageClient() {
   return (
     <div className="min-h-screen bg-surface">
       <main className="pt-24 pb-12 px-gutter max-w-container-max-width mx-auto">
+        <h1 id="markets-heading" tabIndex={-1} className="sr-only outline-none">
+          Markets
+        </h1>
         <FilterBar 
           status={status} 
           setStatus={(s) => setStatus(s as MarketStatus)} 
@@ -419,13 +436,12 @@ export default function MarketsPageClient() {
                 return (
                   <div {...a11y}>
                     <MarketCard 
-                      href={`/markets/quick-view?marketId=${m.id}`}
+                      href={`/markets/quick-view?marketId=${m.id}&from=markets`}
                       category={m.category}
                       onChainMarketId={m.onChainMarketId}
                       reasoningTraces={m.reasoningTraces}
                       expiry={new Date(m.expiryTimestamp).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase()}
                       title={m.question}
-                      backendYesProb={Math.round(rawProb * 100)}
                       backendLiquidity={rawLiq !== null ? `${formatUsdcDisplay(rawLiq)}${hasSeed ? " (seed)" : " (backend record)"}` : "—"}
                       disableEntrance
                       marketId={m.id}
