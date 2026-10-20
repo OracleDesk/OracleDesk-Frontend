@@ -14,7 +14,9 @@ import { ApiError } from "@/lib/api/client";
 import { useOnChainMarket, usePosition } from "@/lib/hooks/useStellar";
 import { useWalletAddress } from "@/lib/contexts/WalletContext";
 import { ledgerClock, useLedgerNow as useLedgerClock } from "@/lib/stellar/ledger-clock";
-import { formatUsdc } from "@/lib/stellar/units";
+import { formatUsdc, bpsToPercent } from "@/lib/stellar/units";
+import { useRecentPriceWindow } from "@/lib/hooks/usePriceHistory";
+import { Sparkline } from "@/components/charts/sparkline";
 import { MIN_TX_TIMEOUT_S, SAFETY_MARGIN_S } from "@/lib/stellar/deadline";
 import { TradeTape } from "@/components/market/trade-tape";
 import { BuyTicket } from "@/components/market/buy-ticket";
@@ -69,9 +71,7 @@ function MarketQuickViewContent() {
   const [showModal] = useState(true);
   const [side, setSide] = useState<"Yes" | "No">(initialSide);
   const view = chain.data;
-
-  // Illustrative only: there is no price history source yet.
-  const sparklinePath = "M0 25 L10 22 L20 28 L30 18 L40 20 L50 15 L60 17 L70 10 L80 12 L90 5 L100 8";
+  const priceWindow = useRecentPriceWindow(onChainMarketId === null ? null : String(onChainMarketId), view);
 
   const fromChain = Boolean(view);
   const backendProb = market ? Math.round((market.currentYesProb ?? market.initialYesProb) * 100) : 50;
@@ -122,6 +122,12 @@ function MarketQuickViewContent() {
   const liquidityText = view
     ? `$${formatUsdc(view.market.sets_minted, { maxDecimals: 2, grouping: true })}`
     : market ? `$${market.totalLiquidity.toLocaleString()}` : "—";
+  const w24 = priceWindow.data;
+  const change = w24?.changeBps ?? null;
+  const trend: "up" | "down" | "flat" = change === null || change === 0n ? "flat" : change > 0n ? "up" : "down";
+  const changePts = change === null ? null : `${change > 0n ? "+" : ""}${(Number(change) / 100).toFixed(2)}`;
+  const periodText = w24?.reason === "too-young" ? "since opening" : "over the last 24 hours";
+  const periodShort = w24?.reason === "too-young" ? "since opening" : "24h";
   const latestTrace = market?.reasoningTraces?.[0];
 
   return (
@@ -207,33 +213,36 @@ function MarketQuickViewContent() {
                       <SourceTag source={fromChain ? "chain" : "backend"} ledger={view?.ledger} readAt={fromChain ? chain.dataUpdatedAt : undefined} />
                     </div>
                     <p className="font-label-caps text-label-caps text-outline uppercase font-bold tracking-wider">YES price</p>
+                    {w24 && w24.points.length >= 2 && change !== null && (
+                      <>
+                        <p
+                          className={`text-[11px] font-data-mono font-bold ${trend === "up" ? "text-secondary" : trend === "down" ? "text-tertiary" : "text-outline"}`}
+                          title={`${w24.changeBps} bps across ${w24.trades} trade${w24.trades === 1 ? "" : "s"}`}
+                        >
+                          {trend === "up" ? "▲" : trend === "down" ? "▼" : "—"} {changePts} pts ({periodShort})
+                        </p>
+                        <p className="sr-only">
+                          YES {trend === "up" ? "rose" : trend === "down" ? "fell" : "was unchanged"} from{" "}
+                          {bpsToPercent(w24.points[0].yesBps)} to {bpsToPercent(w24.points[w24.points.length - 1].yesBps)} {periodText}{" "}
+                          across {w24.trades} trades.
+                        </p>
+                      </>
+                    )}
                     {view?.ledger != null && (
                       <p className="text-[11px] text-outline font-data-mono">as of ledger {view.ledger.toLocaleString()}</p>
                     )}
                   </div>
-                  {/* Sparkline Simulation */}
-                  <div className="h-16 relative w-full" aria-hidden="true" title="Illustration; price history isn't indexed yet">
-                    <svg className="w-full h-full text-secondary stroke-2 fill-none" viewBox="0 0 100 30" preserveAspectRatio="none">
-                      <path 
-                        d={sparklinePath} 
-                        stroke="currentColor" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth="2"
-                      />
-                      <defs>
-                        <linearGradient id="sparkline-gradient" x1="0" x2="0" y1="0" y2="1">
-                          <stop offset="0%" stopColor="currentColor" stopOpacity="0.1" />
-                          <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-                        </linearGradient>
-                      </defs>
-                      <path 
-                        d={`${sparklinePath} L100 30 L0 30 Z`} 
-                        fill="url(#sparkline-gradient)" 
-                        stroke="none"
-                      />
-                    </svg>
-                  </div>
+                  {w24 && w24.points.length >= 2 ? (
+                    <Sparkline
+                      points={w24.points}
+                      trend={trend}
+                      label={`YES price ${periodText}${changePts ? `: ${trend} ${changePts} points` : ""}, ${w24.trades} trades`}
+                    />
+                  ) : (
+                    <div className="h-16 w-full flex items-center justify-center rounded bg-surface-container">
+                      <p className="text-[11px] text-outline font-label-caps uppercase tracking-wider">Not enough history yet</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Trading Module */}
@@ -294,7 +303,7 @@ function MarketQuickViewContent() {
                         href={`/reasoning/verify?marketId=${market?.id ?? onChainMarketId}&onChainMarketId=${onChainMarketId}`}
                         className="inline-flex items-center gap-1 text-[11px] font-label-caps font-bold text-primary hover:underline"
                       >
-                        <span className="material-symbols-outlined text-xs">fact_check</span>
+                        <Icon name="verified" className="text-xs" />
                         Audit All Traces
                       </Link>
                     )}

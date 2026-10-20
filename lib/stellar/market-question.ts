@@ -144,7 +144,7 @@ export async function verifyMarketQuestion(input: MarketQuestionCheckInput): Pro
         committedQuestion: null,
         committedHash,
         computedHash: null,
-        reason: result.check.reason ?? "IPFS gateway unreachable or document unavailable",
+        reason: ("reason" in result.check && result.check.reason) || "IPFS gateway unreachable or document unavailable",
         metaUri,
       };
     }

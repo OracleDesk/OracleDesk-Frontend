@@ -84,7 +84,7 @@ export default function MarketTraceHistoryPage() {
             href={`/reasoning/verify?marketId=${marketId}&onChainMarketId=${marketId}`}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg font-label-caps text-xs font-bold hover:bg-primary/90 transition-all shadow-sm shrink-0"
           >
-            <span className="material-symbols-outlined text-sm">fact_check</span>
+            <Icon name="verified" className="text-sm" />
             Batch Audit Traces
           </Link>
         </div>

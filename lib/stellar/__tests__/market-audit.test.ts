@@ -82,7 +82,7 @@ describe("reconcileTraceWithBackend", () => {
   };
 
   it("reports no disagreements when on-chain and backend match", () => {
-    const backend: ReasoningTrace = {
+    const backend = ({
       id: "trace-uuid-1",
       onChainTraceId: "123",
       agentId: "agent-1",
@@ -95,7 +95,7 @@ describe("reconcileTraceWithBackend", () => {
       edge: 0.1,
       confidence: 0.8,
       createdAt: new Date().toISOString(),
-    };
+    } as unknown as ReasoningTrace);
 
     const result = reconcileTraceWithBackend(onChain, "verified", "aa".repeat(32), backend);
     expect(result.disagreements).toHaveLength(0);
@@ -110,7 +110,7 @@ describe("reconcileTraceWithBackend", () => {
   });
 
   it("CRITICAL: flags when backend claims verified: true but browser verification failed (mismatch)", () => {
-    const backend: ReasoningTrace = {
+    const backend = ({
       id: "trace-uuid-2",
       onChainTraceId: "123",
       agentId: "agent-1",
@@ -123,7 +123,7 @@ describe("reconcileTraceWithBackend", () => {
       edge: 0.15,
       confidence: 0.85,
       createdAt: new Date().toISOString(),
-    };
+    } as unknown as ReasoningTrace);
 
     // But local browser check computed a different hash!
     const result = reconcileTraceWithBackend(onChain, "mismatch", "ff".repeat(32), backend);
@@ -132,7 +132,7 @@ describe("reconcileTraceWithBackend", () => {
   });
 
   it("CRITICAL: flags when backend traceHash commitment differs from on-chain traceHash", () => {
-    const backend: ReasoningTrace = {
+    const backend = ({
       id: "trace-uuid-3",
       onChainTraceId: "123",
       agentId: "agent-1",
@@ -145,7 +145,7 @@ describe("reconcileTraceWithBackend", () => {
       edge: 0.05,
       confidence: 0.7,
       createdAt: new Date().toISOString(),
-    };
+    } as unknown as ReasoningTrace);
 
     const result = reconcileTraceWithBackend(onChain, "verified", "aa".repeat(32), backend);
     expect(result.isCriticalDisagreement).toBe(true);
@@ -153,7 +153,7 @@ describe("reconcileTraceWithBackend", () => {
   });
 
   it("flags CID disagreement when backend CID differs from on-chain CID", () => {
-    const backend: ReasoningTrace = {
+    const backend = ({
       id: "trace-uuid-4",
       onChainTraceId: "123",
       agentId: "agent-1",
@@ -166,7 +166,7 @@ describe("reconcileTraceWithBackend", () => {
       edge: 0.05,
       confidence: 0.7,
       createdAt: new Date().toISOString(),
-    };
+    } as unknown as ReasoningTrace);
 
     const result = reconcileTraceWithBackend(onChain, "verified", "aa".repeat(32), backend);
     expect(result.disagreements.some((d) => d.includes("CID mismatch"))).toBe(true);
@@ -267,7 +267,7 @@ describe("runMarketTraceAudit", () => {
     },
   };
 
-  const backendTraces: ReasoningTrace[] = [
+  const backendTraces = [
     {
       id: "b1",
       onChainTraceId: "1",
@@ -282,7 +282,7 @@ describe("runMarketTraceAudit", () => {
       confidence: 0.8,
       createdAt: new Date().toISOString(),
     },
-  ];
+  ] as unknown as ReasoningTrace[];
 
   it("runs bounded concurrency verification and produces completed audit summary", async () => {
     // Mock fetchImpl returning the exact bytes for trace 1
@@ -293,7 +293,7 @@ describe("runMarketTraceAudit", () => {
     const mockFetch = (async (url: string | URL | Request) => {
       const urlStr = url.toString();
       if (urlStr.includes("bafytrace1")) {
-        return new Response(contentBytes1, { status: 200 });
+        return new Response(contentBytes1 as BodyInit, { status: 200 });
       }
       return new Response("Not found", { status: 404 });
     }) as typeof fetch;

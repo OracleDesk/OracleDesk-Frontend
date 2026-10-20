@@ -14,6 +14,8 @@ export interface ReasoningSource {
 
 export interface ReasoningTrace {
   id: string;
+  agentId?: string;
+  action?: string;
   marketId: string;
   agentType: AgentType;
   decisionType: string;

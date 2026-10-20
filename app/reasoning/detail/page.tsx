@@ -76,7 +76,7 @@ function ReasoningTraceDetailContent() {
             href="/reasoning"
             className="flex items-center gap-1.5 text-primary hover:underline text-xs font-label-caps mb-2"
           >
-            <span className="material-symbols-outlined text-sm">arrow_back</span>
+            <Icon name="arrow_back" className="text-sm" />
             Back to Reasoning Feed
           </Link>
           <h1 className="font-headline-md text-headline-md text-on-surface">
@@ -188,7 +188,7 @@ function ReasoningTraceDetailContent() {
               Copy Trade (YES)
             </Link>
           </div>
-        )}
+        </div>
       </div>
 
       {isLoading && (

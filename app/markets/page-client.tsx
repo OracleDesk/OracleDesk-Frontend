@@ -7,7 +7,8 @@ import { useBurstFeed } from "@/lib/realtime/useBurst";
 import { formatFeedTime } from "@/lib/realtime/format";
 import { RealtimeProfiler } from "@/components/realtime-profiler";
 import Link from "next/link";
-import { useMarkets, useInfiniteMarkets } from "@/lib/hooks/useMarkets";
+import { useMarkets, useInfiniteMarkets, useMarketQuestionIntegrity } from "@/lib/hooks/useMarkets";
+import { QuestionVerificationBadge } from "@/components/question-verification-badge";
 import { useOnChainMarket, useOnChainMarkets, type OnChainMarketView } from "@/lib/hooks/useStellar";
 import type { Market, MarketStatus, MarketTracePreview } from "@/lib/api/markets";
 import { BACKEND_CATEGORIES, BACKEND_CATEGORY_LABELS } from "@/lib/stellar/categories";
@@ -118,6 +119,12 @@ const MarketCard = ({ href, category, onChainMarketId, reasoningTraces, expiry, 
   const aiSignal = latestTrace ? (latestTrace.edge > 0.05 ? "BULLISH" : latestTrace.edge < -0.05 ? "BEARISH" : "NEUTRAL") : "ANALYZING";
   const aiStatus = latestTrace ? `${Math.abs(latestTrace.edge * 100).toFixed(1)}% EDGE` : "STABLE";
   const volume24h = chainStatusLabel(view);
+  const questionIntegrity = useMarketQuestionIntegrity({
+    onChainMarketId: onChainMarketId === null ? null : String(onChainMarketId),
+    displayedQuestion: title,
+    metaUri: view?.market.meta_uri,
+    questionHash: view?.market.question_hash,
+  });
 
   const cardContent = (
     <>

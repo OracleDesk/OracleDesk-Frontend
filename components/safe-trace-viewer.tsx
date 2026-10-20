@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/ui/icon";
 
 import React, { useMemo, useState } from "react";
 import { validateTraceContent, type ValidatedTraceContent } from "@/lib/stellar/trace-schema";
@@ -37,7 +38,7 @@ export function SafeTraceViewer({
     return (
       <div className={`rounded-xl border border-error/30 bg-error-container/10 p-6 ${className}`}>
         <div className="flex items-center gap-3 text-error mb-2">
-          <span className="material-symbols-outlined">warning</span>
+          <Icon name="error" />
           <h4 className="font-headline-sm text-headline-sm">Trace Content Schema Error</h4>
         </div>
         <p className="text-body-md text-on-surface-variant mb-4">{validation.error}</p>
@@ -82,14 +83,12 @@ export function SafeTraceViewer({
             )}
             {verified ? (
               <span className="flex items-center gap-1 text-secondary text-label-caps font-label-caps font-bold">
-                <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  verified
-                </span>
+                <Icon name="verified" filled className="text-[16px]" />
                 Verified Content
               </span>
             ) : (
               <span className="flex items-center gap-1 text-on-surface-variant text-label-caps font-label-caps">
-                <span className="material-symbols-outlined text-[16px]">visibility</span>
+                <Icon name="search" className="text-[16px]" />
                 Preview Content
               </span>
             )}
@@ -106,7 +105,7 @@ export function SafeTraceViewer({
             className="px-3 py-1.5 bg-surface border border-outline-variant rounded font-label-caps text-xs text-on-surface hover:bg-surface-container transition-colors flex items-center gap-1.5"
             title="Copy sanitized JSON"
           >
-            <span className="material-symbols-outlined text-sm">{copied ? "check" : "content_copy"}</span>
+            <Icon name={copied ? "check" : "content_copy"} className="text-sm" />
             {copied ? "COPIED" : "COPY JSON"}
           </button>
         </div>
@@ -115,7 +114,7 @@ export function SafeTraceViewer({
       {/* Warnings Banner if any URLs or fields were filtered */}
       {warnings && warnings.length > 0 && (
         <div className="p-3 bg-amber-500/10 border-b border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2">
-          <span className="material-symbols-outlined text-sm mt-0.5 text-amber-600">info</span>
+          <Icon name="info" className="text-sm mt-0.5 text-amber-600" />
           <div>
             <span className="font-bold">Sanitization notes: </span>
             {warnings.join("; ")}
@@ -177,7 +176,7 @@ export function SafeTraceViewer({
       {data.reasoning && (
         <div className="p-6 border-b border-outline-variant">
           <h4 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-3 flex items-center gap-2">
-            <span className="material-symbols-outlined text-base">psychology</span>
+            <Icon name="psychology" className="text-base" />
             Reasoning & Analysis
           </h4>
           <div className="space-y-3 font-body-md text-on-surface leading-relaxed whitespace-pre-wrap break-words bg-surface-container-low/50 p-4 rounded-lg border border-outline-variant/50">
@@ -190,7 +189,7 @@ export function SafeTraceViewer({
       {data.sources.length > 0 && (
         <div className="p-6 border-b border-outline-variant">
           <h4 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4 flex items-center gap-2">
-            <span className="material-symbols-outlined text-base">balance</span>
+            <Icon name="balance" className="text-base" />
             Sources & Weighting ({data.sources.length})
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -230,7 +229,7 @@ export function SafeTraceViewer({
                       className="text-[11px] text-primary hover:underline flex items-center gap-1 font-label-caps"
                     >
                       <span>External Source</span>
-                      <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                      <Icon name="open_in_new" className="text-[13px]" />
                     </a>
                   </div>
                 )}
@@ -244,7 +243,7 @@ export function SafeTraceViewer({
       {data.conditions && data.conditions.length > 0 && (
         <div className="p-6 border-b border-outline-variant">
           <h4 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-3 flex items-center gap-2">
-            <span className="material-symbols-outlined text-base">verified_user</span>
+            <Icon name="verified_user" className="text-base" />
             Hedge & Execution Conditions
           </h4>
           <ul className="space-y-2">
@@ -253,7 +252,7 @@ export function SafeTraceViewer({
                 key={i}
                 className="text-xs text-on-surface bg-surface-container-low p-2.5 rounded border border-outline-variant/60 flex items-start gap-2"
               >
-                <span className="material-symbols-outlined text-secondary text-sm shrink-0 mt-0.5">check_circle</span>
+                <Icon name="check_circle" className="text-secondary text-sm shrink-0 mt-0.5" />
                 <span className="break-words">{cond}</span>
               </li>
             ))}
@@ -270,12 +269,10 @@ export function SafeTraceViewer({
             className="w-full flex items-center justify-between text-left font-label-caps text-xs text-on-surface-variant hover:text-on-surface transition-colors"
           >
             <span className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-sm">data_object</span>
+              <Icon name="code" className="text-sm" />
               Additional Fields (Inert Data)
             </span>
-            <span className="material-symbols-outlined text-sm">
-              {showRaw ? "expand_less" : "expand_more"}
-            </span>
+            <Icon name={showRaw ? "expand_less" : "expand_more"} className="text-sm" />
           </button>
 
           {showRaw && (

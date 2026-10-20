@@ -194,6 +194,7 @@ describe("tx-tracker pure functions", () => {
       ["stellar", "markets"],
       ["stellar", "position", "42", holder],
       ["stellar", "usdcBalance", holder],
+      ["stellar", "equity", holder],
     ]);
   });
 });
