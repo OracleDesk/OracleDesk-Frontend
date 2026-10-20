@@ -179,6 +179,24 @@ through [`lib/format/money.ts`](lib/format/money.ts):
   heuristic, rename the identifier or add
   `// eslint-disable-next-line no-restricted-syntax -- not money: <reason>`.
 
+## Dialogs
+
+Modal flows (market quick-view, copy-trade, premium checkout, and trace verification) must use the accessible primitive in `components/ui/dialog.tsx`:
+- Always wrap modal content in `Dialog`, `DialogContent`, and provide an accessible name via `DialogTitle` (use `className="sr-only"` if visually redundant) and `DialogDescription`.
+- Choose the appropriate initial focus using `initialFocusRef` (e.g. amount input or primary action control).
+- Announce transaction lifecycle states and settled quotes politely via `components/ui/live-region.tsx` (`<LiveRegion message="..." />`) without announcing in-progress or raw URLs.
+- Mark simulated or blurred background elements as `aria-hidden="true"` and `inert` to keep them out of the accessibility tree and tab order.
+- Block dismissals (Escape or outside click) during active transaction submissions to prevent accidental orphan states, and announce the reason why.
+
+## Navigation and routes
+
+The site header navigation routes are declared in a single source of truth: `components/layout/nav-items.ts` (`NAV_ITEMS`).
+- Any new primary route or nested route section must be added to `NAV_ITEMS`.
+- Active styling is computed using `isActive(item, pathname)`.
+- The single exact link carrying `aria-current="page"` is resolved using `activeHref(pathname)`. Exact child matches take precedence over section parent links.
+- Desktop dropdown navigation is powered by Radix `NavigationMenu` (disclosure navigation with keyboard arrow navigation and Escape support).
+- Mobile navigation is rendered by `MobileNav.tsx` using Radix `Dialog` as an accessible sheet that traps focus and auto-closes on route changes.
+
 ## Never commit secrets
 
 No `.env*` files (only `.env.example`), no Stellar secret seeds (`S…`), no
@@ -186,3 +204,4 @@ API keys. Every `NEXT_PUBLIC_*` variable ends up in browser JavaScript, so a
 secret must never go in one. If you commit a secret by accident, tell a
 maintainer privately (see [SECURITY.md](SECURITY.md)) so it can be rotated;
 removing it in a later commit is not enough.
+
