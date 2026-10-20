@@ -102,6 +102,15 @@ new checklist in [manual-test.md](manual-test.md).
 
 Node v24.13.1, npm 11.8.0 (CI: Node 22 via `.nvmrc`), Next.js 16.2.6 (Turbopack), React 19.2.4, TypeScript 5.9.3, `@tanstack/react-query` 5.100.10, `@stellar/stellar-sdk` 16.3.1, `@creit.tech/stellar-wallets-kit` 2.5.0 (pinned exactly), Vitest 5.0.3, gitleaks 8.30.1, Stellar CLI 27.1.0. Contracts submodule at `OracleDesk-SmartContract@eb5f3fd` (that repo's `main` HEAD).
 
+## Coordinated Stellar SDK 17 & Wallets Kit Upgrade (Issue #142)
+
+The app pins `@stellar/stellar-sdk` to 16.3.1 and `@creit.tech/stellar-wallets-kit` to 2.5.0 to ensure XDR class identity and avoid duplicate SDK installations in the bundle.
+- **CI Guard**: `npm run check:sdk` runs in CI and fails if multiple versions of `@stellar/stellar-sdk` exist in `package-lock.json` or if the app's SDK major deviates from the bindings or wallet kit declared major.
+- **Upstream Coordination Order**:
+  1. In `OracleDesk-SmartContract`: Pin a Stellar CLI version targeting SDK 17, regenerate bindings (`make bindings`), and export `bindings-package.json`.
+  2. Bump the `contracts` submodule pointer in this repo and run `npm run sync:bindings`.
+  3. Upgrade `@stellar/stellar-sdk` to 17.x and `@creit.tech/stellar-wallets-kit` to the matching release in `package.json`, then run `npm run check:sdk`.
+
 ## Phases
 
 | Phase | Status | Evidence |

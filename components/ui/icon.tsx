@@ -35,6 +35,8 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Eye,
+  EyeOff,
   Filter,
   Gem,
   Globe,
@@ -152,6 +154,8 @@ export const ICONS = {
   trending_up: TrendingUp,
   verified: BadgeCheck,
   verified_user: ShieldCheck,
+  visibility: Eye,
+  visibility_off: EyeOff,
   workspace_premium: Award,
 } as const;
 

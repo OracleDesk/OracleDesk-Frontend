@@ -3,7 +3,8 @@ import { Icon } from "@/components/ui/icon";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { usePortfolio, usePositions } from "@/lib/hooks/usePortfolio";
-import { useMyPositions } from "@/lib/hooks/useMyPositions";
+import { useAddressPositions, useMyPositions } from "@/lib/hooks/useMyPositions";
+import { useViewedAddress } from "@/lib/hooks/useViewedAddress";
 import {
   floatUsdcToRaw,
   formatBps,
@@ -13,7 +14,9 @@ import {
   ratioBps,
 } from "@/lib/format/money";
 import { useTreasuryValuation } from "@/lib/portfolio/useValuation";
-import { formatUsdc } from "@/lib/stellar/units";
+import { formatUsdc, shortAddress } from "@/lib/stellar/units";
+import { SourceTag } from "@/components/ui/source-tag";
+import deployments from "@/lib/stellar/generated/deployments.testnet.json";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useRedeemAll, type PreparedWriteReview } from "@/lib/hooks/useStellar";
 import { shouldSkipTxReview, TxReview, TxReviewPreferenceControl } from "@/components/tx-review";
@@ -205,7 +208,16 @@ export default function PortfolioPage() {
   const { data: summary, isLoading: isSummaryLoading } = usePortfolio();
   const { data: positionsData, isLoading: isPositionsLoading } = usePositions({ status });
   const positions = positionsData?.positions ?? [];
-  const treasuryValuation = useTreasuryValuation(positions);
+  const rawTreasuryValuation = useTreasuryValuation(positions);
+  const treasuryValuation = {
+    ...rawTreasuryValuation,
+    basis: rawTreasuryValuation.mode,
+    setBasis: rawTreasuryValuation.setMode,
+  };
+  const { viewed, isWatching, setWatch, clearWatch } = useViewedAddress();
+  const [watchInput, setWatchInput] = useState("");
+  const activeHolder = viewed ?? wallet.address;
+  const addressPositions = useAddressPositions(activeHolder);
   const myPositions = useMyPositions();
   const currentRedeemIds = new Set(redeemBatch.discovery?.redeemables.map((item) => item.marketId.toString()) ?? []);
   const currentRedeemed = redeemBatch.discovery?.redeemables.filter(
@@ -335,16 +347,30 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* User's own on-chain positions (issue #50), read from ledger entries */}
-      <section className="mb-8" aria-labelledby="my-positions-title">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      {/* Per-address on-chain positions (issue #141 & #50), read from ledger entries */}
+      <section className="mb-8" aria-labelledby="address-positions-title">
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 id="my-positions-title" className="font-headline-sm text-headline-sm text-on-background">My positions</h2>
+            <div className="flex items-center gap-2">
+              <h2 id="address-positions-title" className="font-headline-sm text-headline-sm text-on-background">
+                Positions for {activeHolder ? shortAddress(activeHolder, 6, 4) : "Address"}
+              </h2>
+              {isWatching && (
+                <span className="rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                  Watching
+                </span>
+              )}
+              {activeHolder && activeHolder === deployments.agent && (
+                <span className="rounded-full bg-secondary/10 text-secondary border border-secondary/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                  Treasury Agent
+                </span>
+              )}
+            </div>
             <p className="text-[11px] font-medium text-on-surface-variant">
-              From your wallet&apos;s market-core ledger entries · not the agent&apos;s book
+              Read directly from market-core ledger entries on Stellar Testnet · not the agent&apos;s book
             </p>
           </div>
-          {wallet.isConnected && (
+          {wallet.isConnected && activeHolder === wallet.address && (
             <button
               type="button"
               onClick={() => setExportOpen(true)}
@@ -355,32 +381,100 @@ export default function PortfolioPage() {
             </button>
           )}
         </div>
-        <div className="rounded-xl border border-outline-variant bg-white shadow-sm">
+
+        {/* Address Input & Quick Picks */}
+        <div className="bg-surface-container-low border border-outline-variant rounded-xl p-4 mb-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = watchInput.trim();
+              if (!trimmed) return;
+              if (setWatch(trimmed)) {
+                setWatchInput("");
+              }
+            }}
+            className="flex flex-col sm:flex-row gap-2 mb-3"
+          >
+            <input
+              type="text"
+              placeholder="Watch an address (G... or C...)"
+              value={watchInput}
+              onChange={(e) => setWatchInput(e.target.value)}
+              className="flex-1 bg-white border border-outline-variant rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button
+              type="submit"
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-xs font-bold font-label-caps hover:brightness-110 transition-all shrink-0"
+            >
+              Watch
+            </button>
+          </form>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-[11px] text-on-surface-variant font-medium">Quick picks:</span>
+            {wallet.isConnected && wallet.address && (
+              <button
+                type="button"
+                onClick={() => { if (wallet.address) setWatch(wallet.address); }}
+                className={`px-2.5 py-1 rounded border text-xs transition-colors ${
+                  activeHolder === wallet.address && !isWatching
+                    ? "bg-primary text-primary-foreground border-primary font-bold"
+                    : "bg-white border-outline-variant hover:border-primary text-on-surface"
+                }`}
+              >
+                My Wallet ({shortAddress(wallet.address, 4, 4)})
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setWatch(deployments.agent)}
+              className={`px-2.5 py-1 rounded border text-xs transition-colors ${
+                activeHolder === deployments.agent
+                  ? "bg-primary text-primary-foreground border-primary font-bold"
+                  : "bg-white border-outline-variant hover:border-primary text-on-surface"
+              }`}
+            >
+              Treasury Agent ({shortAddress(deployments.agent, 4, 4)})
+            </button>
+            {isWatching && (
+              <button
+                type="button"
+                onClick={clearWatch}
+                className="px-2.5 py-1 rounded border border-outline-variant bg-white hover:bg-error-container hover:text-on-error-container text-xs text-on-surface-variant transition-colors"
+              >
+                Clear watch
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Positions Table */}
+        <div className="rounded-xl border border-outline-variant bg-white shadow-sm overflow-hidden">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-variant px-6 py-3">
             <span className="font-label-caps text-label-caps text-outline">MARKET VALUE</span>
-            <span className="font-data-mono text-data-mono text-on-background">
-              {myPositions.isLoading ? "Scanning ledger…" : formatUsdcDisplay(myPositions.totalValueRaw)}
+            <span className="font-data-mono text-data-mono text-on-background flex items-center gap-1.5">
+              {addressPositions.isLoading ? "Scanning ledger…" : formatUsdcDisplay(addressPositions.totalValueRaw)}
+              <SourceTag source="chain" />
             </span>
           </div>
-          {myPositions.error ? (
-            <p className="px-6 py-8 text-center text-sm text-error" role="alert">{myPositions.error}</p>
-          ) : !wallet.isConnected ? (
+          {addressPositions.error ? (
+            <p className="px-6 py-8 text-center text-sm text-error" role="alert">{addressPositions.error}</p>
+          ) : !activeHolder ? (
             <p className="px-6 py-8 text-center text-sm text-on-surface-variant">
-              Connect a Stellar wallet to see your on-chain positions.
+              Connect a Stellar wallet or enter an address above to inspect on-chain positions.
             </p>
-          ) : myPositions.isLoading ? (
+          ) : addressPositions.isLoading ? (
             <p className="px-6 py-8 text-center text-sm text-on-surface-variant" role="status">
               Reading Position entries from the market-core contract…
             </p>
-          ) : myPositions.rows.length === 0 ? (
+          ) : addressPositions.rows.length === 0 ? (
             <p className="px-6 py-8 text-center text-sm text-on-surface-variant">
-              {myPositions.totalMarkets === undefined || myPositions.totalMarkets === 0n
+              {addressPositions.totalMarkets === undefined || addressPositions.totalMarkets === 0n
                 ? "No on-chain markets exist yet."
-                : "Your wallet holds no position shares on-chain."}
+                : "This address holds no position shares on-chain."}
             </p>
           ) : (
             <ul className="divide-y divide-outline-variant">
-              {myPositions.rows.map((row) => {
+              {addressPositions.rows.map((row) => {
                 const settled = row.settlement !== null;
                 return (
                   <li key={row.marketId.toString()} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-6 py-3">
@@ -400,15 +494,18 @@ export default function PortfolioPage() {
                     <span className="font-data-mono text-data-mono font-semibold text-on-background">
                       {row.valueRaw === null ? "—" : `${formatUsdc(row.valueRaw, { maxDecimals: 2, grouping: true })} USDC`}
                     </span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                      row.settlement === "yes" || row.settlement === "no"
-                        ? "bg-secondary-container text-on-secondary-container"
-                        : row.settlement === "void"
-                          ? "bg-surface-container-highest text-on-surface-variant"
-                          : "bg-primary-container text-on-primary-container"
-                    }`}>
-                      {settled ? `Settled · ${row.settlement}` : "Open"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        row.settlement === "yes" || row.settlement === "no"
+                          ? "bg-secondary-container text-on-secondary-container"
+                          : row.settlement === "void"
+                            ? "bg-surface-container-highest text-on-surface-variant"
+                            : "bg-primary-container text-on-primary-container"
+                      }`}>
+                        {settled ? `Settled · ${row.settlement}` : "Open"}
+                      </span>
+                      <SourceTag source="chain" />
+                    </div>
                     {row.archived && (
                       <span className="font-data-mono text-[10px] text-outline">archived</span>
                     )}
@@ -417,12 +514,17 @@ export default function PortfolioPage() {
               })}
             </ul>
           )}
-          {myPositions.scanLimited && (
+          {addressPositions.scanLimited && (
             <p className="border-t border-outline-variant px-6 py-2 text-xs text-on-surface-variant">
               The scan limit was reached; the newest markets were checked first.
             </p>
           )}
         </div>
+        {isWatching && (
+          <p className="text-[11px] text-on-surface-variant mt-2 italic">
+            Note: Trade and transaction history isn&apos;t available for watched addresses yet.
+          </p>
+        )}
       </section>
 
       {/* J4: Unified Gateway Balance Widget */}

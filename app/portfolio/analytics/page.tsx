@@ -20,6 +20,7 @@ import type { LedgerEntry } from "@/lib/portfolio/equity";
 import { getMarketByOnChainId } from "@/lib/api/markets";
 import { explorerTx } from "@/lib/stellar/config";
 import { bpsToPercent, formatUsdc, usdcToNumber } from "@/lib/stellar/units";
+import { ExportHistoryDialog } from "@/components/portfolio/export-history-dialog";
 
 const RANGES: { label: string; seconds: number }[] = [
   { label: "1D", seconds: 86_400 },
@@ -75,6 +76,7 @@ const StateCard = ({ children }: { children: React.ReactNode }) => (
 export default function PortfolioAnalytics() {
   const { address, openModal } = useWallet();
   const [rangeS, setRangeS] = useState(86_400);
+  const [exportOpen, setExportOpen] = useState(false);
   const equity = useEquity(rangeS);
 
   if (!address) {
@@ -287,8 +289,8 @@ export default function PortfolioAnalytics() {
                 </table>
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
         <ExportHistoryDialog open={exportOpen} onClose={() => setExportOpen(false)} />
       </main>
     </div>

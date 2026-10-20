@@ -12,6 +12,7 @@ import { getMarketByOnChainId, getResolution } from "@/lib/api/markets";
 import { ApiError } from "@/lib/api/client";
 import { useOnChainMarket, usePosition } from "@/lib/hooks/useStellar";
 import { useWalletAddress } from "@/lib/contexts/WalletContext";
+import { useViewedAddress } from "@/lib/hooks/useViewedAddress";
 import { floatUsdcToRaw, formatBps, formatUsdcDisplay } from "@/lib/format/money";
 import { formatUsdc, bpsToPercent } from "@/lib/stellar/units";
 import { useRecentPriceWindow } from "@/lib/hooks/usePriceHistory";
@@ -20,6 +21,7 @@ import { MIN_TX_TIMEOUT_S, SAFETY_MARGIN_S } from "@/lib/stellar/deadline";
 import { TradeTape } from "@/components/market/trade-tape";
 import { BuyTicket } from "@/components/market/buy-ticket";
 import { DevProfiler } from "@/lib/dev/profiler";
+import { ledgerClock, useLedgerClock } from "@/lib/stellar/ledger-clock";
 import { PushVerifiedStatus } from "@/components/push-verified-status";
 import { SourceTag } from "@/components/ui/source-tag";
 import {
@@ -93,7 +95,9 @@ function MarketQuickViewContent() {
   });
 
   const { address } = useWalletAddress();
-  const position = usePosition(onChainMarketId, address);
+  const { viewed } = useViewedAddress();
+  const activeHolder = viewed ?? address;
+  const position = usePosition(onChainMarketId, activeHolder);
   const ledger = useLedgerClock();
   const [side, setSide] = useState<"Yes" | "No">(initialSide);
   const view = chain.data;

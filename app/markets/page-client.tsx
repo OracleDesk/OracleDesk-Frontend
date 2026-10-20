@@ -99,15 +99,12 @@ interface MarketCardProps {
   reasoningTraces?: MarketTracePreview[];
   expiry: string;
   title: string;
-  backendYesProb: number | null;
+  backendYesProb?: number | null;
   backendLiquidity: string | null;
-  marketId?: string;
-  metaUri?: string | null;
-  questionHash?: string | null;
-  disableEntrance?: boolean;
   marketId?: string | null;
   metaUri?: string | null;
   questionHash?: string | null;
+  disableEntrance?: boolean;
 }
 
 const MarketCard = ({ href, category, onChainMarketId, reasoningTraces, expiry, title, backendYesProb, backendLiquidity, disableEntrance, marketId, metaUri, questionHash }: MarketCardProps) => {
@@ -126,12 +123,6 @@ const MarketCard = ({ href, category, onChainMarketId, reasoningTraces, expiry, 
   const aiSignal = latestTrace ? (latestTrace.edge > 0.05 ? "BULLISH" : latestTrace.edge < -0.05 ? "BEARISH" : "NEUTRAL") : "ANALYZING";
   const aiStatus = latestTrace ? `${Math.abs(latestTrace.edge * 100).toFixed(1)}% EDGE` : "STABLE";
   const volume24h = chainStatusLabel(view);
-  const questionIntegrity = useMarketQuestionIntegrity({
-    onChainMarketId: onChainMarketId === null ? null : String(onChainMarketId),
-    displayedQuestion: title,
-    metaUri: view?.market.meta_uri,
-    questionHash: view?.market.question_hash,
-  });
 
   const questionIntegrity = useMarketQuestionIntegrity({
     marketId,

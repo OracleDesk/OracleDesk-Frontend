@@ -29,6 +29,10 @@ import {
 import { useTxTracker } from "@/lib/stellar/tx-tracker";
 import { tradeInvalidationKeys } from "@/lib/stellar/tx-tracker-core";
 import { CONTRACTS, NETWORK_PASSPHRASE } from "@/lib/stellar/config";
+import { useContractIntegrity, type ContractKey } from "@/lib/stellar/contract-check";
+import { assertCanWrite } from "@/lib/stellar/write-guard";
+import { useViewedAddress } from "@/lib/hooks/useViewedAddress";
+import type { ViewedAddress } from "@/lib/stellar/identity";
 
 import { preflightBuy, preflightRedeem, type Preflight, type PreflightFailure, type PreflightInput } from "@/lib/stellar/preflight";
 import { getSubmitQueue } from "@/lib/stellar/submit-queue";
@@ -333,14 +337,14 @@ function positionOptions(client: ReturnType<typeof useQueryClient>, id: bigint |
     refetchIntervalInBackground: false,
   };
 }
-export function usePosition(id: bigint | string | null | undefined, holder: string | null | undefined) {
+export function usePosition(id: bigint | string | null | undefined, holder: ViewedAddress | string | null | undefined) {
   const client = useQueryClient();
   return useQuery({ ...positionOptions(client, id, holder), select: (data: Stamped<Position>) => data.value });
 }
-export function usePositionState(id: bigint | string | null | undefined, holder: string | null | undefined) {
+export function usePositionState(id: bigint | string | null | undefined, holder: ViewedAddress | string | null | undefined) {
   return useQuery(positionOptions(useQueryClient(), id, holder));
 }
-function balanceOptions(client: ReturnType<typeof useQueryClient>, owner: string | null | undefined) {
+function balanceOptions(client: ReturnType<typeof useQueryClient>, owner: ViewedAddress | string | null | undefined) {
   const queryKey = stellarKeys.balance(owner ?? "");
   return {
     queryKey,
@@ -355,10 +359,10 @@ function balanceOptions(client: ReturnType<typeof useQueryClient>, owner: string
     refetchIntervalInBackground: false,
   };
 }
-export function useUsdcBalance(owner: string | null | undefined) {
+export function useUsdcBalance(owner: ViewedAddress | string | null | undefined) {
   return useQuery({ ...balanceOptions(useQueryClient(), owner), select: (data: Stamped<bigint>) => data.value });
 }
-export function useUsdcBalanceState(owner: string | null | undefined) {
+export function useUsdcBalanceState(owner: ViewedAddress | string | null | undefined) {
   return useQuery(balanceOptions(useQueryClient(), owner));
 }
 
@@ -669,35 +673,33 @@ export function useVerifiedTrace(onChainTraceId: bigint | string | null | undefi
 
 // ─── Writes ─────────────────────────────────────────────────────────────────
 
-function useWriteGuard(): () => Signer {
+export function useWriteGuard(): (target?: ContractKey | "usdc") => Signer {
   const signer = useWalletSigner();
   const { isWrongNetwork } = useWalletNetwork();
   const queryClient = useQueryClient();
   const updatePending = useUpdatePending();
-  // The guard's identity is stable, so the write hooks don't get a new
-  // mutation function on every wallet change.
-  return useCallback(() => {
-    // Never sign with an outdated bundle (stale contract ids or slippage logic).
-    if (updatePending) {
-      throw new UserFacingError({ kind: "unknown", message: "Reload to update OracleDesk before signing." });
-    }
-    if (!signer) {
-      throw new UserFacingError({ kind: "disconnected", message: "Connect your wallet first." });
-    }
-    if (isWrongNetwork) {
-      throw new UserFacingError({ kind: "wrong-network", message: "Switch your wallet to Stellar Testnet and try again." });
-    }
-    // An unfunded account has no ledger entry, so building any transaction
-    // from it would fail with a raw SDK error. Refuse here, in plain words.
-    const account = queryClient.getQueryData<AccountReserveState>(stellarKeys.account(signer.publicKey));
-    if (account && !account.funded) {
-      throw new UserFacingError({
-        kind: "account-not-found",
-        message: "Your Stellar account isn't activated yet. Fund it with XLM first.",
+  const { data: integrity } = useContractIntegrity();
+  const { isWatching, viewed } = useViewedAddress();
+
+  return useCallback(
+    (target: ContractKey | "usdc" = "marketCore") => {
+      const account = queryClient.getQueryData<AccountReserveState>(
+        signer ? stellarKeys.account(signer.publicKey) : [],
+      );
+      assertCanWrite({
+        signer,
+        isWrongNetwork,
+        isWatching,
+        watchedAddress: viewed,
+        updatePending,
+        accountFunded: account ? account.funded : undefined,
+        integrity: integrity ?? null,
+        target,
       });
-    }
-    return signer;
-  }, [signer, isWrongNetwork, queryClient, updatePending]);
+      return signer!;
+    },
+    [signer, isWrongNetwork, isWatching, viewed, queryClient, updatePending, integrity],
+  );
 }
 
 export function useInvalidateAfterTrade() {
@@ -1534,7 +1536,7 @@ export function useUsdcTransfer() {
 
   const mutation = useMutation({
     mutationFn: ({ to, amount, followUp, review }: UsdcTransferParams) => withPinnedRpc(async () => {
-      const signer = guard();
+      const signer = guard("usdc");
       if (amount <= 0n) throw new UserFacingError({ kind: "contract", message: "Enter an amount greater than zero." });
 
       await requireUsdcTrustline(signer.publicKey);

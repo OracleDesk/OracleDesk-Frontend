@@ -15,6 +15,7 @@ import { confirmCopyTrade, initiateCopyTrade } from "@/lib/api/trade";
 import { ApiError } from "@/lib/api/client";
 import { useMarket } from "@/lib/hooks/useMarkets";
 import { useBuy, useQuoteBuy, useUsdcBalance, useAccountReserve, usePrepareBuy, useOnChainMarket, fetchOnChainMarketBySimulation, useUsdcTrustline, useEnableUsdc, useUsdcBalanceState, type PreparedWriteReview } from "@/lib/hooks/useStellar";
+import { useViewedAddress } from "@/lib/hooks/useViewedAddress";
 import { explorerTx } from "@/lib/stellar/config";
 import { formatUsdc, formatXlm, minOut, bpsToPercent, probabilityToBps, tryParseUsdc, BPS } from "@/lib/stellar/units";
 import { chooseCollateral, maxCollateralForEdge, quoteCopy, type CopyMarket, type CopyQuote, type SizingMode } from "@/lib/stellar/quote";
@@ -122,6 +123,7 @@ function CopyTradeContent() {
   const onChainMarketId = market?.onChainMarketId ?? null;
   const onChainMarket = useOnChainMarket(onChainMarketId);
 
+  const { viewed, isWatching } = useViewedAddress();
   const balance = useUsdcBalance(address);
   const balanceState = useUsdcBalanceState(address);
   const ledger = useLedgerNow();
@@ -480,6 +482,11 @@ function CopyTradeContent() {
             </div>
 
             <div className="space-y-3">
+              {isWatching && !isConnected && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 font-medium">
+                  Watching with no wallet connected. Connect your own wallet to size allocations and trade.
+                </div>
+              )}
               <div className="flex justify-between items-end flex-wrap gap-2">
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase text-[10px]">Amount to copy</label>
                 <span className="font-data-mono text-data-mono text-primary font-bold text-xs sm:text-sm">
@@ -498,6 +505,7 @@ function CopyTradeContent() {
                     type="button"
                     role="radio"
                     aria-checked={sizingKind === option.kind}
+                    disabled={isWatching && !isConnected}
                     onClick={() => setSizingKind(option.kind)}
                     className={`px-3 py-2 text-[11px] font-bold border rounded transition-all ${
                       sizingKind === option.kind
@@ -517,10 +525,11 @@ function CopyTradeContent() {
                     inputMode="decimal"
                     autoComplete="off"
                     value={fixedInput}
+                    disabled={isWatching && !isConnected}
                     onChange={(e) => setFixedInput(e.target.value)}
                     placeholder="e.g. 25"
                     aria-invalid={fixedInput.trim() !== "" && fixedAmount === null}
-                    className="w-full border border-outline-variant rounded px-3 py-2 font-data-mono text-sm bg-white"
+                    className="w-full border border-outline-variant rounded px-3 py-2 font-data-mono text-sm bg-white disabled:opacity-50"
                   />
                   {fixedInput.trim() !== "" && fixedAmount === null && (
                     <p className="text-[11px] text-error">Enter an amount like 10 or 2.5 (up to 7 decimal places).</p>
@@ -543,10 +552,11 @@ function CopyTradeContent() {
                   inputMode="decimal"
                   autoComplete="off"
                   value={capInput}
+                  disabled={isWatching && !isConnected}
                   onChange={(e) => setCapInput(e.target.value)}
                   placeholder="No cap"
                   aria-invalid={capInput.trim() !== "" && userCap === null}
-                  className="w-full border border-outline-variant rounded px-3 py-2 font-data-mono text-sm bg-white"
+                  className="w-full border border-outline-variant rounded px-3 py-2 font-data-mono text-sm bg-white disabled:opacity-50"
                 />
                 {capInput.trim() !== "" && userCap === null && (
                   <p className="text-[11px] text-error">Enter an amount like 10 or 2.5.</p>
@@ -748,15 +758,19 @@ function CopyTradeContent() {
                   disabled={
                     isSubmitting ||
                     buy.isPending ||
+                    isWatching ||
                     !side ||
                     edgeBlocked ||
                     (thinEdge && !acknowledgeThinEdge) ||
                     (isConnected && isUnfunded) ||
                     (isConnected && isInsufficientXlm)
                   }
+                  aria-describedby={isWatching ? "watching-copy-desc" : undefined}
                 >
                   <Icon name="bolt" className="text-xl" />
-                  {isSubmitting || buy.isPending
+                  {isWatching
+                    ? "Watching. Connect your own wallet to trade."
+                    : isSubmitting || buy.isPending
                     ? (buy.phase.name === "awaiting-signature" ? "Signing…" : "Submitting…")
                     : isUnfunded
                     ? "Fund Account"
@@ -765,6 +779,11 @@ function CopyTradeContent() {
                     : "Confirm Copy Trade"}
                 </button>
               </div>
+              {isWatching && (
+                <p id="watching-copy-desc" className="sr-only">
+                  You are viewing another address in watch-only mode. Connect your own wallet to copy trades.
+                </p>
+              )}
               <p className="text-center font-body-md text-body-md text-on-surface-variant text-xs">
                 Your wallet signs a buy on the OracleDesk market contract on Stellar Testnet. The trade fails instead of filling below the slippage limit.
               </p>

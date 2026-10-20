@@ -116,8 +116,6 @@ export interface PaymentEvent {
   /** Backend verification state; absent on the unlock receipt shape. */
   status?: "PENDING" | "CONFIRMED" | "FAILED" | string;
   createdAt: string;
-  amount?: number;
-  status?: "PENDING" | "CONFIRMED" | "FAILED";
   confirmedAt?: string | null;
 }
 

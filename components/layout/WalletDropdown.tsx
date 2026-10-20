@@ -4,6 +4,7 @@ import { Icon } from "@/components/ui/icon";
 import React, { useState } from "react";
 import { DropdownMenu as DM } from "radix-ui";
 import { useWalletActions, useWalletAddress, useWalletNetwork, useWalletSession } from "@/lib/contexts/WalletContext";
+import { useViewedAddress } from "@/lib/hooks/useViewedAddress";
 import { useAccountReserve, useEnableUsdc, useRpcNetwork, useUsdcBalance, useUsdcTrustline, useUsdcBalanceState } from "@/lib/hooks/useStellar";
 import { NETWORK_LABEL, NETWORK_PASSPHRASE, TESTNET_PASSPHRASE, explorerAccount } from "@/lib/stellar/config";
 import { PendingValue } from "@/components/pending-value";
@@ -12,6 +13,7 @@ import { formatUsdc, formatXlm, shortAddress } from "@/lib/stellar/units";
 
 const WalletDropdownBody = () => {
   const { address, isConnected } = useWalletAddress();
+  const { isWatching, viewed, clearWatch } = useViewedAddress();
   const { isWrongNetwork } = useWalletNetwork();
   const { isConnecting, error } = useWalletSession();
   const { openModal, disconnect } = useWalletActions();
@@ -191,6 +193,21 @@ const WalletDropdownBody = () => {
                 </div>
               </a>
             </DM.Item>
+
+            {isWatching && viewed && (
+              <DM.Item
+                onSelect={() => clearWatch()}
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-surface-container focus:bg-surface-container rounded-lg transition-colors group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Icon name="visibility_off" className="text-on-surface-variant group-hover:text-primary group-focus:text-primary" />
+                <div className="text-left">
+                  <span className="block text-sm font-bold text-on-surface">Stop watching</span>
+                  <span className="block text-[10px] text-on-surface-variant font-data-mono">
+                    Viewing {shortAddress(viewed, 6, 4)}
+                  </span>
+                </div>
+              </DM.Item>
+            )}
 
             <DM.Separator className="h-px bg-outline-variant my-1 mx-2" />
 

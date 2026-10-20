@@ -163,6 +163,10 @@ export default function ReasoningFeedPage() {
   } = useInfiniteTraces();
   const traces = useMemo(() => mergeTracePages(data?.pages.map((page) => page.traces) ?? []), [data]);
   const totalCount = data?.pages[0]?.meta?.total ?? traces.length;
+  const { address } = useWallet();
+  const cart = useUnlockCart(address);
+  const quotedPassRaw = traces.find((t) => /^\d+$/.test(t.dailyPassPriceRaw ?? ""))?.dailyPassPriceRaw;
+  const dailyPassPriceRaw = quotedPassRaw ? BigInt(quotedPassRaw) : DAILY_PASS_PRICE_RAW;
 
   return (
     <main className="pt-24 pb-12 px-gutter max-w-container-max-width mx-auto">

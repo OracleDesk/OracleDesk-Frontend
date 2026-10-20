@@ -28,6 +28,7 @@ import {
   useUsdcTrustline,
 } from "@/lib/hooks/useStellar";
 import { useWalletActions, useWalletAddress, useWalletNetwork } from "@/lib/contexts/WalletContext";
+import { useViewedAddress } from "@/lib/hooks/useViewedAddress";
 import { useSettings } from "@/lib/settings/useSettings";
 import { explorerTx } from "@/lib/stellar/config";
 import { MIN_TX_TIMEOUT_S, SAFETY_MARGIN_S } from "@/lib/stellar/deadline";
@@ -105,13 +106,15 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
   const { settings } = useSettings(address);
   const slippageBps = settings.slippageBps;
 
+  const { viewed, isWatching } = useViewedAddress();
+  const activeHolder = viewed ?? address;
   const chain = useOnChainMarket(onChainMarketId);
   const view = chain.data;
-  const position = usePosition(onChainMarketId, address);
-  const balance = useUsdcBalance(address);
+  const position = usePosition(onChainMarketId, activeHolder);
+  const balance = useUsdcBalance(activeHolder);
   const reserve = useAccountReserve(address);
-  const positionState = usePositionState(onChainMarketId, address);
-  const balanceState = useUsdcBalanceState(address);
+  const positionState = usePositionState(onChainMarketId, activeHolder);
+  const balanceState = useUsdcBalanceState(activeHolder);
   const config = useMarketConfig();
   const ledgerNow = useLedgerNow();
   const ledger = useLedgerClock();
@@ -348,13 +351,17 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
           onClick={handleBuy}
           disabled={
             buy.isPending ||
+            isWatching ||
             (isConnected && !isOpen) ||
             (isConnected && isUnfunded) ||
             (isConnected && isInsufficientXlm)
           }
+          aria-describedby={isWatching ? "watching-trade-explanation" : undefined}
           className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-label-caps text-label-caps font-bold disabled:opacity-50"
         >
-          {!isConnected
+          {isWatching
+            ? "Watching. Connect your own wallet to trade."
+            : !isConnected
             ? "Connect"
             : buy.isPending
             ? (buy.phase.name === "awaiting-signature" ? "Signing…" : "Buying…")
@@ -365,6 +372,11 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
             : `Buy ${side.toUpperCase()}`}
         </button>
       </div>
+      {isWatching && (
+        <p id="watching-trade-explanation" className="sr-only">
+          You are viewing another address in watch-only mode. Connect your own wallet to trade.
+        </p>
+      )}
       <div className="flex justify-between text-[11px] font-data-mono text-on-surface-variant">
         <span>
           {amountRaw === null
@@ -438,7 +450,7 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
       {trustlineUnauthorized && <p className="text-[11px] text-error">The issuer hasn&apos;t authorized your USDC trustline.</p>}
       {position.data && (position.data.yes > 0n || position.data.no > 0n || positionState.data?.provisional || positionState.data?.awaitingRpc) && (
         <p className="text-[11px] font-data-mono text-on-surface">
-          Your position: {formatUsdc(position.data.yes, { maxDecimals: 2 })} YES · {formatUsdc(position.data.no, { maxDecimals: 2 })} NO
+          {isWatching ? "Watched position:" : "Your position:"} {formatUsdc(position.data.yes, { maxDecimals: 2 })} YES · {formatUsdc(position.data.no, { maxDecimals: 2 })} NO
           <PendingValue state={positionState.data} fallback={<SourceTag source="chain" ledger={view?.ledger} readAt={chain.dataUpdatedAt} />} />
         </p>
       )}

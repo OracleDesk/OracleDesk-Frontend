@@ -197,11 +197,25 @@ The site header navigation routes are declared in a single source of truth: `com
 - Desktop dropdown navigation is powered by Radix `NavigationMenu` (disclosure navigation with keyboard arrow navigation and Escape support).
 - Mobile navigation is rendered by `MobileNav.tsx` using Radix `Dialog` as an accessible sheet that traps focus and auto-closes on route changes.
 
-## Never commit secrets
+## Bumping the contracts submodule
 
-No `.env*` files (only `.env.example`), no Stellar secret seeds (`S…`), no
-API keys. Every `NEXT_PUBLIC_*` variable ends up in browser JavaScript, so a
-secret must never go in one. If you commit a secret by accident, tell a
-maintainer privately (see [SECURITY.md](SECURITY.md)) so it can be rotated;
-removing it in a later commit is not enough.
+When the contracts repository changes:
+
+1. Update the pinned submodule:
+   ```bash
+   git -C contracts checkout <commit-or-tag>
+   npm run sync:bindings
+   ```
+2. Run the interface change report:
+   ```bash
+   npm run spec:diff
+   ```
+   This decodes embedded contract specifications from both the base branch and the new bindings, producing a structured diff of functions, types, error codes, and events.
+
+### Clearing CI spec-diff failures
+
+- **Uncovered Contract Errors**: If a new contract error code was added without a friendly user-facing message, add an entry describing it to `FRIENDLY` in `lib/stellar/errors.ts` (or add it to `UNFRIENDLY_ALLOWLIST` with justification if it is internal/admin-only).
+- **Breaking Call-Site References**: If a contract function was removed or its signature changed, update the calling code in `lib/`, `app/`, `components/`, or `e2e/` so no dead or mismatched invocations remain.
+- **Renumbered Error Codes**: Renumbering existing error codes breaks client-side error mapping and is rejected. Coordinate with contract maintainers to deprecate rather than renumber codes.
+- **Event Changes**: Changes to `Trade` or `TracePublished` events flag a requirement for backend indexer review.
 

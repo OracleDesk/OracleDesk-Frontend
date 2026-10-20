@@ -61,9 +61,21 @@ export const FRIENDLY: Record<string, string> = {
   DailyCapExceeded: "The treasury has reached its daily limit.",
   InsufficientBalance: "You don't have enough USDC for this.",
   // resolver
+  MarketAlreadyConfigured: "This market's resolution rule has already been configured.",
   MarketNotConfigured: "This market's resolution rule hasn't been revealed yet.",
   SpecHashMismatch: "That resolution rule doesn't match what this market committed to.",
   DisputeWindowOpen: "The dispute window is still open.",
+  InvalidPrice: "The oracle returned an invalid price for this asset.",
+  NotSigner: "Your wallet isn't one of this market's signers.",
+  AlreadyAttested: "You've already attested this outcome for this market.",
+  ThresholdNotReached: "Not enough signers have attested this outcome yet.",
+  DisputeActive: "A dispute is active for this market's resolution.",
+  NoProposal: "There's no resolution proposal for this market yet.",
+  AlreadyFinalized: "This market has already been finalized.",
+  MarketNotClosed: "This market hasn't closed yet.",
+  WrongMode: "This action doesn't match this market's resolution mode.",
+  StalePrice: "The price feed is too stale to resolve this market.",
+  PriceUnavailable: "No price is available to resolve this market yet.",
   // reasoning-registry
   TraceNotFound: "This reasoning trace isn't on-chain.",
   AgentAlreadyRegistered: "This agent is already registered.",
@@ -74,7 +86,12 @@ export const FRIENDLY: Record<string, string> = {
   // shared across contracts
   NotInitialized: "This contract hasn't been initialized yet.",
   InvalidFee: "Fees can be at most 10% (1000 bps).",
+  InvalidProbability: "Initial probabilities must add up to 100%.",
+  InvalidCloseTime: "The market's close time must be in the future.",
 };
+
+export const FRIENDLY_NAMES = Object.keys(FRIENDLY) as readonly string[];
+export const UNFRIENDLY_ALLOWLIST = ["NotInitialized", "InvalidConfig"] as const;
 
 import type { rpc } from "@stellar/stellar-sdk";
 
