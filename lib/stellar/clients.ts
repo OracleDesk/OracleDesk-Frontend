@@ -7,6 +7,7 @@ import { Client as ResolverClient } from "./generated/resolver";
 import { Client as ReasoningRegistryClient } from "./generated/reasoning-registry";
 import { CONTRACTS, NETWORK_PASSPHRASE, RPC_URL, RPC_URLS } from "./config";
 import { getRpcPool, type RpcPool } from "./rpc-pool";
+import { assertRpcNetwork } from "./rpc-network-guard";
 
 /** What a wallet provides to sign. Omit it for read-only simulation. */
 export interface Signer {
@@ -31,7 +32,17 @@ const servers = new Map<string, rpc.Server>();
 export function rpcServer(url: string = currentRpcUrl()): rpc.Server {
   let server = servers.get(url);
   if (!server) {
-    server = new rpc.Server(url, { allowHttp: url.startsWith("http://") });
+    const raw = new rpc.Server(url, { allowHttp: url.startsWith("http://") });
+    server = new Proxy(raw, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value !== "function") return value;
+        return (...args: unknown[]) => {
+          if (property !== "getNetwork") assertRpcNetwork();
+          return value.apply(target, args);
+        };
+      },
+    });
     servers.set(url, server);
   }
   return server;

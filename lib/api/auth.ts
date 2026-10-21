@@ -2,6 +2,9 @@ import { apiClient, clearAuthSession, getStoredSessionWallet, getStoredToken, st
 import { validateSEP10Challenge, type SEP10ValidationError } from "@/lib/stellar/sep10-validator";
 import { isTokenExpired, getTokenTTL, getReAuthPromise, setReAuthPromise, isReAuthInFlight, waitForReAuth } from "./jwt-manager";
 import { broadcastSessionChange } from "./cross-tab-sync";
+import { TransactionBuilder } from "@stellar/stellar-sdk";
+import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
+import { NetworkMismatchError } from "@/lib/stellar/network-check";
 
 export interface AuthSession {
   token: string;
@@ -21,8 +24,9 @@ export async function requestChallenge(address: string) {
   return data;
 }
 
-export async function verifyChallenge(address: string, signed: string) {
+export async function verifyChallenge(address: string, signed: string, isCurrent: () => boolean = () => true) {
   const { data } = await apiClient.post<AuthSession>("/auth/verify", { address, signed });
+  if (!isCurrent() || data.walletAddress !== address) throw new Error("Your account changed; sign in again.");
   storeAuthSession(data);
   broadcastSessionChange(data.token, data.walletAddress);
   return data;
@@ -33,7 +37,7 @@ export async function verifyChallenge(address: string, signed: string) {
  * Throws if the challenge is invalid or expired.
  */
 export function validateChallenge(challenge: AuthChallenge): SEP10ValidationError | null {
-  return validateSEP10Challenge(challenge, challenge.networkPassphrase);
+  return validateSEP10Challenge(challenge, NETWORK_PASSPHRASE);
 }
 
 /**
@@ -46,8 +50,16 @@ export function validateChallenge(challenge: AuthChallenge): SEP10ValidationErro
 export async function signInWithWallet(
   address: string,
   signTransaction: (xdr: string, networkPassphrase: string) => Promise<string>,
+  isCurrent: () => boolean = () => true,
 ): Promise<AuthSession> {
   const challenge = await requestChallenge(address);
+
+  if (challenge.networkPassphrase !== NETWORK_PASSPHRASE) {
+    throw new NetworkMismatchError(NETWORK_PASSPHRASE, challenge.networkPassphrase);
+  }
+  // XDR does not itself encode a passphrase; parsing here ensures the envelope
+  // is valid, and the exact advertised passphrase check above binds the hash.
+  TransactionBuilder.fromXDR(challenge.transaction, NETWORK_PASSPHRASE);
 
   // Validate challenge before signing
   const validationError = validateChallenge(challenge);
@@ -55,8 +67,10 @@ export async function signInWithWallet(
     throw new Error(`Invalid SEP-10 challenge: ${validationError.message}`);
   }
 
+  if (!isCurrent()) throw new Error("Your account changed; sign in again.");
   const signed = await signTransaction(challenge.transaction, challenge.networkPassphrase);
-  return verifyChallenge(address, signed);
+  if (!isCurrent()) throw new Error("Your account changed; sign in again.");
+  return verifyChallenge(address, signed, isCurrent);
 }
 
 /**

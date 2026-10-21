@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, type ApiRequestOptions } from "./client";
 import type { MarketCategory, PaginationMeta, SettlementCurrency } from "./markets";
 
 export type AgentType = "MARKET_MAKER" | "TRADER";
@@ -176,20 +176,20 @@ export function validatePaymentEvents(rawList: unknown): {
   return { events, invalidCount };
 }
 
-export async function listTraces(params: ListTracesParams = {}) {
-  const { data, meta } = await apiClient.get<ReasoningTrace[]>("/traces", { ...params });
+export async function listTraces(params: ListTracesParams = {}, options?: ApiRequestOptions) {
+  const { data, meta } = await apiClient.get<ReasoningTrace[]>("/traces", { ...params }, options);
   return { traces: data, meta: isPaginationMeta(meta) ? meta : undefined };
 }
 
-export async function getTrace(id: string) {
-  const { data } = await apiClient.get<ReasoningTrace>(`/traces/${id}`);
+export async function getTrace(id: string, options?: ApiRequestOptions) {
+  const { data } = await apiClient.get<ReasoningTrace>(`/traces/${id}`, undefined, options);
   return data;
 }
 
-export async function verifyTrace(traceId: string) {
+export async function verifyTrace(traceId: string, options?: ApiRequestOptions) {
   const { data } = await apiClient.post<TraceVerification>("/traces/verify", {
     traceId,
-  });
+  }, undefined, options);
 
   return data;
 }
@@ -202,11 +202,11 @@ export const DAILY_PASS_TRACE_PLACEHOLDER = "00000000-0000-0000-0000-00000000000
  * the backend the transaction hash; it verifies the transfer on-chain.
  * Per-trace unlocks go through the x402 service instead.
  */
-export async function unlockDailyPass(traceId: string, txHash: string, amountRaw: string) {
+export async function unlockDailyPass(traceId: string, txHash: string, amountRaw: string, options?: ApiRequestOptions) {
   const { data } = await apiClient.post<{
     subscription: unknown;
     trace: ReasoningTrace | null;
-  }>(`/traces/${traceId}/unlock`, { txHash, amountRaw, type: "DAILY_PASS" satisfies UnlockType });
+  }>(`/traces/${traceId}/unlock`, { txHash, amountRaw, type: "DAILY_PASS" satisfies UnlockType }, undefined, options);
 
   return data;
 }
@@ -220,8 +220,8 @@ export function activateDailyPass(txHash: string, amountRaw: string) {
   return unlockDailyPass(DAILY_PASS_TRACE_PLACEHOLDER, txHash, amountRaw);
 }
 
-export async function getSpendingAllowance() {
-  const { data } = await apiClient.get<SpendingAllowance | null>("/traces/access/allowance");
+export async function getSpendingAllowance(options?: ApiRequestOptions) {
+  const { data } = await apiClient.get<SpendingAllowance | null>("/traces/access/allowance", undefined, options);
   return data;
 }
 
@@ -229,20 +229,20 @@ export async function setSpendingAllowance(allowance: {
   dailyLimit: number;
   perTraceLimit: number;
   currency?: SettlementCurrency;
-}) {
-  const { data } = await apiClient.put<SpendingAllowance>("/traces/access/allowance", allowance);
+}, options?: ApiRequestOptions) {
+  const { data } = await apiClient.put<SpendingAllowance>("/traces/access/allowance", allowance, options);
   return data;
 }
 
-export async function getPaymentEventsWithValidation(): Promise<{
+export async function getPaymentEventsWithValidation(options?: ApiRequestOptions): Promise<{
   events: PaymentEvent[];
   invalidCount: number;
 }> {
-  const { data } = await apiClient.get<unknown>("/traces/payments");
+  const { data } = await apiClient.get<unknown>("/traces/payments", undefined, options);
   return validatePaymentEvents(data);
 }
 
-export async function getPaymentEvents(): Promise<PaymentEvent[]> {
-  const { events } = await getPaymentEventsWithValidation();
+export async function getPaymentEvents(options?: ApiRequestOptions): Promise<PaymentEvent[]> {
+  const { events } = await getPaymentEventsWithValidation(options);
   return events;
 }

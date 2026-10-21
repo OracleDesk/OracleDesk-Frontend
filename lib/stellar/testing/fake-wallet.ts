@@ -14,6 +14,12 @@ export const declinedSigner: Signer = {
 };
 
 const disconnected: WalletContextValue = {
+  walletNetwork: { state: "unknown", confirmedByUser: false },
+  rpcNetwork: { status: "ok", protocolVersion: 23 },
+  networkEpoch: 0,
+  confirmUnknownNetwork: () => {},
+  retryRpcNetwork: async () => ({ status: "ok", protocolVersion: 23 }),
+  assertNetworkCurrent: () => {},
   address: null,
   isConnected: false,
   isConnecting: false,
@@ -30,6 +36,7 @@ const disconnected: WalletContextValue = {
 
 const connected: WalletContextValue = {
   ...disconnected,
+  walletNetwork: { state: "match" },
   address: FAKE_ADDRESS,
   isConnected: true,
   walletNetworkPassphrase: "Test SDF Network ; September 2015",

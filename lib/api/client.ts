@@ -1,3 +1,17 @@
+import type { UserScope } from "@/lib/query/scope";
+
+export interface ApiRequestOptions { expectScope?: UserScope; signal?: AbortSignal }
+const sessionListeners = new Set<() => void>();
+const authInvalidListeners = new Set<() => void>();
+export function onAuthSessionChanged(listener: () => void) {
+  sessionListeners.add(listener);
+  return () => { sessionListeners.delete(listener); };
+}
+export function onAuthInvalid(listener: () => void) {
+  authInvalidListeners.add(listener);
+  return () => { authInvalidListeners.delete(listener); };
+}
+
 export interface ApiErrorPayload {
   code: string;
   message: string;
@@ -47,9 +61,10 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://oracledesk-ba
 const TOKEN_KEY = "oracledesk_token";
 const USER_ID_KEY = "oracledesk_user_id";
 const WALLET_KEY = "oracledesk_wallet";
+const SESSION_KEY = "oracledesk_session_id";
 
 function getBrowserStorage() {
-  return typeof window === "undefined" ? null : window.localStorage;
+  try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; }
 }
 
 function buildUrl(path: string, params?: QueryParams) {
@@ -70,11 +85,25 @@ export function getStoredToken() {
   return getBrowserStorage()?.getItem(TOKEN_KEY) ?? null;
 }
 
+export function getStoredSessionId() {
+  if (!getStoredToken()) return null;
+  const storage = getBrowserStorage();
+  // Upgrade sessions saved before scope ids existed without putting JWTs in keys.
+  let id = storage?.getItem(SESSION_KEY) ?? null;
+  if (!id && storage && typeof storage.setItem === "function") {
+    try { id = crypto.randomUUID(); storage.setItem(SESSION_KEY, id); }
+    catch { return null; }
+  }
+  return id;
+}
+
 export function storeAuthSession(session: { token: string; userId: string; walletAddress: string }) {
   const storage = getBrowserStorage();
   storage?.setItem(TOKEN_KEY, session.token);
   storage?.setItem(USER_ID_KEY, session.userId);
   storage?.setItem(WALLET_KEY, session.walletAddress);
+  storage?.setItem(SESSION_KEY, crypto.randomUUID());
+  sessionListeners.forEach((listener) => listener());
 }
 
 /** Wallet address the stored session belongs to, if any. */
@@ -88,14 +117,27 @@ export function clearAuthSession() {
   storage?.removeItem(TOKEN_KEY);
   storage?.removeItem(USER_ID_KEY);
   storage?.removeItem(WALLET_KEY);
+  storage?.removeItem(SESSION_KEY);
+  sessionListeners.forEach((listener) => listener());
 }
 
 async function request<T>(
   path: string,
   init: RequestInit = {},
   params?: QueryParams,
+  options: ApiRequestOptions = {},
 ): Promise<ApiResponse<T>> {
+  const assertScope = () => {
+    const expected = options.expectScope;
+    if (expected && (expected.sessionId !== getStoredSessionId() ||
+        (expected.sessionId !== null && expected.wallet !== getStoredSessionWallet()))) {
+      throw new ApiError({ code: "SCOPE_CHANGED", message: "Your account changed; this result was not applied." }, 0);
+    }
+    options.signal?.throwIfAborted();
+  };
+  assertScope();
   const token = getStoredToken();
+  const requestSessionId = getStoredSessionId();
   const headers = new Headers(init.headers);
 
   if (!headers.has("Content-Type") && init.body) {
@@ -110,6 +152,7 @@ async function request<T>(
   try {
     response = await fetch(buildUrl(path, params), {
       ...init,
+      signal: options.signal ?? init.signal,
       headers,
     });
   } catch (error) {
@@ -128,10 +171,13 @@ async function request<T>(
 
   const envelope = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
   const apiError = envelope?.error;
+  // An old response (including a 401) must never affect a newer session.
+  assertScope();
 
   if (!response.ok || envelope?.ok === false) {
-    if (apiError?.code === "TOKEN_EXPIRED") {
+    if (token && token === getStoredToken() && requestSessionId === getStoredSessionId() && ["TOKEN_EXPIRED", "INVALID_TOKEN", "UNAUTHORIZED"].includes(apiError?.code ?? "")) {
       clearAuthSession();
+      authInvalidListeners.forEach((listener) => listener());
     }
 
     throw new ApiError(
@@ -156,36 +202,36 @@ async function request<T>(
  */
 export function isAuthError(error: unknown): boolean {
   if (error instanceof ApiError) {
-    return error.code === "TOKEN_EXPIRED" || error.code === "UNAUTHORIZED" || error.status === 401;
+    return error.code === "TOKEN_EXPIRED" || error.code === "INVALID_TOKEN" || error.code === "UNAUTHORIZED" || error.status === 401;
   }
   return false;
 }
 
 export const apiClient = {
-  get<T>(path: string, params?: QueryParams) {
-    return request<T>(path, { method: "GET" }, params);
+  get<T>(path: string, params?: QueryParams, options?: ApiRequestOptions) {
+    return request<T>(path, { method: "GET" }, params, options);
   },
 
-  post<T>(path: string, body?: unknown, headers?: HeadersInit) {
+  post<T>(path: string, body?: unknown, headers?: HeadersInit, options?: ApiRequestOptions) {
     return request<T>(path, {
       method: "POST",
       body: body === undefined ? undefined : JSON.stringify(body),
       headers,
-    });
+    }, undefined, options);
   },
 
-  put<T>(path: string, body?: unknown) {
+  put<T>(path: string, body?: unknown, options?: ApiRequestOptions) {
     return request<T>(path, {
       method: "PUT",
       body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    }, undefined, options);
   },
 
-  patch<T>(path: string, body?: unknown) {
+  patch<T>(path: string, body?: unknown, options?: ApiRequestOptions) {
     return request<T>(path, {
       method: "PATCH",
       body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    }, undefined, options);
   },
   delete<T>(path: string) {
     return request<T>(path, { method: "DELETE" });

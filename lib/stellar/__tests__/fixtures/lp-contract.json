@@ -1,0 +1,7 @@
+{
+  "source": "OracleDesk-SmartContract@eb5f3fdaf00a39dabd7e7d41eb84e6d2c1940551",
+  "method": "Python model/fpmm_model.py seed_reserves and settle_value; inputs from Rust create_market_sets_initial_price and void_market_allows_creator_to_claim_pool_remainder",
+  "seed6800": { "amount": "1000000000", "initialYesBps": "6800", "reserveYes": "470588235", "reserveNo": "1000000000", "creatorYes": "529411765", "creatorNo": "0", "voidPayout": "735294117" },
+  "void5000": { "amount": "1000000000", "initialYesBps": "5000", "reserveYes": "1000000000", "reserveNo": "1000000000", "creatorYes": "0", "creatorNo": "0", "voidPayout": "1000000000" },
+  "oddVoid": { "reserveYes": "3", "reserveNo": "4", "payout": "3" }
+}

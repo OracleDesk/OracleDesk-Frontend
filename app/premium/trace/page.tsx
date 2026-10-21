@@ -8,7 +8,7 @@ import { useWallet } from "@/lib/contexts/WalletContext";
 import { usePaymentEvents, useTrace, useUnlockTrace } from "@/lib/hooks/useTraces";
 import { useAccountReserve, usePrepareUsdcTransfer, useUsdcTransfer } from "@/lib/hooks/useStellar";
 import type { PaymentEvent, TraceAccessLevel } from "@/lib/api/traces";
-import { PAYMENTS_RECIPIENT, X402_URL, explorerTx } from "@/lib/stellar/config";
+import { PAYMENTS_RECIPIENT, X402_URL, explorerTx, NETWORK_LABEL } from "@/lib/stellar/config";
 import { formatUsdc, formatXlm, parseUsdc } from "@/lib/stellar/units";
 import type { TxPhase } from "@/lib/stellar/tx-lifecycle";
 import type { ReviewModel } from "@/lib/stellar/tx-decode";
@@ -164,7 +164,7 @@ function UnlockPremiumTraceContent() {
     }
     if (!isConnected && !(await openModal())) return;
     if (isWrongNetwork) {
-      setStatusMessage("Switch your wallet to Stellar Testnet to buy a daily pass.");
+      setStatusMessage(`Switch your wallet to ${NETWORK_LABEL} to buy a daily pass.`);
       return;
     }
     setIsSubmitting(true);
@@ -352,7 +352,7 @@ function UnlockPremiumTraceContent() {
                   Connect your wallet to pay. Your wallet signs the transfer; OracleDesk never signs for you.
                 </p>
               )}
-              {isWrongNetwork && <p className="text-xs text-error">Switch your wallet to Stellar Testnet to pay.</p>}
+              {isWrongNetwork && <p className="text-xs text-error">Switch your wallet to {NETWORK_LABEL} to pay.</p>}
               {isConnected && isUnfunded && (
                 <p className="text-xs text-error font-medium" role="alert">
                   Fund this account with XLM first.

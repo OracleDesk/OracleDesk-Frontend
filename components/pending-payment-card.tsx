@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { terminalMessage } from "@/lib/payments/classify";
 import type { PendingPayment } from "@/lib/payments/pending";
-import { explorerTx } from "@/lib/stellar/config";
+import { explorerTx, NETWORK_LABEL } from "@/lib/stellar/config";
 import { formatUsdc } from "@/lib/stellar/units";
 
 interface PendingPaymentCardProps {
@@ -56,7 +56,7 @@ export function PendingPaymentCard({ payment, busy, wrongNetwork, onRetry, onDis
     body = terminalMessage(payment.lastError?.code ?? "UNKNOWN");
   }
   if (wrongNetwork && !failed) {
-    body = "Switch your wallet to Stellar Testnet to finish activating.";
+    body = `Switch your wallet to ${NETWORK_LABEL} to finish activating.`;
   }
 
   return (

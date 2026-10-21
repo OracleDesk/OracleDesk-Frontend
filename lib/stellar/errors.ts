@@ -2,6 +2,7 @@ import { Errors as MarketCoreErrors } from "./generated/market-core";
 import { Errors as TreasuryErrors } from "./generated/treasury";
 import { Errors as ResolverErrors } from "./generated/resolver";
 import { Errors as ReasoningRegistryErrors } from "./generated/reasoning-registry";
+import { NETWORK_LABEL } from "./config";
 
 export type ContractName = "marketCore" | "treasury" | "resolver" | "reasoningRegistry";
 
@@ -145,6 +146,7 @@ function safeJson(v: unknown): string {
 
 /** Turns anything thrown by the SDK, a binding or a wallet into a message for the user. */
 export function describeError(err: unknown, contract: ContractName = "marketCore"): DescribedError {
+  if (err instanceof UserFacingError) return err.described;
   const text = textOf(err);
 
   if (classifySequenceError(err)) {
@@ -211,8 +213,11 @@ export function describeError(err: unknown, contract: ContractName = "marketCore
   if (/op_low_reserve|txInsufficientBalance|tx_insufficient_balance/i.test(text)) {
     return { kind: "insufficient-xlm", message: "You don't have enough spendable XLM to pay the network fee." };
   }
+  if (err instanceof Error && err.name === "NetworkMismatchError") {
+    return { kind: "wrong-network", message: err.message };
+  }
   if (/wrong network|network mismatch/i.test(text)) {
-    return { kind: "wrong-network", message: "Switch your wallet to Stellar Testnet and try again." };
+    return { kind: "wrong-network", message: `Switch your wallet to ${NETWORK_LABEL} and try again.` };
   }
   // Admin-gated contract calls (e.g. market-core's require_admin) fail auth
   // for any non-admin signer; name this distinctly from a wallet rejection.

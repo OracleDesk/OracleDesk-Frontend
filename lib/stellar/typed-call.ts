@@ -4,6 +4,7 @@ import type { AssembledTransaction, Result } from "@stellar/stellar-sdk/contract
 import type { ContractName } from "./errors";
 import { describeError, UserFacingError } from "./errors";
 import type { marketCore, reasoningRegistry } from "./clients";
+import { assertRpcNetwork, rpcNetworkEpoch } from "./rpc-network-guard";
 
 /**
  * Converts a byte buffer (Buffer or Uint8Array) into a lowercase hex string.
@@ -70,8 +71,12 @@ export async function submit<Tx extends AssembledTransaction<any>>(
 ): Promise<{ value: Unwrapped<TxValue<Tx>>; txHash: string | null; ledger: number | null }> {
   // Surface simulation failures before asking the wallet to sign.
   read(tx, contract);
+  const epoch = rpcNetworkEpoch();
   try {
-    const sent = await tx.signAndSend();
+    assertRpcNetwork(epoch);
+    await tx.sign();
+    assertRpcNetwork(epoch);
+    const sent = await tx.send();
     const value = sent.result as unknown;
     // Single documented cast at the boundary where the SDK's SentTransaction.result is loosely typed.
     let unwrapped: unknown = value;

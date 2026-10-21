@@ -68,6 +68,17 @@ Needs `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` set and this origin allowed in the 
 
 ## 6. See your balance
 
+- [ ] Start a copy-trade quote, switch Freighter to Mainnet while its signature
+  prompt is open, wait for the network check (or return to the tab), and approve.
+  The app refuses submission and purges old chain results. No buy is sent.
+- [ ] Use a wallet that cannot report its network. The menu says **Network:
+  unknown**; signing is blocked until **I confirm my wallet is on Stellar Testnet**
+  is selected. Disconnect and reconnect: confirmation is required again.
+- [ ] Point the configured RPC at a different network. A non-dismissable banner
+  blocks reads/signing. Restore the RPC and click **Retry network check**.
+- [ ] Return a login challenge with a different network passphrase. Sign-in
+  explains the server mismatch without opening a wallet signature prompt.
+
 - [ ] Open the wallet menu (top right). It says **Stellar Testnet** and shows **100.00 USDC**.
 - [ ] Switch Freighter to Mainnet: the menu shows **Wrong network** in red. Switch back to Testnet.
 - [ ] "Copy address" copies your G-address; "View on Stellar Expert" opens your testnet account page.
@@ -99,6 +110,23 @@ To try the same on market 0 (resolved): the buy button is disabled and the panel
 - [ ] On the same page: "Your position: N YES · 0 NO" with a `chain` tag.
 - [ ] The YES price moved up from 50%.
 
+## 8a. Claim the pool remainder
+
+- [ ] Create a market with `seed-market.sh` using your own tester key as creator.
+  Open its quick view with the same wallet. **Your market liquidity** shows
+  on-chain reserves, an explicitly estimated value while Open, and fees labelled
+  as going to the treasury. Other wallets and treasury-created markets have no
+  creator panel. Seed figures appear only when the backend metadata exactly
+  reproduces the on-chain initial reserves and sets minted.
+- [ ] While Open, **Claim pool remainder** is disabled. Have a maintainer resolve
+  or void the market, then refresh. Claimable USDC equals the winning reserve
+  (or floor of half the reserve sum for Void); it excludes fees.
+- [ ] Claim, approve the wallet prompt, and follow the transaction link. The
+  panel changes to **Claimed**, balances refresh, and claiming again is refused.
+  An empty final pool can still be claimed to mark it settled with a zero payout.
+- [ ] Redeem ordinary seed YES/NO shares separately. A pool claim does not redeem
+  positions or sweep treasury fees.
+
 ## 9. Verify a trace
 
 - [ ] Open `http://localhost:3000/reasoning/verify?onChainTraceId=1` and click **Begin verification**.
@@ -120,6 +148,13 @@ To try the same on market 0 (resolved): the buy button is disabled and the panel
 - [ ] Verify the same fee preview, spendable XLM display, and blocking warnings appear on `/copy-trade` (next to slippage text) and `/premium` (in the checkout modal above the pay button).
 
 ## Also worth clicking
+
+- [ ] Copy a trade while blocking `/trade/copy/*/confirm` in DevTools. The buy
+  succeeds and the unconfirmed-trades panel retains its hash. Reload onto
+  `/portfolio`, unblock the route, and verify the trade becomes recorded
+  without a second buy or signature. Expire the JWT during recording: only the
+  explicit sign-in button should request one new login. Switch wallets during
+  reconciliation: the old wallet's entries disappear and never use the new JWT.
 
 - [ ] `/premium` → **Get a daily pass** → **Pay with wallet**. Freighter shows a USDC `transfer` to the treasury (`CBTFA3EP…`) for 0.50 USDC. After approval the backend verifies it on-chain and says the pass is active. Note: until `PAYMENTS_RECIPIENT` is decided, this payment becomes treasury trading capital (see docs/STATUS.md).
 - [ ] `/copy-trade?marketId=<backend market id>&traceId=<trace id>`: the side comes from the trace's edge. With no trace or zero edge the confirm button is disabled and the page explains why.

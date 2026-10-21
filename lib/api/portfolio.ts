@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, type ApiRequestOptions } from "./client";
 import type { MarketCategory, SettlementCurrency } from "./markets";
 
 export interface PortfolioSummary {
@@ -57,13 +57,13 @@ export interface ListPositionsParams {
   limit?: number;
 }
 
-export async function getPortfolio() {
-  const { data } = await apiClient.get<PortfolioSummary>("/portfolio");
+export async function getPortfolio(options?: ApiRequestOptions) {
+  const { data } = await apiClient.get<PortfolioSummary>("/portfolio", undefined, options);
   return data;
 }
 
-export async function getPositions(params: ListPositionsParams = {}) {
-  const { data, meta } = await apiClient.get<Position[]>("/portfolio/positions", { ...params });
+export async function getPositions(params: ListPositionsParams = {}, options?: ApiRequestOptions) {
+  const { data, meta } = await apiClient.get<Position[]>("/portfolio/positions", { ...params }, options);
   return { positions: data, meta };
 }
 

@@ -1,5 +1,5 @@
-import { rpc } from "@stellar/stellar-sdk";
-import { RPC_URL } from "./config";
+import type { rpc } from "@stellar/stellar-sdk";
+import { rpcServer } from "./clients";
 import { API_URL } from "@/lib/api/client";
 
 /**
@@ -65,7 +65,7 @@ export function nextBackoff(failures: number, baseMs: number, maxMs: number): nu
 }
 
 export async function probeRpc(
-  server: rpc.Server = new rpc.Server(RPC_URL, { allowHttp: RPC_URL.startsWith("http://") }),
+  server: rpc.Server = rpcServer(),
   previous: { latestLedger: number | null; checkedAt: number } | null = null,
   now: number = Date.now(),
 ): Promise<RpcHealth> {

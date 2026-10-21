@@ -1,4 +1,5 @@
-import type { rpc, xdr } from "@stellar/stellar-sdk";
+import { Address, rpc, xdr } from "@stellar/stellar-sdk";
+import { rpcServer } from "./clients";
 import type { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import {
   describeError,
@@ -9,6 +10,35 @@ import {
 } from "./errors";
 
 export type { TxDescribedError };
+
+export type TxCheck =
+  | { kind: "success"; ledger: number; envelope: xdr.TransactionEnvelope; returnValue?: xdr.ScVal }
+  | { kind: "failed"; resultCode: string }
+  | { kind: "not-found" };
+
+export async function checkTransaction(hash: string): Promise<TxCheck> {
+  const result = await rpcServer().getTransaction(hash);
+  if (result.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+    return { kind: "success", ledger: result.ledger, envelope: result.envelopeXdr, returnValue: result.returnValue };
+  }
+  if (result.status === rpc.Api.GetTransactionStatus.FAILED) {
+    return { kind: "failed", resultCode: result.resultXdr.result().switch().name };
+  }
+  return { kind: "not-found" };
+}
+
+/** Only a single contract invocation can be reconciled as a copy buy. */
+export function decodeInvoke(envelope: xdr.TransactionEnvelope): { contractId: string; fn: string; args: xdr.ScVal[] } | null {
+  try {
+    const operations = envelope.switch().name === "envelopeTypeTx" ? envelope.v1().tx().operations() :
+      envelope.switch().name === "envelopeTypeTxFeeBump" ? envelope.feeBump().tx().innerTx().v1().tx().operations() : [];
+    if (operations.length !== 1 || operations[0].body().switch().name !== "invokeHostFunction") return null;
+    const host = operations[0].body().invokeHostFunctionOp().hostFunction();
+    if (host.switch().name !== "hostFunctionTypeInvokeContract") return null;
+    const invoke = host.invokeContract();
+    return { contractId: Address.fromScAddress(invoke.contractAddress()).toString(), fn: invoke.functionName().toString(), args: invoke.args() };
+  } catch { return null; }
+}
 
 export type TxPhase =
   | { name: "building" }
@@ -101,6 +131,7 @@ export class TxLifecycle<T> {
     tx: AssembledTransaction<T>,
     parse: (v: xdr.ScVal | undefined) => T,
     onHash?: (hash: string) => void,
+    beforeSubmit?: () => void | Promise<void>,
   ): Promise<{ value: T; txHash: string; ledger: number }> {
     // 1. Simulating
     this.setPhase({ name: "simulating" });
@@ -118,6 +149,7 @@ export class TxLifecycle<T> {
     this.setPhase({ name: "awaiting-signature" });
     try {
       await tx.sign();
+      await beforeSubmit?.();
     } catch (err) {
       const described: TxDescribedError = describeError(err, this.contract);
       this.setPhase({ name: "failed", hash: null, error: described });
