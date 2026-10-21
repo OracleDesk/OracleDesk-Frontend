@@ -286,3 +286,29 @@ Needs a local x402 service (`contracts/oracledesk-stellar/x402`, `npm start`) be
 - /reasoning: **Add to unlock list** on three locked traces, open **Unlock list (3)**: each row gets its price from the 402. Start checkout: three prompts, one after another. Raise `TRACE_PRICE_USDC` mid-run: the run pauses with accept / accept for all / skip. Kill the service on the second item: the receipt marks it failed and flags it; reopening that trace retries delivery without paying. **Download receipt (JSON)** totals equal the sum of paid amounts.
 - With a total at or above the daily-pass price, the drawer recommends a daily pass and links to /premium.
 - `NEXT_PUBLIC_X402_URL` empty: no cart, no unlock list buttons, no panel, no banner.
+
+## Watch-only mode (#141)
+
+Inspect any public Stellar address's positions and portfolio without connecting its private key.
+
+1. **Direct URL navigation**:
+   - [ ] Navigate to `http://localhost:3000/portfolio?watch=GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7`.
+   - [ ] The top banner shows: **Viewing GAAZI4TC...CCWN7 in Watch-Only Mode · Stop watching**.
+   - [ ] Portfolio balance and positions reflect the watched address.
+   - [ ] Reload the page without `?watch=`: the watch mode persists via `sessionStorage`.
+
+2. **Watch from Portfolio UI**:
+   - [ ] Open `/portfolio` and locate the "Watch any Stellar address" card.
+   - [ ] Enter a valid G-address or click a quick-pick button (e.g., "Treasury Agent").
+   - [ ] Click **Watch Address**. The page updates to display positions for that address with on-chain verification tags (`chain`).
+   - [ ] If an invalid address or muxed address (`M...`) is entered, the form displays a validation error ("Invalid Stellar public key format...").
+
+3. **Write protection (Watch vs Signer)**:
+   - [ ] While in watch mode, navigate to `/markets/quick-view?onChainId=0`.
+   - [ ] The trade ticket detects watch-only mode: the Buy button is disabled and displays **Watching. Connect your own wallet to trade.** with an explanatory note below.
+   - [ ] Connect your own wallet (e.g. Wallet A) while watching Wallet B:
+     - Positions displayed remain Wallet B.
+     - Attempting to submit a trade blocks with a clear user-facing error explaining you cannot transact on behalf of a watched address.
+   - [ ] Click **Stop watching** (in banner or wallet dropdown):
+     - The watch state clears, URL parameter is stripped, and the UI immediately switches to displaying Wallet A's own positions and balances.
+

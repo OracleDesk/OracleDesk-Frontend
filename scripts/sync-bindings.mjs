@@ -19,15 +19,7 @@ const SUBMODULE = join(ROOT, "contracts");
 const SOURCE = join(SUBMODULE, "oracledesk-stellar");
 const DEST = join(ROOT, "lib", "stellar", "generated");
 
-// [source path under oracledesk-stellar/, destination file name]
-const FILES = [
-  ["packages/bindings/market-core/src/index.ts", "market-core.ts"],
-  ["packages/bindings/treasury/src/index.ts", "treasury.ts"],
-  ["packages/bindings/reasoning-registry/src/index.ts", "reasoning-registry.ts"],
-  ["packages/bindings/resolver/src/index.ts", "resolver.ts"],
-  ["agents/core/fpmm.ts", "fpmm.ts"],
-  ["deployments/testnet.json", "deployments.testnet.json"],
-];
+import { FILES } from "./lib/files.mjs";
 
 const check = process.argv.includes("--check");
 

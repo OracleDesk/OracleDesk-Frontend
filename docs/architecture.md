@@ -322,3 +322,35 @@ Instead of independent intervals across components, `LedgerClock` (`lib/stellar/
 - **Event-Driven Invalidation**: Mounted in `WalletProvider` via `LedgerInvalidator` (`lib/stellar/ledger-invalidation.ts`). On new ledgers, `getEvents` queries `marketCore` and `usdc` to invalidate queries matching affected market IDs and user balances. Gaps > 120 ledgers perform a broad invalidation.
 - **Query Cache Policies**: On-chain queries have `staleTime: Infinity` with a 5-minute fallback poll; backend queries set `refetchIntervalInBackground: false`.
 
+## Contract integrity check (`lib/stellar/contract-check.ts`)
+
+At startup, the frontend verifies that the deployed contracts match the bundled TypeScript bindings:
+
+1. **Instance Check**: Queries persistent contract instance keys for all configured contracts (`marketCore`, `treasury`, `resolver`, `reasoningRegistry`, and `usdc`) in a single batched `getLedgerEntries` call.
+2. **Wasm Spec Fingerprint**: For Wasm contracts, extracts the executable's `wasmHash`, fetches the contract code entry if not cached, parses the embedded `contractspecv0` section, normalizes spec entries (stripping doc fields and sorting by kind and name), and computes a SHA-256 fingerprint. The fingerprint is cached in `sessionStorage` per content-addressed `wasmHash`.
+3. **Stellar Asset Contract (SAC) Verification**: For USDC, verifies that the instance executable is `contractExecutableStellarAsset`, checks that the contract ID matches `new Asset(code, issuer).contractId(NETWORK_PASSPHRASE)` for `NEXT_PUBLIC_USDC_ASSET`, and simulates `name()`.
+4. **Write-Path Gating**: `useContractIntegrity()` evaluates network status. If any contract status is `mismatch`, `not-found`, or `wrong-kind`, `useWriteGuard()` blocks transaction signing with a `UserFacingError({ kind: "contract" })`, and `IntegrityBanner.tsx` renders a non-dismissable alert detailing the discrepancies. Temporary RPC connectivity failures yield `unchecked` and do not block writes.
+
+## Viewed address vs signer (Watch-only mode)
+
+To allow inspecting any Stellar address's positions, balances, and history without connecting a wallet or risking accidental transactions from a signer wallet:
+
+1. **Branded Types (`lib/stellar/identity.ts`)**:
+   - `ViewedAddress`: A validated Stellar G-address (`G[A-Z2-7]{55}`) that is being inspected in the UI.
+   - `SignerAddress`: A connected wallet's address that can sign transactions.
+   - Distinct branded types ensure write paths cannot mistakenly pass a watched address to a signer client.
+2. **State & URL Synchronization (`lib/hooks/useViewedAddress.tsx`)**:
+   - Tracks `viewed`, `source` (`"url"` | `"session"` | `"signer"`), and `isWatching`.
+   - Priority order: URL query param `?watch=<G...>` takes highest precedence, followed by active `sessionStorage.getItem("oracledesk_watch")`, falling back to the connected wallet's `address`.
+   - Never stored in `localStorage` or `oracledesk_wallet`, preventing session mixups with the backend.
+   - Navigating or clicking "Clear watch" purges the watch session and invalidates user-scoped query caches.
+3. **Batched Position Reads (`lib/stellar/positions.ts`)**:
+   - `fetchPositionsFor(holder: ViewedAddress, marketIds: bigint[])` encodes `DataKey::Position(holder)` keys and batches up to 200 keys per chunk via `getLedgerEntries`.
+   - Missing or unbatched positions fallback to simulating `get_position(holder)`. Zero-balance positions are filtered out.
+4. **Write-Path Protection (`lib/stellar/write-guard.ts`)**:
+   - `assertCanWrite()` is evaluated in `useWriteGuard()`.
+   - If `isWatching` is true and `watchedAddress !== signer.publicKey`, it throws `UserFacingError({ kind: "watch-only", title: "Watch-only mode", message: "You are currently inspecting another address in watch-only mode. Connect or switch to this wallet to perform transactions." })`.
+   - UI trade buttons (Buy, Sell, Copy-Trade confirm) are disabled with explicit helper text ("Watching. Connect your own wallet to trade.").
+   - Copy-trade position sizing is strictly bound to the signer's actual USDC balance, never the watched address's funds.
+
+

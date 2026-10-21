@@ -50,7 +50,7 @@ export function handleMessage(
   message: ExportWorkerRequest,
   deps: ExportWorkerDeps,
 ): void {
-  if ("cancel" in message && message.cancel) {
+  if ("cancel" in message) {
     deps.cancelledIds.add(message.id);
     return;
   }

@@ -369,12 +369,13 @@ export function useExportData() {
             kind: "trade",
             marketId: t.marketId,
             ledger: t.raw.ledger,
-            eventId: t.raw.id,
-            outcome: t.outcome,
+            id: t.raw.id,
+            outcome: t.outcome === "YES" ? "Yes" : "No",
             isBuy: t.isBuy,
             collateral: t.collateral,
             shares: t.shares,
             fee: t.fee,
+            time: iso,
           });
         }
 
@@ -385,8 +386,9 @@ export function useExportData() {
             kind: "resolved",
             marketId,
             ledger: res.raw.ledger,
-            eventId: res.raw.id,
-            outcome: res.outcome,
+            id: res.raw.id,
+            outcome: res.outcome === "YES" ? "Yes" : res.outcome === "NO" ? "No" : "Void",
+            time: iso,
           });
         }
 
@@ -394,11 +396,12 @@ export function useExportData() {
           const iso = toLedgerIsoTime(r.raw.ledgerClosedAt);
           eventTimeById.set(r.raw.id, iso);
           pnlEvents.push({
-            kind: "redeemed",
+            kind: "redeem",
             marketId: r.marketId,
             ledger: r.raw.ledger,
-            eventId: r.raw.id,
+            id: r.raw.id,
             payout: r.payout,
+            time: iso,
           });
         }
 
@@ -407,7 +410,7 @@ export function useExportData() {
         for (const rel of realizations) {
           rows.push({
             type: "pnl",
-            time: eventTimeById.get(rel.eventId) ?? new Date(0).toISOString(),
+            time: rel.time || eventTimeById.get(rel.id) || new Date(0).toISOString(),
             marketId: rel.marketId,
             outcome: rel.outcome,
             realized: rel.realized,

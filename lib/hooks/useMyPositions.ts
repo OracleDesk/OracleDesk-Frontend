@@ -7,28 +7,22 @@ import { useWalletAddress } from "@/lib/contexts/WalletContext";
 import { describeError } from "@/lib/stellar/errors";
 import { scanHolderPositions, withBackendQuestions } from "@/lib/stellar/my-positions";
 import { useMarketCount, stellarKeys } from "@/lib/hooks/useStellar";
+import type { ViewedAddress } from "@/lib/stellar/identity";
 
 /**
- * The connected wallet's own on-chain positions (issue #50), driven by
- * market-core ledger entries rather than the agent's backend book.
- *
- * The ledger scan is the source of truth and the only thing that can fail the
- * query. Question text is joined from the backend best-effort: if the join
- * rejects (backend down, unreachable, unauthenticated), rows keep a null
- * question and the caller falls back to "Market #<id>".
+ * On-chain positions for any holder address, driven by market-core ledger entries.
  */
-export function useMyPositions() {
-  const { address } = useWalletAddress();
+export function useAddressPositions(holder: ViewedAddress | string | null | undefined) {
   const count = useMarketCount();
   const totalMarkets = count.data;
 
   const query = useQuery({
-    queryKey: stellarKeys.myPositions(address ?? "", totalMarkets?.toString() ?? "?"),
-    enabled: Boolean(address) && totalMarkets !== undefined,
+    queryKey: stellarKeys.myPositions(holder ?? "", totalMarkets?.toString() ?? "?"),
+    enabled: Boolean(holder) && totalMarkets !== undefined,
     staleTime: 30_000,
     refetchInterval: 60_000,
     queryFn: async () => {
-      const scan = await scanHolderPositions(address as string, totalMarkets as bigint);
+      const scan = await scanHolderPositions(holder as string, totalMarkets as bigint);
       let backend: { onChainMarketId: string | null; question: string }[] = [];
       try {
         const { markets } = await listMarkets({ onChain: true, limit: 500 });
@@ -63,4 +57,13 @@ export function useMyPositions() {
     scanLimited: query.data?.scanLimited ?? false,
     totalMarkets,
   };
+}
+
+/**
+ * The connected wallet's own on-chain positions (issue #50), driven by
+ * market-core ledger entries rather than the agent's backend book.
+ */
+export function useMyPositions() {
+  const { address } = useWalletAddress();
+  return useAddressPositions(address);
 }

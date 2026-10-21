@@ -82,7 +82,8 @@ export default function RootLayout({
                 </InboxProvider>
               </HealthProvider>
             </RealtimeProvider>
-          </WalletProvider>
+          </ViewedAddressProvider>
+        </WalletProvider>
         </PwaRegistrar>
       </body>
     </html>

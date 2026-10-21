@@ -50,6 +50,16 @@ export const CONTRACTS = {
 } as const;
 
 /**
+ * Expected USDC asset identifier (CODE:ISSUER). Defaults to USDC:deployer on testnet.
+ */
+export const USDC_ASSET = env(
+  process.env.NEXT_PUBLIC_USDC_ASSET,
+  NETWORK_PASSPHRASE === TESTNET_PASSPHRASE ? `USDC:${deployments.deployer}` : "",
+  "USDC_ASSET"
+);
+
+
+/**
  * Recipient of premium payments. Must match the backend's PAYMENTS_RECIPIENT
  * or the backend will reject the payment. Defaults to the treasury, like the
  * backend (see docs/api.md for why that is a product decision).

@@ -337,14 +337,14 @@ function positionOptions(client: ReturnType<typeof useQueryClient>, id: bigint |
     refetchIntervalInBackground: false,
   };
 }
-export function usePosition(id: bigint | string | null | undefined, holder: string | null | undefined) {
+export function usePosition(id: bigint | string | null | undefined, holder: ViewedAddress | string | null | undefined) {
   const client = useQueryClient();
   return useQuery({ ...positionOptions(client, id, holder), select: (data: Stamped<Position>) => data.value });
 }
-export function usePositionState(id: bigint | string | null | undefined, holder: string | null | undefined) {
+export function usePositionState(id: bigint | string | null | undefined, holder: ViewedAddress | string | null | undefined) {
   return useQuery(positionOptions(useQueryClient(), id, holder));
 }
-function balanceOptions(client: ReturnType<typeof useQueryClient>, owner: string | null | undefined) {
+function balanceOptions(client: ReturnType<typeof useQueryClient>, owner: ViewedAddress | string | null | undefined) {
   const queryKey = stellarKeys.balance(owner ?? "");
   return {
     queryKey,
@@ -359,10 +359,10 @@ function balanceOptions(client: ReturnType<typeof useQueryClient>, owner: string
     refetchIntervalInBackground: false,
   };
 }
-export function useUsdcBalance(owner: string | null | undefined) {
+export function useUsdcBalance(owner: ViewedAddress | string | null | undefined) {
   return useQuery({ ...balanceOptions(useQueryClient(), owner), select: (data: Stamped<bigint>) => data.value });
 }
-export function useUsdcBalanceState(owner: string | null | undefined) {
+export function useUsdcBalanceState(owner: ViewedAddress | string | null | undefined) {
   return useQuery(balanceOptions(useQueryClient(), owner));
 }
 
@@ -673,7 +673,7 @@ export function useVerifiedTrace(onChainTraceId: bigint | string | null | undefi
 
 // ─── Writes ─────────────────────────────────────────────────────────────────
 
-function useWriteGuard(): () => Signer {
+export function useWriteGuard(): (target?: ContractKey | "usdc") => Signer {
   const signer = useWalletSigner();
   const { isWrongNetwork, rpcNetwork, walletNetwork } = useWalletNetwork();
   const queryClient = useQueryClient();
@@ -1569,7 +1569,7 @@ export function useUsdcTransfer() {
 
   const mutation = useMutation({
     mutationFn: ({ to, amount, followUp, review }: UsdcTransferParams) => withPinnedRpc(async () => {
-      const signer = guard();
+      const signer = guard("usdc");
       if (amount <= 0n) throw new UserFacingError({ kind: "contract", message: "Enter an amount greater than zero." });
 
       await requireUsdcTrustline(signer.publicKey);
