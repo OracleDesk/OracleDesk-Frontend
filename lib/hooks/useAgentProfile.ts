@@ -16,7 +16,7 @@ export function useAgentProfile(agentAddress: string) {
         const { traces } = await listTraces();
 
         const agentTraces = traces.filter(
-          (t) => t.onChainTraceId === agentAddress || t.agentType,
+          (t) => t.agentId === agentAddress,
         );
 
         if (agentTraces.length === 0) {
@@ -26,7 +26,7 @@ export function useAgentProfile(agentAddress: string) {
           return;
         }
 
-        const filledProfile = buildAgentProfile(agentAddress, true, agentTraces, [], []);
+        const filledProfile = buildAgentProfile(agentAddress, false, agentTraces, [], []);
         setProfile(filledProfile);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load agent profile.");

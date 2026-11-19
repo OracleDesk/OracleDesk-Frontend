@@ -25,7 +25,7 @@ export default function AgentProfilePage() {
         const { traces } = await listTraces();
 
         const agentTraces = traces.filter(
-          (t) => t.onChainTraceId === agentAddress || t.agentType,
+          (t) => t.agentId === agentAddress,
         );
 
         if (agentTraces.length === 0) {
@@ -37,7 +37,7 @@ export default function AgentProfilePage() {
 
         const filledProfile = buildAgentProfile(
           agentAddress,
-          true,
+          false,
           agentTraces,
           [],
           [],

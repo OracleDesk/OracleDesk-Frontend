@@ -121,7 +121,7 @@ export function AgentProfileCard({ profile }: AgentProfileCardProps) {
               Recent Reasoning Traces
             </span>
             <Link
-              href={`/agent/${encodeURIComponent(profile.agentAddress)}/traces`}
+              href={`/agent/${encodeURIComponent(profile.agentAddress)}`}
               className="text-primary text-xs hover:underline"
             >
               View All

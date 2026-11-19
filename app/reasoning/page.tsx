@@ -136,7 +136,7 @@ const ReasoningCard = ({ trace, disableEntrance = true }: ReasoningCardProps) =>
             Copy Trade
           </Link>
           <Link
-            href={`/agent/${encodeURIComponent(id)}`}
+            href={`/agent/${encodeURIComponent(trace.agentId ?? id)}`}
             className="px-4 py-2 bg-surface-container-low border border-outline text-on-surface rounded font-label-caps text-label-caps hover:bg-surface-variant transition-all"
           >
             View Agent Profile
