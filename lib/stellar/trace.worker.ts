@@ -1,4 +1,5 @@
 import { raceGateways, type RaceResult, type TraceCheck } from "./trace-core";
+import type { CarLimits } from "./car";
 
 /**
  * Runs the gateway race, the streaming hash and the JSON decode off the main
@@ -19,6 +20,7 @@ export type TraceWorkerRequest =
       maxBytes: number;
       timeoutMs?: number;
       staggerMs?: number;
+      carLimits?: CarLimits;
     }
   | { type: "cancel"; id: string };
 
@@ -80,6 +82,7 @@ export function handleMessage(message: TraceWorkerRequest, deps: WorkerDeps): vo
     maxBytes: message.maxBytes,
     timeoutMs: message.timeoutMs,
     staggerMs: message.staggerMs,
+    carLimits: message.carLimits,
     signal: controller.signal,
     fetchImpl: deps.fetch,
     onProgress: ({ received, total }) => {

@@ -37,6 +37,7 @@ import { Stamped, reconcileRead } from "@/lib/stellar/optimistic";
 import type { Preflight, PreflightFailure, PreflightInput } from "@/lib/stellar/preflight";
 import { preflightBuy, preflightRedeem } from "@/lib/stellar/preflight";
 import { assertIntentMatches, describeAssembled, type ReviewModel } from "@/lib/stellar/tx-decode";
+import { decodeStateChanges, assertEffectsMatchIntent, type Effect } from "@/lib/stellar/state-changes";
 import { assertSigningDeadline, deadlineFor, type TransactionDeadline } from "@/lib/stellar/deadline";
 import { fetchLatestLedger } from "@/lib/stellar/ledger-clock";
 import {
@@ -768,6 +769,7 @@ export interface PreparedWrite {
   builtAt: number;
   quote?: bigint;
   deadline?: TransactionDeadline;
+  effects?: Effect[];
 }
 
 export type PreparedWriteReview = (
@@ -775,6 +777,7 @@ export type PreparedWriteReview = (
   model: ReviewModel,
   changedFrom?: ReviewModel,
   forceReview?: boolean,
+  effects?: Effect[],
 ) => Promise<boolean>;
 
 export async function prepareBuy(
@@ -1047,6 +1050,18 @@ export async function submitPrepared<T>(
   return submit(prepared.tx, prepared.contract === "usdc" ? "marketCore" : prepared.contract) as Promise<{ value: T; txHash: string | null; ledger: number | null }>;
 }
 
+function checkSimulatedEffects(prep: PreparedWrite, model: ReviewModel): Effect[] | undefined {
+  const sim = prep.tx.simulation as { stateChanges?: any[] } | undefined;
+  const changes = sim?.stateChanges;
+  if (changes && Array.isArray(changes) && changes.length > 0) {
+    const decoded = decodeStateChanges(changes, {});
+    prep.effects = decoded;
+    assertEffectsMatchIntent(prep.kind, prep.intent, decoded, model.source);
+    return decoded;
+  }
+  return undefined;
+}
+
 async function reviewPreparedWrite(
   initial: PreparedWrite,
   review: PreparedWriteReview | undefined,
@@ -1054,16 +1069,22 @@ async function reviewPreparedWrite(
   changedFrom?: ReviewModel,
   forceInitialReview = false,
 ): Promise<{ prepared: PreparedWrite; model?: ReviewModel }> {
-  if (!review) return { prepared: initial };
-
   let current = initial;
+  const initialModel = describeAssembled(current.tx, current.contract === "usdc" ? "sac" : marketCore().spec, current.derived);
+  assertPreparedInvocation(current, initialModel);
+  assertIntentMatches(initialModel, current.intent);
+  const initialEffects = checkSimulatedEffects(current, initialModel);
+
+  if (!review) return { prepared: initial, model: initialModel };
+
   let previousModel = changedFrom;
   let forceReview = forceInitialReview || changedFrom !== undefined;
   while (true) {
     const model = describeAssembled(current.tx, current.contract === "usdc" ? "sac" : marketCore().spec, current.derived);
     assertPreparedInvocation(current, model);
     assertIntentMatches(model, current.intent);
-    if (!(await review(current, model, previousModel, forceReview))) {
+    const effects = checkSimulatedEffects(current, model);
+    if (!(await review(current, model, previousModel, forceReview, effects))) {
       throw new UserFacingError({ kind: "rejected", message: "You cancelled the transaction review." });
     }
     if (Date.now() - current.builtAt <= 20_000) return { prepared: current, model };
@@ -1077,6 +1098,7 @@ async function reviewPreparedWrite(
     );
     assertPreparedInvocation(refreshed, freshModel);
     assertIntentMatches(freshModel, refreshed.intent);
+    checkSimulatedEffects(refreshed, freshModel);
     current = refreshed;
     previousModel = beforeRefresh;
     forceReview = true;

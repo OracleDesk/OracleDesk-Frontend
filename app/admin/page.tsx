@@ -199,6 +199,13 @@ function AdminContent() {
           <Icon name="smart_toy" />
           MANAGE AGENTS
         </Link>
+        <Link
+          href="/admin/contracts"
+          className="border border-outline text-on-surface px-6 py-4 rounded-lg font-label-caps text-label-caps flex items-center gap-2 hover:bg-surface-container-low transition-all"
+        >
+          <Icon name="fact_check" />
+          CONTRACTS MATRIX
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

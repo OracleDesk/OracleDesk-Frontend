@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useContractIntegrity, type IntegrityResult } from "@/lib/stellar/contract-check";
 import { explorerAccount } from "@/lib/stellar/config";
 import { AlertTriangle, ShieldAlert, ExternalLink, RefreshCw } from "lucide-react";
@@ -65,14 +66,22 @@ export function IntegrityBanner() {
               </ul>
             </div>
           </div>
-          <button
-            onClick={() => void refetch()}
-            disabled={isFetching}
-            className="self-end md:self-center px-3 py-1.5 rounded bg-destructive/20 hover:bg-destructive/30 text-destructive text-xs font-medium inline-flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-            Recheck
-          </button>
+          <div className="flex items-center gap-2 self-end md:self-center">
+            <Link
+              href="/admin/contracts"
+              className="px-3 py-1.5 rounded bg-surface border border-outline-variant hover:bg-surface-container text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+            >
+              View Contract Matrix
+            </Link>
+            <button
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              className="px-3 py-1.5 rounded bg-destructive/20 hover:bg-destructive/30 text-destructive text-xs font-medium inline-flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+              Recheck
+            </button>
+          </div>
         </div>
       </div>
     );

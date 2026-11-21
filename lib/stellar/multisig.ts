@@ -62,6 +62,8 @@ export interface MultisigSession {
   closeTime?: number;
   /** Human-readable decoded args for the review UI (raw strings). */
   args?: Record<string, string>;
+  /** Simulated ledger state change effects recorded at build time. */
+  effects?: any[];
 }
 
 export const MULTISIG_SESSIONS_KEY = "oracledesk_multisig_sessions";

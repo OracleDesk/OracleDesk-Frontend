@@ -287,6 +287,9 @@ export const DIAGNOSTICS_TOLERANCE_BPS = (() => {
 export const IPFS_GATEWAYS: readonly string[] = config.ipfsGateways;
 export const IPFS_GATEWAY = IPFS_GATEWAYS[0]; // unchanged export for existing callers
 
+const rawTrustless = process.env.NEXT_PUBLIC_IPFS_TRUSTLESS_GATEWAYS;
+export const IPFS_TRUSTLESS_GATEWAYS: readonly string[] = rawTrustless ? parseGateways(rawTrustless) : [];
+
 const ipfsMaxBytesEnv = Number(process.env.NEXT_PUBLIC_IPFS_MAX_TRACE_BYTES);
 /** Largest trace body read from a gateway. Larger responses are abandoned while streaming. */
 export const IPFS_MAX_TRACE_BYTES =

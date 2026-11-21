@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import type { ReviewModel } from "@/lib/stellar/tx-decode";
 import { BUILD_IDENTITY, IDENTITIES, explorerAccount, type IdentityEntry, type IdentityKey } from "@/lib/stellar/config";
 import { addressFingerprint, groupAddress, type AddressFingerprint } from "@/lib/stellar/fingerprint";
+import { formatUsdcDisplay, formatSignedUsdc } from "@/lib/format/money";
+import type { Effect } from "@/lib/stellar/state-changes";
 
 const SKIP_REVIEW_KEY = "oracledesk_skip_tx_review";
 
@@ -41,6 +43,8 @@ interface TxReviewProps {
   model: ReviewModel;
   changedFrom?: ReviewModel;
   confirming?: boolean;
+  effects?: Effect[];
+  effectViolation?: string | null;
   onConfirm(): void;
   onCancel(): void;
 }
@@ -55,7 +59,7 @@ function changed(previous: string | null | undefined, current: string | null | u
   return previous !== current;
 }
 
-export function TxReview({ model, changedFrom, confirming = false, onConfirm, onCancel }: TxReviewProps) {
+export function TxReview({ model, changedFrom, confirming = false, effects, effectViolation, onConfirm, onCancel }: TxReviewProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [skipReview, setSkipReview] = useState(false);
@@ -151,6 +155,62 @@ export function TxReview({ model, changedFrom, confirming = false, onConfirm, on
             </dl>
           </section>
 
+          <section aria-labelledby="tx-review-effects">
+            <h3 id="tx-review-effects" className="mb-3 font-label-caps text-label-caps text-on-surface">What changes</h3>
+            {effectViolation && (
+              <div className="mb-3 rounded-lg bg-error-container/20 p-3 text-xs text-error border border-error/30" role="alert">
+                <span className="font-semibold block mb-1">Effect Invariant Violated:</span>
+                {effectViolation}
+              </div>
+            )}
+            {effects && effects.length > 0 ? (
+              <ul className="space-y-2 text-sm">
+                {effects.map((eff, index) => {
+                  if (eff.kind === "usdc-balance") {
+                    const delta = eff.after - eff.before;
+                    const isSelf = eff.holder === model.source;
+                    return (
+                      <li key={index} className="flex justify-between items-baseline font-data-mono text-xs">
+                        <span className="text-on-surface-variant">{isSelf ? "Your USDC:" : `${eff.holder.slice(0, 4)}…${eff.holder.slice(-4)} USDC:`}</span>
+                        <span>
+                          {formatUsdcDisplay(eff.before)} → {formatUsdcDisplay(eff.after)} ({formatSignedUsdc(delta)})
+                        </span>
+                      </li>
+                    );
+                  }
+                  if (eff.kind === "position") {
+                    const isSelf = eff.holder === model.source;
+                    return (
+                      <li key={index} className="flex justify-between items-baseline font-data-mono text-xs">
+                        <span className="text-on-surface-variant">
+                          {isSelf ? "Your shares" : `${eff.holder.slice(0, 4)}…${eff.holder.slice(-4)}`} in #{eff.marketId.toString()}:
+                        </span>
+                        <span>
+                          YES: {eff.before.yes.toString()} → {eff.after.yes.toString()} · NO: {eff.before.no.toString()} → {eff.after.no.toString()}
+                        </span>
+                      </li>
+                    );
+                  }
+                  if (eff.kind === "market" && eff.before && eff.after) {
+                    return (
+                      <li key={index} className="flex justify-between items-baseline font-data-mono text-xs">
+                        <span className="text-on-surface-variant">Pool #{eff.marketId.toString()} reserves:</span>
+                        <span>
+                          YES {eff.after.reserve_yes.toString()} ({formatSignedUsdc(eff.after.reserve_yes - eff.before.reserve_yes)}) · NO {eff.after.reserve_no.toString()} ({formatSignedUsdc(eff.after.reserve_no - eff.before.reserve_no)})
+                        </span>
+                      </li>
+                    );
+                  }
+                  return null;
+                })}
+              </ul>
+            ) : (
+              <p className="text-xs text-on-surface-variant italic">
+                This RPC did not report effects; only the request was checked.
+              </p>
+            )}
+          </section>
+
           <section aria-labelledby="tx-review-network">
             <h3 id="tx-review-network" className="mb-3 font-label-caps text-label-caps text-on-surface">Network details</h3>
             <dl className="space-y-2">
@@ -179,17 +239,23 @@ export function TxReview({ model, changedFrom, confirming = false, onConfirm, on
             <button type="button" onClick={onCancel} disabled={confirming} className="rounded-lg border border-outline-variant px-4 py-2 font-label-caps text-sm">
               Cancel
             </button>
-            <button
-              type="button"
-              disabled={confirming}
-              onClick={() => {
-                setSkipTxReview(skipReview);
-                onConfirm();
-              }}
-              className="rounded-lg bg-primary px-4 py-2 font-label-caps text-sm text-on-primary disabled:opacity-50"
-            >
-              {confirming ? "Preparing…" : "Confirm in wallet"}
-            </button>
+            {effectViolation ? (
+              <span className="rounded-lg bg-error-container/40 px-4 py-2 font-label-caps text-xs text-error font-medium">
+                Signing blocked: simulation contradicts intent
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={confirming}
+                onClick={() => {
+                  setSkipTxReview(skipReview);
+                  onConfirm();
+                }}
+                className="rounded-lg bg-primary px-4 py-2 font-label-caps text-sm text-on-primary disabled:opacity-50"
+              >
+                {confirming ? "Preparing…" : "Confirm in wallet"}
+              </button>
+            )}
           </div>
         </footer>
       </div>

@@ -1,5 +1,5 @@
 import { parseCid as parseValidCid } from "@/lib/validation/ids";
-import { IPFS_GATEWAYS, IPFS_MAX_TRACE_BYTES } from "./config";
+import { IPFS_GATEWAYS, IPFS_MAX_TRACE_BYTES, IPFS_TRUSTLESS_GATEWAYS } from "./config";
 import type { TraceWorkerRequest, TraceWorkerResponse, WorkerCheck } from "./trace.worker";
 import { gatewayUrl, normalizeHash, raceGateways, type RaceOptions, type RaceProgress, type TraceCheck } from "./trace-core";
 
@@ -163,13 +163,26 @@ export function verifyTraceInWorker(cid: string, onChainHash: string, opts: Work
       },
     });
     opts.signal?.addEventListener("abort", cancel, { once: true });
+    const maxFileBytes = IPFS_MAX_TRACE_BYTES;
+    const carLimits = {
+      maxFileBytes,
+      maxCarBytes: Math.floor(1.25 * maxFileBytes) + 64 * 1024,
+      maxBlocks: 4096,
+      maxBlockBytes: 1024 * 1024 + 1024,
+      maxDepth: 8,
+    };
+    const combinedGateways = [
+      ...IPFS_TRUSTLESS_GATEWAYS,
+      ...IPFS_GATEWAYS.filter((g) => !IPFS_TRUSTLESS_GATEWAYS.includes(g)),
+    ];
     target.postMessage({
       type: "verify",
       id,
       cid,
       expectedHash: onChainHash,
-      gateways: [...IPFS_GATEWAYS],
+      gateways: combinedGateways,
       maxBytes: IPFS_MAX_TRACE_BYTES,
+      carLimits,
     } satisfies TraceWorkerRequest);
   });
 }

@@ -18,6 +18,7 @@ import { viewOf } from "./wallet-machine";
 import { TransactionTrackerProvider } from "./tx-tracker";
 import { storedPushWallet, unsubscribe as unsubscribePush } from "@/lib/notifications/push";
 import { LedgerInvalidator } from "./ledger-invalidation";
+import { getIndex, saveIndex, seedIndex, sortAndDedupeMarketIds } from "./wallet-market-index";
 import { getStoredSessionId, onAuthInvalid, onAuthSessionChanged } from "@/lib/api/client";
 import { startRefreshScheduler } from "@/lib/api/refresh-scheduler";
 import { UserScopeContext, UserScopeStore } from "@/lib/query/scope";
@@ -393,6 +394,33 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit, rp
       queryClient,
       getUserAddress: () => address,
     });
+    if (address) {
+      invalidator.onDecodedEvents(async (events, ledger, gap) => {
+        if (gap) {
+          void seedIndex(address).catch(() => {});
+          return;
+        }
+        let added = false;
+        const current = await getIndex(address);
+        const set = new Set<string>(current?.marketIds ?? []);
+        for (const ev of events) {
+          if (ev.kind === "Trade" && ev.trader === address) {
+            set.add(ev.marketId.toString());
+            added = true;
+          } else if (ev.kind === "MarketCreated" && ev.creator === address) {
+            set.add(ev.marketId.toString());
+            added = true;
+          }
+        }
+        if (current && (added || ledger > current.processedToLedger)) {
+          await saveIndex({
+            ...current,
+            marketIds: sortAndDedupeMarketIds([...set]),
+            processedToLedger: Math.max(current.processedToLedger, ledger),
+          });
+        }
+      });
+    }
     return invalidator.start();
   }, [queryClient, address]);
 

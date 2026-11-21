@@ -13,6 +13,7 @@ export interface InvalidatorOptions {
   marketCoreId?: string;
   usdcId?: string;
   priceStore?: MarketPriceStore;
+  onDecodedEvents?: (events: DecodedEvent[], currentLedger: number, gapTriggered: boolean) => void;
 }
 
 export interface InvalidationSummary {
@@ -21,14 +22,32 @@ export interface InvalidationSummary {
   gapTriggered: boolean;
 }
 
+export type DecodedEventListener = (
+  events: DecodedEvent[],
+  currentLedger: number,
+  gapTriggered: boolean,
+) => void;
+
 export class LedgerInvalidator {
   private lastSeenLedger: number | null = null;
   private unsubscribeClock: (() => void) | null = null;
   private unsubscribeStall: (() => void) | null = null;
   private isProcessing = false;
   private deferredKeys = new Map<string, (readonly unknown[])[]>();
+  private eventListeners = new Set<DecodedEventListener>();
 
-  constructor(private readonly opts: InvalidatorOptions) {}
+  constructor(private readonly opts: InvalidatorOptions) {
+    if (opts.onDecodedEvents) {
+      this.eventListeners.add(opts.onDecodedEvents);
+    }
+  }
+
+  onDecodedEvents(listener: DecodedEventListener): () => void {
+    this.eventListeners.add(listener);
+    return () => {
+      this.eventListeners.delete(listener);
+    };
+  }
 
   get lastSeen(): number | null {
     return this.lastSeenLedger;
@@ -97,6 +116,9 @@ export class LedgerInvalidator {
       // Gap > 120 ledgers: skip event parsing and broad invalidate
       this.lastSeenLedger = currentLedger;
       const keys = this.broadInvalidate();
+      for (const listener of this.eventListeners) {
+        listener([], currentLedger, true);
+      }
       return { invalidatedKeys: keys, eventsCount: 0, gapTriggered: true };
     }
 
@@ -151,6 +173,7 @@ export class LedgerInvalidator {
   ): InvalidationSummary {
     const invalidatedKeys: (readonly unknown[])[] = [];
     const seenKeys = new Set<string>();
+    const decodedEvents: DecodedEvent[] = [];
 
     const recordKey = (key: readonly unknown[]) => {
       const serial = JSON.stringify(key);
@@ -179,6 +202,7 @@ export class LedgerInvalidator {
         }
 
         if (decoded) {
+          decodedEvents.push(decoded);
           switch (decoded.kind) {
             case "Trade": {
               const id = decoded.marketId.toString();
@@ -254,6 +278,10 @@ export class LedgerInvalidator {
           }
         }
       }
+    }
+
+    for (const listener of this.eventListeners) {
+      listener(decodedEvents, this.lastSeenLedger ?? 0, false);
     }
 
     return {

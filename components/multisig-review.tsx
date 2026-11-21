@@ -184,6 +184,34 @@ export function MultisigReview({
           </section>
 
           <section>
+            <h3 className="mb-3 font-label-caps text-label-caps text-on-surface">What changes</h3>
+            {session.effects && session.effects.length > 0 ? (
+              <ul className="space-y-2 text-sm font-data-mono text-xs">
+                {session.effects.map((eff: any, index: number) => (
+                  <li key={index} className="flex justify-between items-baseline">
+                    <span className="text-on-surface-variant">
+                      {eff.kind === "usdc-balance"
+                        ? `${eff.holder?.slice(0, 4)}…${eff.holder?.slice(-4)} USDC:`
+                        : eff.kind === "position"
+                          ? `Shares in #${eff.marketId}:`
+                          : "State delta:"}
+                    </span>
+                    <span>
+                      {eff.before !== undefined && eff.after !== undefined
+                        ? `${eff.before.toString()} → ${eff.after.toString()}`
+                        : "Modified"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-on-surface-variant italic">
+                This RPC did not report effects; only the request was checked.
+              </p>
+            )}
+          </section>
+
+          <section>
             <h3 className="mb-3 font-label-caps text-label-caps text-on-surface">Network details</h3>
             <dl className="space-y-2">
               <div className="grid grid-cols-[9rem_1fr] gap-3">

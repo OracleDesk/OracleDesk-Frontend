@@ -4,6 +4,7 @@ import { Icon } from "@/components/ui/icon";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { usePortfolio, usePositions } from "@/lib/hooks/usePortfolio";
 import { useAddressPositions, useMyPositions } from "@/lib/hooks/useMyPositions";
+import { reconcileIndex } from "@/lib/stellar/wallet-market-index";
 import { useViewedAddress } from "@/lib/hooks/useViewedAddress";
 import {
   floatUsdcToRaw,
@@ -227,6 +228,25 @@ export default function PortfolioPage() {
   const activeHolder = viewed ?? wallet.address;
   const addressPositions = useAddressPositions(activeHolder);
   const myPositions = useMyPositions();
+  const [reconcileProgress, setReconcileProgress] = useState<{ scanned: number; total: number } | null>(null);
+  const reconcileAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!activeHolder || !addressPositions.totalMarkets || addressPositions.coverage?.complete) {
+      setReconcileProgress(null);
+      return;
+    }
+    const controller = new AbortController();
+    reconcileAbortRef.current = controller;
+    void reconcileIndex(activeHolder, addressPositions.totalMarkets, {
+      signal: controller.signal,
+      onProgress: (scanned, total) => setReconcileProgress({ scanned, total }),
+    }).catch(() => {});
+
+    return () => {
+      controller.abort();
+    };
+  }, [activeHolder, addressPositions.totalMarkets, addressPositions.coverage?.complete]);
   const currentRedeemIds = new Set(redeemBatch.discovery?.redeemables.map((item) => item.marketId.toString()) ?? []);
   const currentRedeemed = redeemBatch.discovery?.redeemables.filter(
     (item) => redeemBatch.states[item.marketId.toString()]?.s === "redeemed",
@@ -566,7 +586,22 @@ export default function PortfolioPage() {
               })}
             </ul>
           )}
-          {addressPositions.scanLimited && (
+          {reconcileProgress && (
+            <div className="border-t border-outline-variant px-6 py-2 flex items-center justify-between text-xs text-on-surface-variant">
+              <span>Checking older markets… {reconcileProgress.scanned.toLocaleString()} / {reconcileProgress.total.toLocaleString()}</span>
+              <button
+                type="button"
+                className="underline hover:text-primary ml-2"
+                onClick={() => {
+                  reconcileAbortRef.current?.abort();
+                  setReconcileProgress(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {!reconcileProgress && addressPositions.scanLimited && (
             <p className="border-t border-outline-variant px-6 py-2 text-xs text-on-surface-variant">
               The scan limit was reached; the newest markets were checked first.
             </p>

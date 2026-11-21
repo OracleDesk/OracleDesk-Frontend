@@ -2,6 +2,7 @@ import type { rpc } from "@stellar/stellar-sdk";
 import { rpcServer } from "./clients";
 import { settleValue, type Settlement } from "./generated/fpmm";
 import type { Market, Position } from "./generated/market-core";
+import { getIndex } from "./wallet-market-index";
 import {
   chunks,
   isMarket,
@@ -68,7 +69,11 @@ export async function discoverRedeemable(
 ): Promise<RedeemDiscovery> {
   const scannedMarkets = totalMarkets > MAX_REDEEM_SCAN_MARKETS ? MAX_REDEEM_SCAN_MARKETS : totalMarkets;
   const startId = totalMarkets - scannedMarkets;
-  const ids = Array.from({ length: Number(scannedMarkets) }, (_, index) => startId + BigInt(index));
+  const index = await getIndex(holder).catch(() => null);
+  const ids =
+    index && index.marketIds.length > 0
+      ? index.marketIds.map(BigInt)
+      : Array.from({ length: Number(scannedMarkets) }, (_, i) => startId + BigInt(i));
   const positionKeys = ids.map((id) => ({ id, key: positionLedgerKey(id, holder) }));
   const positions = new Map<string, { id: bigint; position: Position; liveUntilLedgerSeq?: number }>();
 

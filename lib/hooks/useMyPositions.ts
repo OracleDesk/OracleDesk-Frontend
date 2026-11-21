@@ -5,9 +5,16 @@ import { useQuery } from "@tanstack/react-query";
 import { listMarkets } from "@/lib/api/markets";
 import { useWalletAddress } from "@/lib/contexts/WalletContext";
 import { describeError } from "@/lib/stellar/errors";
-import { scanHolderPositions, withBackendQuestions } from "@/lib/stellar/my-positions";
+import { readHolderPositions, withBackendQuestions } from "@/lib/stellar/my-positions";
+import { getIndex, seedIndex } from "@/lib/stellar/wallet-market-index";
 import { useMarketCount, stellarKeys } from "@/lib/hooks/useStellar";
 import type { ViewedAddress } from "@/lib/stellar/identity";
+
+export interface PositionsCoverage {
+  eventsFromLedger: number;
+  reconciledThrough: string | null;
+  complete: boolean;
+}
 
 /**
  * On-chain positions for any holder address, driven by market-core ledger entries.
@@ -22,7 +29,12 @@ export function useAddressPositions(holder: ViewedAddress | string | null | unde
     staleTime: 30_000,
     refetchInterval: 60_000,
     queryFn: async () => {
-      const scan = await scanHolderPositions(holder as string, totalMarkets as bigint);
+      let index = await getIndex(holder as string);
+      if (!index) {
+        index = await seedIndex(holder as string);
+      }
+      const ids = index.marketIds.map(BigInt);
+      const positions = await readHolderPositions(holder as string, ids);
       let backend: { onChainMarketId: string | null; question: string }[] = [];
       try {
         const { markets } = await listMarkets({ onChain: true, limit: 500 });
@@ -31,11 +43,21 @@ export function useAddressPositions(holder: ViewedAddress | string | null | unde
         backend = [];
       }
       const questions = new Map(
-        withBackendQuestions(scan.positions, backend).map((row) => [row.marketId.toString(), row.question]),
+        withBackendQuestions(positions, backend).map((row) => [row.marketId.toString(), row.question]),
       );
+      const isComplete =
+        index.reconciled.completedAt !== null ||
+        (totalMarkets !== undefined && BigInt(index.marketIds.length) >= totalMarkets);
+      const coverage: PositionsCoverage = {
+        eventsFromLedger: index.seededFromLedger,
+        reconciledThrough: index.reconciled.throughMarketId,
+        complete: isComplete,
+      };
       return {
-        ...scan,
-        rows: scan.positions.map((position) => ({
+        positions,
+        coverage,
+        scanLimited: !isComplete,
+        rows: positions.map((position) => ({
           ...position,
           question: questions.get(position.marketId.toString()) ?? null,
         })),
@@ -54,6 +76,7 @@ export function useAddressPositions(holder: ViewedAddress | string | null | unde
     totalValueRaw,
     isLoading: query.isLoading,
     error: query.error ? describeError(query.error).message : null,
+    coverage: query.data?.coverage ?? { eventsFromLedger: 0, reconciledThrough: null, complete: false },
     scanLimited: query.data?.scanLimited ?? false,
     totalMarkets,
   };

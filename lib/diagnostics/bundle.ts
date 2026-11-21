@@ -1,6 +1,7 @@
 import type { Query } from "@tanstack/react-query";
 import { CONFIG_SOURCES, CONTRACTS, EXPLORER_URL, IPFS_GATEWAY, NETWORK_PASSPHRASE, PAYMENTS_RECIPIENT, RPC_URLS, X402_URL } from "@/lib/stellar/config";
 import provenance from "@/lib/stellar/generated/provenance.json";
+import type { IntegrityResult } from "@/lib/stellar/contract-check";
 import type { SimRecord } from "./events";
 import { redact } from "./redact";
 
@@ -19,6 +20,7 @@ export interface DiagnosticsInput {
   rpc?: unknown;
   userAgent?: string;
   nextVersion?: string;
+  integrity?: Record<string, IntegrityResult>;
 }
 
 export interface DiagnosticsBundle {
@@ -30,12 +32,34 @@ export interface DiagnosticsBundle {
   simulations: readonly SimRecord[];
   rpc: unknown;
   userAgent: string | null;
+  contracts?: Array<{
+    contract: string;
+    id: string;
+    wasmHash?: string;
+    fingerprint: { algo: string; bundled?: string; onChain?: string };
+    entries?: unknown[];
+  }>;
 }
 
 export const bigintReplacer = (_: string, v: unknown) => (typeof v === "bigint" ? v.toString() : v);
 
 /** Fixed key order so two bundles from the same state are byte-identical. Redaction runs last. */
 export function buildDiagnostics(input: DiagnosticsInput): DiagnosticsBundle {
+  const contractsSection = input.integrity
+    ? Object.entries(input.integrity)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([contract, res]) => ({
+          contract,
+          id: res.id,
+          wasmHash: res.wasmHash,
+          fingerprint: {
+            algo: res.algo ?? "odspec-v1",
+            bundled: res.bundledFingerprint,
+            onChain: res.onChainFingerprint,
+          },
+        }))
+    : undefined;
+
   const bundle: DiagnosticsBundle = {
     app: {
       buildSha: process.env.NEXT_PUBLIC_BUILD_SHA || null,
@@ -57,7 +81,10 @@ export function buildDiagnostics(input: DiagnosticsInput): DiagnosticsBundle {
     simulations: input.simulations,
     rpc: input.rpc ?? null,
     userAgent: input.userAgent ?? null,
+    ...(contractsSection ? { contracts: contractsSection } : {}),
   };
+  return redact(JSON.parse(JSON.stringify(bundle, bigintReplacer))) as DiagnosticsBundle;
+}
   return redact(JSON.parse(JSON.stringify(bundle, bigintReplacer))) as DiagnosticsBundle;
 }
 

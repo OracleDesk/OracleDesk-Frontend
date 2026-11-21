@@ -45,6 +45,9 @@ const GATEWAY_OUTCOME_LABEL: Record<GatewayAttempt["outcome"], string> = {
   network: "Unreachable",
   aborted: "Stopped",
   skipped: "Not needed",
+  "car-unsupported": "CAR unsupported",
+  "car-invalid": "CAR invalid",
+  "cid-hash-disagree": "CID & hash disagree",
 };
 
 const formatBytes = (bytes: number) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
@@ -61,12 +64,14 @@ function describeCid(cidCheck: CidCheck | undefined, status: TraceCheck["status"
   switch (cidCheck) {
     case "match":
       return "CID check: the CID names these exact bytes.";
+    case "match-other-content":
+      return "The CID is valid, but the file it names is not the file whose hash was committed. The publisher's CID and hash disagree.";
     case "mismatch":
       return status === "verified"
         ? "CID check: the CID doesn't name these bytes, but the on-chain hash does. The publish is inconsistent."
         : "CID check: the CID doesn't name these bytes either. The gateway may have served the wrong object.";
     case "unsupported":
-      return "CID check: not checkable here (only single-block raw CIDs are checked).";
+      return "CID check: not checkable here (unsupported CID format).";
     case "invalid":
       return "CID check: not a valid CID, so it wasn't checked.";
     default:

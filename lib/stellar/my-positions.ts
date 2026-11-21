@@ -83,19 +83,14 @@ export function positionValue(
 }
 
 /**
- * Scans Position entries for `holder` across the newest `totalMarkets` market
- * IDs (chunked getLedgerEntries, same shape as redeem-all's discovery), then
- * reads each holding market's entry for pricing and settlement.
+ * Reads positions for the given market IDs directly, fetching position entries
+ * and holding markets in chunks.
  */
-export async function scanHolderPositions(
+export async function readHolderPositions(
   holder: string,
-  totalMarkets: bigint,
+  ids: bigint[],
   server: rpc.Server = rpcServer(),
-): Promise<PositionScan> {
-  const scannedMarkets = totalMarkets > MAX_POSITION_SCAN_MARKETS ? MAX_POSITION_SCAN_MARKETS : totalMarkets;
-  const startId = totalMarkets - scannedMarkets;
-  const ids = Array.from({ length: Number(scannedMarkets) }, (_, index) => startId + BigInt(index));
-
+): Promise<HolderPosition[]> {
   const found = new Map<bigint, Position>();
   for (const keyChunk of chunks(ids, LEDGER_ENTRY_CHUNK_SIZE)) {
     const keys = keyChunk.map((id) => ({ id, key: positionLedgerKey(id, holder) }));
@@ -129,7 +124,7 @@ export async function scanHolderPositions(
     }
   }
 
-  const positions: HolderPosition[] = [...found.entries()]
+  return [...found.entries()]
     .map(([marketId, position]) => {
       const market = markets.get(marketId) ?? null;
       const settlement = market ? settlementOf(market.status) : null;
@@ -146,6 +141,23 @@ export async function scanHolderPositions(
       };
     })
     .sort((a, b) => (a.marketId < b.marketId ? 1 : a.marketId > b.marketId ? -1 : 0));
+}
+
+/**
+ * Scans Position entries for `holder` across the newest `totalMarkets` market
+ * IDs (chunked getLedgerEntries, same shape as redeem-all's discovery), then
+ * reads each holding market's entry for pricing and settlement.
+ */
+export async function scanHolderPositions(
+  holder: string,
+  totalMarkets: bigint,
+  server: rpc.Server = rpcServer(),
+): Promise<PositionScan> {
+  const scannedMarkets = totalMarkets > MAX_POSITION_SCAN_MARKETS ? MAX_POSITION_SCAN_MARKETS : totalMarkets;
+  const startId = totalMarkets - scannedMarkets;
+  const ids = Array.from({ length: Number(scannedMarkets) }, (_, index) => startId + BigInt(index));
+
+  const positions = await readHolderPositions(holder, ids, server);
 
   return {
     positions,

@@ -14,6 +14,7 @@ import {
   USDC_ASSET,
 } from "./config";
 import { useQuery } from "@tanstack/react-query";
+import { FINGERPRINT_ALGO, specFingerprintV1 } from "./spec-fingerprint";
 
 export type ContractKey = "marketCore" | "treasury" | "resolver" | "reasoningRegistry";
 
@@ -21,6 +22,7 @@ export interface IntegrityResult {
   contract: ContractKey | "usdc";
   id: string;
   status: "match" | "mismatch" | "not-found" | "wrong-kind" | "unchecked";
+  algo?: string;
   wasmHash?: string;
   onChainFingerprint?: string;
   bundledFingerprint?: string;
@@ -652,7 +654,7 @@ export async function checkContractIntegrity(
 
     const cachedFp = getCachedFingerprint(wasmHashHex);
     const bundledEntries = bundledSpec(name);
-    const bundledFp = await specFingerprint(bundledEntries);
+    const bundledFp = (await specFingerprintV1(bundledEntries)).root;
 
     if (cachedFp) {
       if (cachedFp === bundledFp) {
@@ -660,6 +662,7 @@ export async function checkContractIntegrity(
           contract: name,
           id: item.id,
           status: "match",
+          algo: FINGERPRINT_ALGO,
           wasmHash: wasmHashHex,
           onChainFingerprint: cachedFp,
           bundledFingerprint: bundledFp,
@@ -670,6 +673,7 @@ export async function checkContractIntegrity(
           contract: name,
           id: item.id,
           status: "mismatch",
+          algo: FINGERPRINT_ALGO,
           wasmHash: wasmHashHex,
           onChainFingerprint: cachedFp,
           bundledFingerprint: bundledFp,
@@ -727,18 +731,19 @@ export async function checkContractIntegrity(
           continue;
         }
 
-        const onChainFp = await specFingerprint(onChainEntries);
+        const onChainFp = (await specFingerprintV1(onChainEntries)).root;
         setCachedFingerprint(hashHex, onChainFp);
 
         for (const contractKey of info.contracts) {
           const bEntries = bundledSpec(contractKey);
-          const bFp = await specFingerprint(bEntries);
+          const bFp = (await specFingerprintV1(bEntries)).root;
 
           if (onChainFp === bFp) {
             results[contractKey] = {
               contract: contractKey,
               id: contractIds[contractKey],
               status: "match",
+              algo: FINGERPRINT_ALGO,
               wasmHash: hashHex,
               onChainFingerprint: onChainFp,
               bundledFingerprint: bFp,
@@ -750,6 +755,7 @@ export async function checkContractIntegrity(
               contract: contractKey,
               id: contractIds[contractKey],
               status: "mismatch",
+              algo: FINGERPRINT_ALGO,
               wasmHash: hashHex,
               onChainFingerprint: onChainFp,
               bundledFingerprint: bFp,

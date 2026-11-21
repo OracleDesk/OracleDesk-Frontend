@@ -1,0 +1,18 @@
+{
+  "algo": "odspec-v1",
+  "generatedAt": "2026-11-21T00:00:00.000Z",
+  "contracts": {
+    "marketCore": {
+      "algo": "odspec-v1"
+    },
+    "treasury": {
+      "algo": "odspec-v1"
+    },
+    "resolver": {
+      "algo": "odspec-v1"
+    },
+    "reasoningRegistry": {
+      "algo": "odspec-v1"
+    }
+  }
+}

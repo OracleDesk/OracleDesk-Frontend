@@ -1,5 +1,6 @@
-import { cidDigestCheck, type CidCheck } from "./cid";
+import { cidDigestCheck, parseCid, type CidCheck, DAG_PB_CODEC } from "./cid";
 import { Sha256 } from "./sha256";
+import { readCar, verifyCarFile, type CarLimits } from "./car";
 
 /**
  * Trace fetching and verification without any DOM or app configuration, so
@@ -23,7 +24,10 @@ export type GatewayOutcome =
   | "too-large"
   | "network"
   | "aborted"
-  | "skipped";
+  | "skipped"
+  | "car-unsupported"
+  | "car-invalid"
+  | "cid-hash-disagree";
 
 export interface GatewayAttempt {
   gateway: string;
@@ -51,6 +55,7 @@ export interface RaceOptions {
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
   onProgress?: (progress: RaceProgress) => void;
+  carLimits?: CarLimits;
 }
 
 /** `bytes` is only set for a verified result, so unverified content never leaves the race. */
@@ -142,6 +147,56 @@ interface AttemptResult {
   attempt: GatewayAttempt;
   bytes?: Uint8Array;
   contentKind?: "json" | "text";
+  cidCheck?: CidCheck;
+}
+
+async function fetchCarFromGateway(
+  gateway: string,
+  cid: string,
+  expectedHash: string,
+  opts: { fetchImpl: typeof fetch; signal: AbortSignal; carLimits: CarLimits; onProgress?: RaceOptions["onProgress"] },
+): Promise<AttemptResult> {
+  const started = performance.now();
+  const elapsed = () => Math.round(performance.now() - started);
+  try {
+    const bare = cid.replace(/^ipfs:\/\//, "");
+    const base = gateway.endsWith("/") ? gateway.slice(0, -1) : gateway;
+    const url = `${base}/${encodeURIComponent(bare)}?format=car&dag-scope=entity`;
+    const res = await opts.fetchImpl(url, {
+      signal: opts.signal,
+      headers: { Accept: "application/vnd.ipld.car;version=1;order=dfs;dups=n" },
+    });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => undefined);
+      return { attempt: { gateway, outcome: "car-unsupported", status: res.status, ms: elapsed() } };
+    }
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().startsWith("application/vnd.ipld.car")) {
+      await res.body?.cancel().catch(() => undefined);
+      return { attempt: { gateway, outcome: "car-unsupported", status: res.status, ms: elapsed() } };
+    }
+    if (!res.body) {
+      return { attempt: { gateway, outcome: "car-invalid", ms: elapsed() } };
+    }
+    const blocksGen = readCar(res.body, opts.carLimits);
+    const { bytes, hex } = await verifyCarFile(cid, blocksGen, opts.carLimits);
+    if (hex !== expectedHash) {
+      return {
+        attempt: { gateway, outcome: "cid-hash-disagree", ms: elapsed(), bytes: bytes.byteLength, computedHash: hex },
+        cidCheck: "match-other-content",
+      };
+    }
+    const decoded = decodeContent(bytes);
+    return {
+      attempt: { gateway, outcome: "verified", ms: elapsed(), bytes: bytes.byteLength, computedHash: hex },
+      bytes,
+      contentKind: decoded.kind,
+      cidCheck: "match",
+    };
+  } catch (error) {
+    if (error instanceof TraceTooLargeError) return { attempt: { gateway, outcome: "too-large", ms: elapsed() } };
+    return { attempt: { gateway, outcome: "car-invalid", ms: elapsed() } };
+  }
 }
 
 async function fetchFromGateway(
@@ -184,6 +239,12 @@ function describeFailure(attempt: GatewayAttempt, maxBytes: number): string {
       return "The IPFS gateway timed out";
     case "too-large":
       return `Trace is larger than the ${maxBytes}-byte limit`;
+    case "car-unsupported":
+      return "The IPFS gateway does not support trustless CAR retrieval";
+    case "car-invalid":
+      return "The IPFS gateway returned an invalid or malformed CAR archive";
+    case "cid-hash-disagree":
+      return "The CID is valid, but the file it names is not the file whose hash was committed. The publisher's CID and hash disagree.";
     default:
       return "Couldn't reach the IPFS gateway";
   }
@@ -203,11 +264,20 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TRACE_TIMEOUT_MS;
   const staggerMs = opts.staggerMs ?? DEFAULT_TRACE_STAGGER_MS;
   const gateways = opts.gateways;
+  const parsedCid = parseCid(opts.cid);
+  const isDagPb = parsedCid?.codec === DAG_PB_CODEC || parsedCid?.version === 0;
+  const carLimits: CarLimits = opts.carLimits ?? {
+    maxFileBytes: opts.maxBytes,
+    maxCarBytes: Math.floor(1.25 * opts.maxBytes) + 64 * 1024,
+    maxBlocks: 4096,
+    maxBlockBytes: 1024 * 1024 + 1024,
+    maxDepth: 8,
+  };
 
   return new Promise<RaceResult>((resolve) => {
     const attempts: GatewayAttempt[] = [];
     const inFlight = new Map<string, { controller: AbortController; timer: ReturnType<typeof setTimeout>; started: number }>();
-    const mismatches: GatewayAttempt[] = [];
+    const mismatches: { attempt: GatewayAttempt; cidCheck?: CidCheck }[] = [];
     let next = 0;
     let settled = false;
     let staggerTimer: ReturnType<typeof setTimeout> | undefined;
@@ -232,8 +302,9 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
     const finalizeFailure = () => {
       const first = mismatches[0];
       if (first) {
+        const checkKind = first.cidCheck ?? (first.attempt.outcome === "cid-hash-disagree" ? "match-other-content" : cidDigestCheck(opts.cid, first.attempt.computedHash ?? ""));
         finish({
-          check: { status: "mismatch", computedHash: first.computedHash ?? "", cidCheck: cidDigestCheck(opts.cid, first.computedHash ?? "") },
+          check: { status: "mismatch", computedHash: first.attempt.computedHash ?? "", cidCheck: checkKind },
         });
         return;
       }
@@ -260,14 +331,16 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
             content: decoded.content,
             computedHash,
             gateway,
-            cidCheck: cidDigestCheck(opts.cid, computedHash),
+            cidCheck: result.cidCheck ?? cidDigestCheck(opts.cid, computedHash),
           },
           bytes: result.bytes,
           contentKind: decoded.kind,
         });
         return;
       }
-      if (result.attempt.outcome === "mismatch") mismatches.push(result.attempt);
+      if (result.attempt.outcome === "mismatch" || result.attempt.outcome === "cid-hash-disagree") {
+        mismatches.push({ attempt: result.attempt, cidCheck: result.cidCheck });
+      }
 
       launchNext();
       if (inFlight.size === 0 && next >= gateways.length) finalizeFailure();
@@ -281,12 +354,35 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
         controller.abort();
       }, timeoutMs);
       inFlight.set(gateway, { controller, timer, started: performance.now() });
-      void fetchFromGateway(gateway, opts.cid, expectedHash, {
-        fetchImpl,
-        signal: controller.signal,
-        maxBytes: opts.maxBytes,
-        onProgress: opts.onProgress,
-      }).then((result) => {
+
+      const runRawFetch = () => {
+        return fetchFromGateway(gateway, opts.cid, expectedHash, {
+          fetchImpl,
+          signal: controller.signal,
+          maxBytes: opts.maxBytes,
+          onProgress: opts.onProgress,
+        });
+      };
+
+      const execute = async () => {
+        if (isDagPb) {
+          const carRes = await fetchCarFromGateway(gateway, opts.cid, expectedHash, {
+            fetchImpl,
+            signal: controller.signal,
+            carLimits,
+            onProgress: opts.onProgress,
+          });
+          if (carRes.attempt.outcome === "car-unsupported" || carRes.attempt.outcome === "car-invalid") {
+            attempts.push(carRes.attempt);
+            // Fall back to raw fetch for this gateway in the same slot
+            return runRawFetch();
+          }
+          return carRes;
+        }
+        return runRawFetch();
+      };
+
+      void execute().then((result) => {
         // The timeout or a caller cancel can make a read fail with a generic network error; name the real cause.
         if (result.attempt.outcome === "network" && controller.signal.aborted) {
           result.attempt.outcome = timedOut ? "timeout" : "aborted";

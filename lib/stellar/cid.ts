@@ -6,7 +6,7 @@
  * "unsupported" rather than guessed at. See https://github.com/multiformats/cid.
  */
 
-export type CidCheck = "match" | "mismatch" | "unsupported" | "invalid";
+export type CidCheck = "match" | "mismatch" | "unsupported" | "invalid" | "match-other-content";
 
 export interface ParsedCid {
   version: 0 | 1;
@@ -15,10 +15,10 @@ export interface ParsedCid {
   digest: Uint8Array;
 }
 
-const RAW_CODEC = 0x55;
-const SHA2_256_CODE = 0x12;
-const SHA2_256_LENGTH = 32;
-const DAG_PB_CODEC = 0x70;
+export const RAW_CODEC = 0x55;
+export const SHA2_256_CODE = 0x12;
+export const SHA2_256_LENGTH = 32;
+export const DAG_PB_CODEC = 0x70;
 
 const BASE32_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -61,7 +61,7 @@ function decodeBase58(input: string): Uint8Array | null {
 }
 
 /** Unsigned LEB128 varint, as used by multiformats. Returns the value and the next offset. */
-function readVarint(bytes: Uint8Array, offset: number): { value: number; next: number } | null {
+export function readVarint(bytes: Uint8Array, offset: number): { value: number; next: number } | null {
   let value = 0;
   let shift = 0;
   for (let i = offset; i < bytes.length && i < offset + 9; i++) {
@@ -70,6 +70,32 @@ function readVarint(bytes: Uint8Array, offset: number): { value: number; next: n
     shift += 7;
   }
   return null;
+}
+
+/** Parses binary CID bytes into a ParsedCid with original bytes attached. */
+export function parseCidBytes(bytes: Uint8Array): (ParsedCid & { bytes: Uint8Array }) | null {
+  if (bytes.length === 34 && bytes[0] === SHA2_256_CODE && bytes[1] === SHA2_256_LENGTH) {
+    return { version: 0, codec: DAG_PB_CODEC, hashCode: SHA2_256_CODE, digest: bytes.slice(2), bytes };
+  }
+  const version = readVarint(bytes, 0);
+  if (!version || (version.value !== 0 && version.value !== 1)) return null;
+  if (version.value === 0) {
+    return { version: 0, codec: DAG_PB_CODEC, hashCode: SHA2_256_CODE, digest: bytes.slice(2), bytes };
+  }
+  const codec = readVarint(bytes, version.next);
+  if (!codec) return null;
+  const hashCode = readVarint(bytes, codec.next);
+  if (!hashCode) return null;
+  const length = readVarint(bytes, hashCode.next);
+  if (!length || length.value > bytes.length - length.next) return null;
+  if (length.next + length.value !== bytes.length) return null;
+  return {
+    version: 1,
+    codec: codec.value,
+    hashCode: hashCode.value,
+    digest: bytes.slice(length.next),
+    bytes,
+  };
 }
 
 /** Parses a bare CID string (no ipfs:// prefix, no path). Returns null when it isn't a well-formed CID. */
