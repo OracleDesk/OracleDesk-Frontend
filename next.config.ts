@@ -124,6 +124,19 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+
+  /**
+   * React Compiler (#152). Enabled incrementally: starts with the whole app
+   * and opts out per-directory via panicThreshold to avoid mis-optimizing
+   * code that mutates during render.  Remove entries as violations are fixed.
+   * The compiler automatically memoizes components and hooks that follow the
+   * Rules of React, replacing hand-written useMemo/useCallback.
+   */
+  experimental: {
+    reactCompiler: {
+      compilationMode: "infer",
+    },
+  },
 };
 
 export default nextConfig;

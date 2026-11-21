@@ -1,0 +1,59 @@
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build-preview:
+    name: Build & Deploy Preview
+    runs-on: ubuntu-latest
+    env:
+      # Mock mode: all backend/RPC calls go through MSW.
+      NEXT_PUBLIC_PREVIEW_MODE: "1"
+      NEXT_PUBLIC_API_URL: "/__mock__/api/v1"
+      NEXT_PUBLIC_RPC_URL: "/__mock__/rpc"
+      # Deterministic build id for cache busting.
+      BUILD_ID: "pr-${{ github.event.pull_request.number }}-${{ github.sha }}"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: ".node-version"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Build static preview
+        run: npm run build
+
+      - name: Upload preview artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preview-pr-${{ github.event.pull_request.number }}
+          path: out/
+          retention-days: 7
+
+      - name: Post preview link comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const run = context.runId;
+            const pr = context.payload.pull_request.number;
+            const sha = context.sha.slice(0, 7);
+            const body = `## 👁 Preview build ready\n\nStatic export for commit \`${sha}\` has been built.\n\n📦 Download artifact from [this workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${run}).\n\n> This preview runs against a mocked backend (MSW). No real backend or wallet is needed.\n`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: pr,
+            });
+            const existing = comments.find(c => c.user.login === 'github-actions[bot]' && c.body.includes('Preview build ready'));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr, body });
+            }
