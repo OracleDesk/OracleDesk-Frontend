@@ -22,7 +22,7 @@ jobs:
           cache: npm
 
       - id: nm-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules
           key: nm-node22-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -45,7 +45,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: node_modules
           key: nm-node22-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -116,13 +116,13 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: node_modules
           key: nm-node22-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - id: x402cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: contracts/oracledesk-stellar/x402/node_modules
           key: x402-node22-${{ runner.os }}-${{ hashFiles('contracts/oracledesk-stellar/x402/package-lock.json') }}
@@ -154,7 +154,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: node_modules
           key: nm-node22-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -184,7 +184,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: node_modules
           key: nm-node22-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
