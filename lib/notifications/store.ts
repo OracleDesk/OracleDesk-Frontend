@@ -118,9 +118,13 @@ export async function openInbox(owner: string, network: string): Promise<Inbox> 
     async unreadCount() { return (await readItems()).filter(item => item.readAt === null).length; },
     async prune(max) {
       const items = await readItems();
+      // Only read items are eligible for removal — an unread item (a `redeemable`
+      // the user has not claimed, a pending/failed tx) represents something the
+      // user still needs to act on, and must never be dropped just because the
+      // inbox is over its cap. Deleting unread items silently loses that state.
+      const readOldestFirst = items.filter(item => item.readAt !== null).sort((a, b) => a.createdAt - b.createdAt);
       const removeCount = Math.max(0, items.length - max);
-      const oldestFirst = items.sort((a, b) => Number(a.readAt === null) - Number(b.readAt === null) || a.createdAt - b.createdAt);
-      await remove(oldestFirst.slice(0, removeCount).map(item => item.id));
+      await remove(readOldestFirst.slice(0, Math.min(removeCount, readOldestFirst.length)).map(item => item.id));
     },
     async getMeta(key) {
       return safe(() => transaction<string | undefined>("meta", (store, result) => {

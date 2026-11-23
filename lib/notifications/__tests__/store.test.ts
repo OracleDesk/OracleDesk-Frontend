@@ -20,10 +20,12 @@ describe("persisted wallet inbox", () => {
     expect(await b.getMeta("ledger")).toBeUndefined(); expect((await a.list()).map(x => x.id)).toEqual(["1"]);
     [a, b, main].forEach(store => store.close());
   });
-  it("prunes oldest read items first and caps even a wholly unread inbox", async () => {
+  it("prunes oldest read items first and never deletes unread items even over the cap", async () => {
     const store = await openInbox("prune", "test"); await store.put([1, 2, 3, 4].map(id => item(String(id), "prune")));
     await store.markRead(["3", "4"]); await store.prune(2); expect((await store.list()).map(x => x.id)).toEqual(["2", "1"]);
-    await store.put([item("5", "prune")]); await store.prune(2); expect((await store.list()).map(x => x.id)).toEqual(["5", "2"]); store.close();
+    // #312: once nothing left is read, prune must not fall back to deleting unread
+    // items — an unread `redeemable` represents money the user has not claimed yet.
+    await store.put([item("5", "prune")]); await store.prune(2); expect((await store.list()).map(x => x.id)).toEqual(["5", "2", "1"]); store.close();
   });
   it("falls back to memory if IndexedDB is unavailable and retains read state", async () => {
     vi.stubGlobal("indexedDB", { open() { throw new Error("private browsing"); } });
