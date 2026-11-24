@@ -2,7 +2,9 @@
 import { Icon } from "@/components/ui/icon";
 
 import { useEffect, useRef, useState } from "react";
+import type { BreakerVerdict } from "@/lib/stellar/breaker";
 import type { ReviewModel } from "@/lib/stellar/tx-decode";
+import { bpsToPercent, formatUsdc } from "@/lib/stellar/units";
 import { BUILD_IDENTITY, IDENTITIES, explorerAccount, type IdentityEntry, type IdentityKey } from "@/lib/stellar/config";
 import { addressFingerprint, groupAddress, type AddressFingerprint } from "@/lib/stellar/fingerprint";
 import { formatUsdcDisplay, formatSignedUsdc } from "@/lib/format/money";
@@ -40,12 +42,21 @@ export function TxReviewPreferenceControl() {
   );
 }
 
+export interface BreakerReviewInfo {
+  impactBps: bigint;
+  bandBps: bigint;
+  maxBuy: bigint | null;
+  estimatedMoveBps?: bigint | null;
+  verdict?: BreakerVerdict | null;
+}
+
 interface TxReviewProps {
   model: ReviewModel;
   changedFrom?: ReviewModel;
   confirming?: boolean;
   effects?: Effect[];
   effectViolation?: string | null;
+  breaker?: BreakerReviewInfo;
   onConfirm(): void;
   onCancel(): void;
 }
@@ -60,7 +71,7 @@ function changed(previous: string | null | undefined, current: string | null | u
   return previous !== current;
 }
 
-export function TxReview({ model, changedFrom, confirming = false, effects, effectViolation, onConfirm, onCancel }: TxReviewProps) {
+export function TxReview({ model, changedFrom, confirming = false, effects, effectViolation, breaker, onConfirm, onCancel }: TxReviewProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [skipReview, setSkipReview] = useState(false);
@@ -223,6 +234,28 @@ export function TxReview({ model, changedFrom, confirming = false, effects, effe
               <Row label={<Term id="time-bounds">Valid until</Term>} value={formatBound(model.validUntil)} changed={changed(changedFrom?.validUntil, model.validUntil)} />
             </dl>
           </section>
+
+          {breaker && (
+            <section aria-labelledby="tx-review-breaker">
+              <h3 id="tx-review-breaker" className="mb-3 font-label-caps text-label-caps text-on-surface">Price breakers</h3>
+              <dl className="space-y-2">
+                <Row label="Impact limit" value={bpsToPercent(breaker.impactBps, 0)} />
+                <Row label="Ledger band" value={bpsToPercent(breaker.bandBps, 0)} />
+                {breaker.estimatedMoveBps !== undefined && breaker.estimatedMoveBps !== null && (
+                  <Row label="Estimated move" value={bpsToPercent(breaker.estimatedMoveBps)} />
+                )}
+                {breaker.maxBuy !== null && (
+                  <Row label="Largest passing size" value={`${formatUsdc(breaker.maxBuy, { maxDecimals: 2, grouping: true })} USDC`} />
+                )}
+                {breaker.verdict && !breaker.verdict.ok && (
+                  <Row label="Breaker result" value={`${breaker.verdict.code}: ${bpsToPercent(breaker.verdict.moveBps)} vs ${bpsToPercent(breaker.verdict.limitBps)} limit`} />
+                )}
+              </dl>
+              <p className="mt-2 text-xs text-on-surface-variant">
+                The band reference resets every ledger; a rejected trade is not a market halt. Wait for the next ledger or split the order.
+              </p>
+            </section>
+          )}
 
           <section aria-labelledby="tx-review-hash">
             <h3 id="tx-review-hash" className="mb-2 font-label-caps text-label-caps text-on-surface">

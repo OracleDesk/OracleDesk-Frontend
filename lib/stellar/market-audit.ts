@@ -1,11 +1,18 @@
+import { nativeToScVal, xdr, type rpc } from "@stellar/stellar-sdk";
 import type { ReasoningTrace } from "@/lib/api/traces";
 import { listTraces } from "@/lib/api/traces";
-import { reasoningRegistry } from "./clients";
-import { bytesToHex, read } from "./typed-call";
-import { fetchAndVerifyTraceWith, normalizeHash } from "./trace";
+import { reasoningRegistry, rpcServer } from "./clients";
+import { isArchivedStateError } from "./archival";
+import { CONTRACTS } from "./config";
+import { contractDataKey } from "./ledger-keys";
+import { bytesToHex, read, type RegistryClient } from "./typed-call";
+import { cidDigestCheck, fetchAndVerifyTraceWith, normalizeHash, verifyTraceInWorker } from "./trace";
+import type { CidCheck } from "./cid";
+import type { BrowserOutcome } from "@/lib/admin/trace-audit-compare";
 import type { TraceCheck } from "./trace-core";
-import { IPFS_GATEWAYS, DEFAULT_IPFS_MAX_TRACE_BYTES } from "./config";
+import type { Trace } from "./generated/reasoning-registry";
 import { ConcurrencyLimiter } from "@/lib/charts/trace-overlay-cache";
+import { createGatewayGate } from "./gateway-gate";
 
 export interface OnChainMarketTrace {
   index: number;
@@ -69,6 +76,182 @@ export interface AuditProgress {
 
 export const DEFAULT_AUDIT_CONCURRENCY = 3;
 export const MAX_MARKET_TRACE_ENUMERATION = 200;
+
+export type RegistryTraceRead =
+  | OnChainMarketTrace
+  | { error: "not-found" | "archived" | string; message?: string };
+
+export interface VerifyItem {
+  onChainTraceId: string;
+  ipfsCid: string;
+  traceHash: string;
+  agent?: string;
+}
+
+export interface BrowserVerifyResult {
+  traceId: string;
+  outcome: BrowserOutcome;
+  check: TraceCheck;
+  cidCheck: CidCheck;
+}
+
+export interface VerifyManyOptions {
+  concurrency?: number;
+  perGatewayLimit?: number;
+  perGatewayRate?: number;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+  registeredAgents?: ReadonlyMap<string, boolean>;
+  onItem?: (result: BrowserVerifyResult) => void;
+}
+
+export const isRegistryTraceReadError = (
+  value: RegistryTraceRead,
+): value is Extract<RegistryTraceRead, { error: string }> => "error" in value;
+
+const verificationCache = new Map<string, TraceCheck>();
+
+function registryKeyType(): xdr.ScSpecTypeDef {
+  return xdr.ScSpecTypeDef.scSpecTypeUdt(new xdr.ScSpecTypeUdt({ name: "DataKey" }));
+}
+
+function registryTraceType(): xdr.ScSpecTypeDef {
+  return xdr.ScSpecTypeDef.scSpecTypeUdt(new xdr.ScSpecTypeUdt({ name: "Trace" }));
+}
+
+function registryTraceKey(spec: { nativeToScVal?: unknown }, id: bigint): xdr.ScVal {
+  if (typeof spec.nativeToScVal === "function") {
+    return (spec.nativeToScVal as (value: unknown, type: xdr.ScSpecTypeDef) => xdr.ScVal)(
+      { tag: "Trace", values: [id] },
+      registryKeyType(),
+    );
+  }
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Trace"), nativeToScVal(id, { type: "u64" })]);
+}
+
+function actionName(action: Trace["action"]): string {
+  if (typeof action === "string") return action;
+  if (action && typeof action === "object" && "tag" in action) return String(action.tag);
+  return "Other";
+}
+
+function fromRegistryTrace(trace: Trace, id: bigint, index: number): OnChainMarketTrace {
+  return {
+    index,
+    onChainTraceId: id.toString(),
+    agent: trace.agent,
+    action: actionName(trace.action),
+    ipfsCid: trace.ipfs_cid,
+    publishedAt: Number(trace.published_at) * 1000,
+    traceHash: bytesToHex(trace.trace_hash),
+  };
+}
+
+async function readTraceFallback(id: bigint, index: number, client: RegistryClient): Promise<RegistryTraceRead> {
+  try {
+    const tx = await client.get_trace({ trace_id: id });
+    return fromRegistryTrace(read(tx, "reasoningRegistry") as Trace, id, index);
+  } catch (error) {
+    return {
+      error: isArchivedStateError(error) ? "archived" : "not-found",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function readTracesByIds(
+  ids: readonly bigint[],
+  client: RegistryClient = reasoningRegistry(),
+  server: Pick<rpc.Server, "getLedgerEntries"> = rpcServer(),
+): Promise<Map<string, RegistryTraceRead>> {
+  const result = new Map<string, RegistryTraceRead>();
+  const spec = client.spec;
+  const unique = [...new Set(ids.map((id) => id.toString()))].map(BigInt);
+
+  for (let offset = 0; offset < unique.length; offset += 200) {
+    const chunk = unique.slice(offset, offset + 200);
+    const requested = chunk.map((id, index) => ({
+      id,
+      index: offset + index,
+      key: contractDataKey(CONTRACTS.reasoningRegistry, registryTraceKey(spec, id)),
+    }));
+    const response = await server.getLedgerEntries(...requested.map(({ key }) => key));
+    const byKey = new Map(requested.map(({ id, index, key }) => [key.toXDR("base64"), { id, index }]));
+
+    for (const entry of response.entries) {
+      const match = byKey.get(entry.key.toXDR("base64"));
+      if (!match) continue;
+      try {
+        const trace = spec.scValToNative<Trace>(entry.val.contractData().val(), registryTraceType());
+        result.set(match.id.toString(), fromRegistryTrace(trace, match.id, match.index));
+      } catch {
+        result.set(match.id.toString(), await readTraceFallback(match.id, match.index, client));
+      }
+    }
+
+    for (const { id, index } of requested) {
+      if (!result.has(id.toString())) result.set(id.toString(), await readTraceFallback(id, index, client));
+    }
+  }
+
+  return result;
+}
+
+function browserOutcome(check: TraceCheck, cidCheck: CidCheck, registered?: boolean): BrowserOutcome {
+  if (check.status === "verified" && cidCheck === "mismatch") return "cid-mismatch";
+  if (check.status === "verified" && registered === false) return "unregistered-agent";
+  return check.status;
+}
+
+export async function verifyMany(
+  items: readonly VerifyItem[],
+  opts: VerifyManyOptions = {},
+): Promise<Map<string, BrowserVerifyResult>> {
+  const results = new Map<string, BrowserVerifyResult>();
+  const limiter = new ConcurrencyLimiter(opts.concurrency ?? 4);
+  const gate = createGatewayGate({ maxInFlight: opts.perGatewayLimit, ratePerSecond: opts.perGatewayRate });
+
+  await Promise.all(
+    items.map((item) =>
+      limiter.run(async () => {
+        if (opts.signal?.aborted) return;
+        const cid = item.ipfsCid;
+        const hash = normalizeHash(item.traceHash);
+        const cacheKey = `${cid}|${hash}`;
+        let check = verificationCache.get(cacheKey);
+        if (!check) {
+          check = opts.fetchImpl
+            ? await fetchAndVerifyTraceWith(cid, hash, {
+                signal: opts.signal,
+                fetchImpl: opts.fetchImpl,
+                acquire: gate.acquire,
+              })
+            : await verifyTraceInWorker(cid, hash, {
+                signal: opts.signal,
+                acquire: gate.acquire,
+                perGatewayLimit: opts.perGatewayLimit,
+                perGatewayRate: opts.perGatewayRate,
+              });
+          if (check.status === "verified") verificationCache.set(cacheKey, check);
+        }
+        const cidCheck = cidDigestCheck(cid, check.status === "unavailable" ? "" : check.computedHash);
+        const registered = item.agent && opts.registeredAgents
+          ? opts.registeredAgents.get(item.agent)
+          : undefined;
+        const result: BrowserVerifyResult = {
+          traceId: item.onChainTraceId,
+          outcome: browserOutcome(check, cidCheck, registered),
+          check,
+          cidCheck,
+        };
+        results.set(item.onChainTraceId, result);
+        opts.onItem?.(result);
+      }, opts.signal),
+    ),
+  );
+
+  return results;
+}
 
 export interface EnumerateTracesOptions {
   concurrency?: number;
@@ -276,7 +459,7 @@ export interface RunMarketAuditOptions {
   signal?: AbortSignal;
   existingItems?: Map<string, AuditedTraceItem>;
   fetchImpl?: typeof fetch;
-  client?: any;
+  client?: RegistryClient;
   backendTraces?: ReasoningTrace[];
   onProgress?: (progress: AuditProgress, currentItems: AuditedTraceItem[]) => void;
 }
@@ -382,108 +565,64 @@ export async function runMarketTraceAudit(opts: RunMarketAuditOptions): Promise<
 
   updateProgress();
 
-  // 3. Bounded concurrency verification of pending traces
   const pendingItems = Array.from(itemsMap.values()).filter(
     (item) => item.status === "pending" || item.status === "running",
   );
-
-  let nextIndex = 0;
-  let activeWorkers = 0;
-  let wasCancelled = false;
-
-  await new Promise<void>((resolve) => {
-    if (pendingItems.length === 0 || signal?.aborted) {
-      resolve();
-      return;
-    }
-
-    const startWorker = () => {
-      if (signal?.aborted) {
-        wasCancelled = true;
-        if (activeWorkers === 0) resolve();
-        return;
-      }
-
-      if (nextIndex >= pendingItems.length) {
-        if (activeWorkers === 0) resolve();
-        return;
-      }
-
-      const item = pendingItems[nextIndex++];
-      item.status = "running";
-      activeWorkers++;
-      updateProgress(item.onChainTraceId);
-
-      const onChain = onChainTraces.find((t) => t.onChainTraceId === item.onChainTraceId);
-      const onChainHash = onChain ? onChain.traceHash : item.onChainHash;
-
-      fetchAndVerifyTraceWith(item.ipfsCid, onChainHash, {
-        signal,
-        gateways: IPFS_GATEWAYS,
-        maxBytes: DEFAULT_IPFS_MAX_TRACE_BYTES,
-        timeoutMs: 8_000,
-        fetchImpl: opts.fetchImpl,
-      })
-        .then((check: TraceCheck) => {
-          activeWorkers--;
-          if (signal?.aborted) {
-            item.status = "pending";
-            wasCancelled = true;
-            if (activeWorkers === 0) resolve();
-            return;
-          }
-
-          if (check.status === "verified") {
-            item.status = "verified";
-            item.computedHash = check.computedHash;
-            item.content = check.content;
-            verified++;
-          } else if (check.status === "mismatch") {
-            item.status = "mismatch";
-            item.computedHash = check.computedHash;
-            mismatches++;
-          } else {
-            item.status = "unavailable";
-            item.reason = check.reason;
-            unavailable++;
-          }
-
-          // Reconcile with backend
-          const reconciliation = reconcileTraceWithBackend(
-            onChain ?? {
-              index: item.index,
-              onChainTraceId: item.onChainTraceId,
-              agent: item.agent,
-              action: item.action,
-              ipfsCid: item.ipfsCid,
-              publishedAt: item.publishedAt,
-              traceHash: item.onChainHash,
-            },
-            item.status,
-            item.computedHash,
-            item.backendRecord,
-          );
-          item.disagreements = reconciliation.disagreements;
-          item.isCriticalDisagreement = reconciliation.isCriticalDisagreement;
-
-          updateProgress(item.onChainTraceId);
-          startWorker();
-        })
-        .catch(() => {
-          activeWorkers--;
-          item.status = "unavailable";
-          item.reason = "Verification threw error";
-          unavailable++;
-          updateProgress(item.onChainTraceId);
-          startWorker();
-        });
+  const wasCancelled = Boolean(signal?.aborted);
+  const verifyItems = pendingItems.map((item) => {
+    const onChain = onChainTraces.find((trace) => trace.onChainTraceId === item.onChainTraceId);
+    return {
+      onChainTraceId: item.onChainTraceId,
+      ipfsCid: item.ipfsCid,
+      traceHash: onChain?.traceHash ?? item.onChainHash,
+      agent: item.agent,
     };
+  });
 
-    // Launch worker pool up to concurrency limit
-    const poolSize = Math.min(concurrency, pendingItems.length);
-    for (let i = 0; i < poolSize; i++) {
-      startWorker();
-    }
+  await verifyMany(verifyItems, {
+    concurrency,
+    signal,
+    fetchImpl: opts.fetchImpl,
+    onItem: ({ traceId, outcome, check }) => {
+      const item = itemsMap.get(traceId);
+      if (!item) return;
+      const onChain = onChainTraces.find((trace) => trace.onChainTraceId === traceId);
+
+      if (check.status === "verified") {
+        item.status = "verified";
+        item.computedHash = check.computedHash;
+        item.content = check.content;
+        verified++;
+      } else if (check.status === "mismatch") {
+        item.status = "mismatch";
+        item.computedHash = check.computedHash;
+        mismatches++;
+      } else {
+        item.status = "unavailable";
+        item.reason = check.reason;
+        unavailable++;
+      }
+
+      const reconciliation = reconcileTraceWithBackend(
+        onChain ?? {
+          index: item.index,
+          onChainTraceId: item.onChainTraceId,
+          agent: item.agent,
+          action: item.action,
+          ipfsCid: item.ipfsCid,
+          publishedAt: item.publishedAt,
+          traceHash: item.onChainHash,
+        },
+        item.status,
+        item.computedHash,
+        item.backendRecord,
+      );
+      item.disagreements = reconciliation.disagreements;
+      if (outcome === "cid-mismatch") item.disagreements.push("CID digest does not match the served bytes.");
+      if (outcome === "unregistered-agent") item.disagreements.push("Agent is not registered on-chain.");
+      item.isCriticalDisagreement = reconciliation.isCriticalDisagreement || outcome === "unregistered-agent";
+      updateProgress(traceId);
+    },
   });
 
   const finalItems = Array.from(itemsMap.values()).sort((a, b) => a.index - b.index);

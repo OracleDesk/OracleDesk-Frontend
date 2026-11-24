@@ -1,5 +1,5 @@
 import type { UserScope } from "@/lib/query/scope";
-import { API_URL } from "@/lib/stellar/config";
+import { API_URL, NETWORK_LABEL, NETWORK_PASSPHRASE } from "@/lib/stellar/config";
 import { API_ERROR_CODES, type ApiCode, type ApiErrorCode } from "@/lib/errors/codes";
 import { messageFor } from "@/lib/errors/messages";
 import { currentTrace, newTrace, toTraceparent, type TraceCtx } from "@/lib/observability/tracing";
@@ -10,8 +10,10 @@ export interface ApiRequestOptions {
   expectScope?: UserScope;
   signal?: AbortSignal;
   trace?: TraceCtx;
+  headers?: HeadersInit;
   /** Per-user-action idempotency key (reused across retries of the same action). */
   idempotencyKey?: string;
+  stepUp?: { reason: string } | false;
   /** Internal flag to prevent infinite loops when retrying after step-up auth. */
   _stepUpRetried?: boolean;
 }
@@ -54,6 +56,95 @@ export function registerStepUpHandler(handler: StepUpPromptHandler | null) {
   return () => {
     if (stepUpHandler === handler) stepUpHandler = null;
   };
+}
+
+export interface StepUpRequest {
+  wallet: string;
+  sessionId: string;
+  reason: string;
+  maxAgeSeconds: number;
+  network: string;
+  networkPassphrase: string;
+  signal: AbortSignal;
+}
+
+export type StepUpResult = "ok" | "cancelled";
+export type StepUpHandler = (req: StepUpRequest) => Promise<StepUpResult>;
+
+let scopedStepUpHandler: StepUpHandler | null = null;
+const stepUpFlights = new Map<string, Promise<StepUpResult>>();
+let lastMaxAgeSeconds = 300;
+let lastStepUpOkAt = 0;
+
+export function stepUpCompletedAt(): number {
+  return lastStepUpOkAt;
+}
+
+/** Remember the server's window so the freshness hook can tick without a token claim. */
+export function noteStepUpMaxAge(seconds: number | undefined): void {
+  if (typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0) lastMaxAgeSeconds = seconds;
+}
+
+export function stepUpMaxAgeSeconds(): number {
+  return lastMaxAgeSeconds;
+}
+
+export function registerScopedStepUpHandler(handler: StepUpHandler | null) {
+  scopedStepUpHandler = handler;
+  return () => {
+    if (scopedStepUpHandler === handler) scopedStepUpHandler = null;
+  };
+}
+
+/** One prompt per wallet/session, even when several requests get 403 together. */
+export function runStepUp(req: StepUpRequest): Promise<StepUpResult> {
+  const key = `${req.wallet}|${req.sessionId}`;
+  const existing = stepUpFlights.get(key);
+  if (existing) return existing;
+  const flight = Promise.resolve()
+    .then(async () => {
+      const result: StepUpResult = scopedStepUpHandler ? await scopedStepUpHandler(req) : "cancelled";
+      if (result === "ok") lastStepUpOkAt = Date.now();
+      return result;
+    })
+    .finally(() => stepUpFlights.delete(key));
+  stepUpFlights.set(key, flight);
+  return flight;
+}
+
+export class StepUpRequiredError extends ApiError {
+  readonly maxAgeSeconds: number;
+
+  constructor(details: { maxAgeSeconds?: number; reauthenticate?: boolean } = {}) {
+    super({ code: "STEP_UP_REQUIRED", message: messageFor("api.STEP_UP_REQUIRED"), details }, 403);
+    this.name = "StepUpRequiredError";
+    this.maxAgeSeconds = typeof details.maxAgeSeconds === "number" ? details.maxAgeSeconds : lastMaxAgeSeconds;
+  }
+}
+
+export class StepUpCancelledError extends Error {
+  readonly kind = "rejected";
+
+  constructor() {
+    super("Additional wallet authentication was cancelled.");
+    this.name = "StepUpCancelledError";
+  }
+}
+
+/** Routes whose server handlers accept and de-duplicate an Idempotency-Key. */
+export const idempotentRoutes: readonly string[] = [
+  "/trade/copy",
+  "/trade/copy/",
+  "/traces/verify",
+  "/traces/access/allowance",
+  "/markets/generate",
+];
+
+export function routeAllowsReplay(path: string, method: string): boolean {
+  const verb = method.toUpperCase();
+  if (verb === "GET" || verb === "HEAD") return true;
+  if (verb !== "PUT" && verb !== "PATCH") return false;
+  return idempotentRoutes.some((route) => path === route || path.startsWith(route.endsWith("/") ? route : `${route}/`));
 }
 
 export interface ApiErrorPayload {
@@ -356,7 +447,11 @@ async function request<T>(
   assertScope();
   const token = getStoredToken();
   const requestSessionId = getStoredSessionId();
+  const requestSessionWallet = getStoredSessionWallet();
   const headers = new Headers(init.headers);
+  if (options.headers) {
+    new Headers(options.headers).forEach((value, key) => headers.set(key, value));
+  }
 
   // Issue #124: correlate this request with the active operation (or a fresh
   // trace) so backend logs and client reports share one reference id.
@@ -367,6 +462,9 @@ async function request<T>(
 
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
+  }
+  if (options.idempotencyKey && !headers.has("Idempotency-Key")) {
+    headers.set("Idempotency-Key", options.idempotencyKey);
   }
 
   if (token) {
@@ -409,15 +507,41 @@ async function request<T>(
   assertScope();
 
   if (!response.ok || envelope?.ok === false) {
-    const details = apiError?.details as { reauthenticate?: boolean } | undefined;
+    const details = apiError?.details as { maxAgeSeconds?: number; reauthenticate?: boolean } | undefined;
     const isStepUp = response.status === 403 && (apiError?.code === "STEP_UP_REQUIRED" || details?.reauthenticate === true);
-    if (isStepUp && !options._stepUpRetried && stepUpHandler) {
-      const stepUpDetails = (apiError?.details as { maxAgeSeconds?: number; reauthenticate?: boolean }) ?? { reauthenticate: true };
-      const confirmed = await stepUpHandler(stepUpDetails);
-      if (confirmed) {
-        // Re-execute request once with _stepUpRetried flag set to true
-        return request<T>(path, init, params, { ...options, _stepUpRetried: true });
+    if (isStepUp) {
+      const stepUpDetails = details ?? { reauthenticate: true };
+      noteStepUpMaxAge(stepUpDetails.maxAgeSeconds);
+      if (options.stepUp === false || options._stepUpRetried) throw new StepUpRequiredError(stepUpDetails);
+
+      const hasIdempotencyKey = headers.has("Idempotency-Key");
+      const replayable = routeAllowsReplay(path, method) && hasIdempotencyKey;
+      if (!replayable && scopedStepUpHandler) throw new StepUpRequiredError(stepUpDetails);
+
+      if (stepUpHandler) {
+        const confirmed = await stepUpHandler(stepUpDetails);
+        if (confirmed) return request<T>(path, init, params, { ...options, _stepUpRetried: true });
+        throw new StepUpCancelledError();
       }
+
+      if (!scopedStepUpHandler) throw new StepUpRequiredError(stepUpDetails);
+      assertScope();
+      const reason = options.stepUp && options.stepUp !== false ? options.stepUp.reason : "complete this action";
+      const result = await runStepUp({
+        wallet: requestSessionWallet ?? "",
+        sessionId: requestSessionId ?? "",
+        reason,
+        maxAgeSeconds: typeof stepUpDetails.maxAgeSeconds === "number" ? stepUpDetails.maxAgeSeconds : lastMaxAgeSeconds,
+        network: NETWORK_LABEL,
+        networkPassphrase: NETWORK_PASSPHRASE,
+        signal: options.signal ?? new AbortController().signal,
+      });
+      if (result !== "ok") throw new StepUpCancelledError();
+      assertScope();
+      if (requestSessionId !== getStoredSessionId() || requestSessionWallet !== getStoredSessionWallet()) {
+        throw new StepUpRequiredError(stepUpDetails);
+      }
+      return request<T>(path, init, params, { ...options, _stepUpRetried: true });
     }
 
     const authFailure = ["TOKEN_EXPIRED", "INVALID_TOKEN", "UNAUTHORIZED"].includes(apiError?.code ?? "") ||
@@ -501,7 +625,7 @@ export const apiClient = {
       headers,
     }, undefined, options);
   },
-  delete<T>(path: string) {
-    return request<T>(path, { method: "DELETE" });
+  delete<T>(path: string, options?: ApiRequestOptions) {
+    return request<T>(path, { method: "DELETE" }, undefined, options);
   },
 };

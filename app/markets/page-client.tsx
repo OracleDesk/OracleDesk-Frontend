@@ -27,6 +27,9 @@ import type { Route } from "next";
 import { parseBackendMarketId, parseOnChainMarketId, routes } from "@/lib/routes";
 import { sharedMarketEventCache } from "@/lib/stellar/market-activity";
 import { reconcileDisplayPrice } from "@/lib/realtime/market-price-store";
+import { useBreaker } from "@/lib/hooks/useBreaker";
+import { breakerLimits } from "@/lib/stellar/breaker";
+import { bpsToPercent } from "@/lib/stellar/units";
 
 function chainStatusLabel(view: OnChainMarketView | undefined): string {
   if (!view) return "—";
@@ -115,6 +118,9 @@ const MarketCard = ({ href, yesHref, noHref, category, onChainMarketId, reasonin
   const reduceMotion = useReducedMotion();
   const shouldAnimate = !disableEntrance && !reduceMotion;
   const chain = useOnChainMarket(onChainMarketId);
+  const breakerState = useBreaker(onChainMarketId ?? "", Boolean(onChainMarketId));
+  const breaker = breakerLimits(breakerState.data?.config);
+  const breakerEnabled = breaker.impactBps > 0n || breaker.bandBps > 0n;
   const view = chain.data;
   const fromChain = Boolean(view);
   const provisional = useProvisionalPrice(onChainMarketId);
@@ -229,6 +235,14 @@ const MarketCard = ({ href, yesHref, noHref, category, onChainMarketId, reasonin
                 {activity?.status === "ready" ? `${activityFeesText} · ${activity.uniqueTraders}` : "Unavailable"}
               </p>
             </div>
+            {breakerEnabled && (
+              <div className="col-span-2">
+                <p className="text-label-caps text-on-surface-variant uppercase mb-1">Price breakers</p>
+                <p className="font-data-mono text-body-md">
+                  Impact ≤ {bpsToPercent(breaker.impactBps, 0)} · Band ≤ {bpsToPercent(breaker.bandBps, 0)}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -393,19 +407,14 @@ export default function MarketsPageClient() {
   return (
     <div className="min-h-screen bg-surface">
       <main className="pt-24 pb-12 px-gutter max-w-container-max-width mx-auto">
+        <h1 id="markets-heading" tabIndex={-1} className="sr-only outline-none">
+          Markets
+        </h1>
         <FilterBar
           status={status}
           setStatus={handleSetStatus}
           category={category}
           setCategory={setCategory}
-        <h1 id="markets-heading" tabIndex={-1} className="sr-only outline-none">
-          Markets
-        </h1>
-        <FilterBar 
-          status={status} 
-          setStatus={(s) => setStatus(s as MarketStatus)} 
-          category={category} 
-          setCategory={setCategory} 
         />
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

@@ -1180,7 +1180,7 @@ export function runQueuedWrite<T>(
 }
 
 async function fetchTradePreflightInput(marketId: bigint, holder: string, includeBalance: boolean): Promise<PreflightInput> {
-  const [view, config, ledgerNow, position, usdcBalance] = await Promise.all([
+  const [view, config, ledgerNow, position, usdcBalance, breakerConfig, bandState] = await Promise.all([
     fetchOnChainMarketBySimulation(marketId),
     fetchMarketConfig(),
     fetchLedgerNow(),
@@ -1191,8 +1191,18 @@ async function fetchTradePreflightInput(marketId: bigint, holder: string, includ
         throw new UserFacingError(describeError(error), error);
       }),
     includeBalance ? fetchUsdcBalanceIfAvailable(holder) : Promise.resolve(undefined),
+    measured("breaker_config", () => marketCore().breaker_config({ market_id: marketId }))
+      .then((tx) => simulated(tx))
+      .catch(() => null),
+    measured("breaker_state", () => marketCore().breaker_state({ market_id: marketId }))
+      .then((tx) => {
+        const band = simulated(tx);
+        const ledger = typeof tx.simulation?.latestLedger === "number" ? tx.simulation.latestLedger : null;
+        return ledger !== null && band && Number(band.ledger_seq) !== ledger ? null : band;
+      })
+      .catch(() => null),
   ]);
-  return { market: view.market, config, ledgerNow, position, usdcBalance };
+  return { market: view.market, config, ledgerNow, position, usdcBalance, breaker: breakerConfig, band: bandState };
 }
 
 /**

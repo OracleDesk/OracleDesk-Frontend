@@ -201,9 +201,10 @@ export function rpcPriceHistorySource(
 // network switch can never mix two histories.
 
 const DB_NAME = "oracledesk-history";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 const STORE = "series";
 export const LIFECYCLE_STORE = "lifecycle";
+export const WALLET_LEDGER_STORE = "wallet-ledger";
 
 export interface SerializedPricePoint {
   ledger: number;
@@ -275,6 +276,7 @@ function openDb(): Promise<IDBDatabase> {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
       if (!db.objectStoreNames.contains(LIFECYCLE_STORE)) db.createObjectStore(LIFECYCLE_STORE);
+      if (!db.objectStoreNames.contains(WALLET_LEDGER_STORE)) db.createObjectStore(WALLET_LEDGER_STORE);
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("indexedDB open failed"));
@@ -291,6 +293,67 @@ export interface CachedLifecycle {
 }
 
 const lifecycleMemoryCache = new Map<string, CachedLifecycle>();
+
+export interface CachedWalletLedger<T = unknown> {
+  v: 1;
+  entries: T[];
+  cursors: Record<string, string>;
+  startLedger: number;
+  toLedger: number;
+  truncated: boolean;
+}
+
+const walletLedgerMemoryCache = new Map<string, CachedWalletLedger>();
+
+export async function readWalletLedgerCache<T = unknown>(key: string): Promise<CachedWalletLedger<T> | null> {
+  if (!idbAvailable()) return (walletLedgerMemoryCache.get(key) as CachedWalletLedger<T> | undefined) ?? null;
+  try {
+    const db = await openDb();
+    if (!db.objectStoreNames.contains(WALLET_LEDGER_STORE)) {
+      db.close();
+      return (walletLedgerMemoryCache.get(key) as CachedWalletLedger<T> | undefined) ?? null;
+    }
+    const value = await new Promise<CachedWalletLedger<T> | null>((resolve, reject) => {
+      const request = db.transaction(WALLET_LEDGER_STORE, "readonly").objectStore(WALLET_LEDGER_STORE).get(key);
+      request.onsuccess = () => resolve((request.result as CachedWalletLedger<T> | undefined) ?? null);
+      request.onerror = () => reject(request.error ?? new Error("indexedDB read failed"));
+    });
+    db.close();
+    if (!value || value.v !== 1 || !Array.isArray(value.entries)) {
+      return (walletLedgerMemoryCache.get(key) as CachedWalletLedger<T> | undefined) ?? null;
+    }
+    walletLedgerMemoryCache.set(key, value as CachedWalletLedger);
+    return value;
+  } catch {
+    return (walletLedgerMemoryCache.get(key) as CachedWalletLedger<T> | undefined) ?? null;
+  }
+}
+
+export async function writeWalletLedgerCache<T = unknown>(key: string, value: CachedWalletLedger<T>): Promise<boolean> {
+  walletLedgerMemoryCache.set(key, value as CachedWalletLedger);
+  if (walletLedgerMemoryCache.size > MEMORY_CACHE_MAX) {
+    walletLedgerMemoryCache.delete(walletLedgerMemoryCache.keys().next().value!);
+  }
+  if (!idbAvailable()) return false;
+  try {
+    const db = await openDb();
+    if (!db.objectStoreNames.contains(WALLET_LEDGER_STORE)) {
+      db.close();
+      return false;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(WALLET_LEDGER_STORE, "readwrite");
+      tx.objectStore(WALLET_LEDGER_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error("indexedDB write failed"));
+      tx.onabort = () => reject(tx.error ?? new Error("indexedDB write aborted"));
+    });
+    db.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function readLifecycleCache(key: string): Promise<CachedLifecycle | null> {
   if (!idbAvailable()) return lifecycleMemoryCache.get(key) ?? null;

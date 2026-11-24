@@ -102,7 +102,12 @@ export default function PortfolioAnalytics() {
 
   const { kpis, series, coverage } = equity;
   const partial = series.some(point => point.partial);
-  const chartData = series.map(point => ({ time: point.time, value: usdcToNumber(point.equity) }));
+  const chartData = series.map(point => ({
+    time: point.time,
+    value: usdcToNumber(point.equity),
+    lower: usdcToNumber(point.lower),
+    upper: usdcToNumber(point.upper),
+  }));
   const tickFormat = rangeS <= 86_400
     ? (time: number) => new Date(time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : (time: number) => new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -221,7 +226,10 @@ export default function PortfolioAnalytics() {
                       contentStyle={{ backgroundColor: "#ffffff", borderRadius: "8px", border: "1px solid #bfc8cc" }}
                       labelStyle={{ fontFamily: "Geist", fontWeight: "bold" }}
                       labelFormatter={(time) => new Date(Number(time)).toLocaleString()}
-                      formatter={(value) => [`$${Number(value).toFixed(2)}`, "Equity"]}
+                      formatter={(value, name) => [
+                        `$${Number(value).toFixed(2)}`,
+                        name === "lower" ? "Conservative bound" : name === "upper" ? "Full payout bound" : "Equity",
+                      ]}
                     />
                     <Area
                       type="stepAfter"
@@ -233,12 +241,21 @@ export default function PortfolioAnalytics() {
                       animationDuration={800}
                       isAnimationActive={false}
                     />
+                    {partial && (
+                      <>
+                        <Area type="stepAfter" dataKey="lower" stroke="#b3261e" strokeDasharray="4 4" strokeWidth={1} fillOpacity={0} isAnimationActive={false} />
+                        <Area type="stepAfter" dataKey="upper" stroke="#7b1fa2" strokeDasharray="4 4" strokeWidth={1} fillOpacity={0} isAnimationActive={false} />
+                      </>
+                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
               <div className="mt-4 flex flex-col gap-1 text-on-surface-variant font-data-mono text-[11px]">
                 {coverage.truncated && <span>History before ledger {coverage.fromLedger} is unavailable</span>}
-                {partial && <span>Prices between your trades are approximate</span>}
+                {partial && <span>Dashed bounds show conservative-to-full-payout uncertainty where history is incomplete</span>}
+                {equity.approximateMarkets.length > 0 && (
+                  <span>{equity.approximateMarkets.length} held market(s) could not be replayed at full ledger resolution</span>
+                )}
               </div>
             </div>
 

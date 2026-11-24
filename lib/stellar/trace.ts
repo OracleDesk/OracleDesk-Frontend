@@ -29,7 +29,7 @@ export function ipfsUrl(cid: string, gateway: string = IPFS_GATEWAYS[0]): string
 }
 
 export type TraceFetchOptions = Partial<
-  Pick<RaceOptions, "gateways" | "maxBytes" | "timeoutMs" | "staggerMs" | "signal" | "fetchImpl" | "onProgress">
+  Pick<RaceOptions, "gateways" | "maxBytes" | "timeoutMs" | "staggerMs" | "signal" | "fetchImpl" | "onProgress" | "acquire">
 >;
 
 /**
@@ -48,6 +48,7 @@ export async function fetchAndVerifyTraceWith(cid: string, onChainHash: string, 
     signal: opts.signal,
     fetchImpl: opts.fetchImpl,
     onProgress: opts.onProgress,
+    acquire: opts.acquire,
   });
   return check;
 }
@@ -83,6 +84,9 @@ export function fetchAndVerifyTrace(cid: string, onChainHash: string, fetchImpl:
 export interface WorkerVerifyOptions {
   signal?: AbortSignal;
   onProgress?: (progress: Pick<RaceProgress, "received" | "total">) => void;
+  acquire?: RaceOptions["acquire"];
+  perGatewayLimit?: number;
+  perGatewayRate?: number;
 }
 
 interface PendingJob {
@@ -91,6 +95,7 @@ interface PendingJob {
   cid: string;
   onChainHash: string;
   signal?: AbortSignal;
+  acquire?: RaceOptions["acquire"];
 }
 
 let worker: Worker | null = null;
@@ -112,7 +117,11 @@ function rebuildCheck(message: Extract<TraceWorkerResponse, { type: "result" }>)
 function settleAllInThread() {
   for (const [id, job] of pendingJobs) {
     pendingJobs.delete(id);
-    void fetchAndVerifyTraceWith(job.cid, job.onChainHash, { signal: job.signal, onProgress: job.onProgress }).then(job.resolve);
+    void fetchAndVerifyTraceWith(job.cid, job.onChainHash, {
+      signal: job.signal,
+      onProgress: job.onProgress,
+      acquire: job.acquire,
+    }).then(job.resolve);
   }
 }
 
@@ -159,7 +168,13 @@ function getWorker(): Worker | null {
  */
 export function verifyTraceInWorker(cid: string, onChainHash: string, opts: WorkerVerifyOptions = {}): Promise<TraceCheck> {
   const target = getWorker();
-  if (!target) return fetchAndVerifyTraceWith(cid, onChainHash, { signal: opts.signal, onProgress: opts.onProgress });
+  if (!target) {
+    return fetchAndVerifyTraceWith(cid, onChainHash, {
+      signal: opts.signal,
+      onProgress: opts.onProgress,
+      acquire: opts.acquire,
+    });
+  }
   if (opts.signal?.aborted) return Promise.resolve({ status: "unavailable", reason: "Cancelled" });
 
   const id = String(++nextJobId);
@@ -174,6 +189,7 @@ export function verifyTraceInWorker(cid: string, onChainHash: string, opts: Work
       onChainHash,
       signal: opts.signal,
       onProgress: opts.onProgress,
+      acquire: opts.acquire,
       resolve: (check) => {
         opts.signal?.removeEventListener("abort", cancel);
         resolve(check);
@@ -200,6 +216,8 @@ export function verifyTraceInWorker(cid: string, onChainHash: string, opts: Work
       gateways: combinedGateways,
       maxBytes: IPFS_MAX_TRACE_BYTES,
       carLimits,
+      perGatewayLimit: opts.perGatewayLimit,
+      perGatewayRate: opts.perGatewayRate,
     } satisfies TraceWorkerRequest);
   });
 }

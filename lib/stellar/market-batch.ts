@@ -1,8 +1,8 @@
 import { xdr } from "@stellar/stellar-sdk";
 import type { Spec } from "@stellar/stellar-sdk/contract";
 import { priceYesBps } from "./generated/fpmm";
-import type { Market } from "./generated/market-core";
-import { marketKey } from "./ledger-keys";
+import type { BandState, BreakerConfig, Market } from "./generated/market-core";
+import { bandKey, breakerKey, marketKey } from "./ledger-keys";
 
 /** The subset of the market view the batcher produces. Kept structural so the
  * hook layer can re-use its own OnChainMarketView without a cycle. */
@@ -20,6 +20,8 @@ export interface BatchedMarket {
   /** Persistent-entry TTL from getLedgerEntries, when the RPC supplied it. */
   liveUntil: number | null;
   via: "ledger-entry" | "simulation";
+  breaker: BreakerConfig | null;
+  band: BandState | null;
 }
 
 interface LedgerEntryServer {
@@ -40,6 +42,8 @@ export interface MarketBatcherDeps {
    * binding's own MarketNotFound error. */
   fallback: (id: bigint) => Promise<BatchedMarketView>;
   maxKeys?: number;
+  /** Include breaker config and the temporary band reference in the same read. */
+  withBreakers?: boolean;
 }
 
 export interface MarketBatcher {
@@ -73,6 +77,11 @@ export function decodeMarket(spec: Spec, entry: xdr.LedgerEntryData): Market {
   const missing = MARKET_FIELDS.filter((field) => !(field in record));
   if (missing.length) throw new Error(`Decoded Market is missing ${missing.join(", ")}`);
   return market;
+}
+
+function decodeUdt<T>(spec: Spec, value: xdr.ScVal, name: string): T | null {
+  const decoded = spec.scValToNative<T>(value, specUdt(name));
+  return decoded && typeof decoded === "object" ? decoded : null;
 }
 
 function specUdt(name: string) {
@@ -110,15 +119,32 @@ export function createMarketBatcher(deps: MarketBatcherDeps): MarketBatcher {
     else item.reject(result.error);
   };
 
+  const breakerCache = new Map<string, BreakerConfig | null>();
+
+  type KeyEntry = { id: bigint; key: xdr.LedgerKey; role: "market" | "breaker" | "band" };
+
   async function flush() {
     scheduled = false;
     const batch = queue;
     queue = [];
     const unique = [...new Map(batch.map((id) => [id.toString(), id])).values()];
+    const withBreakers = deps.withBreakers === true;
+    const idChunkSize = withBreakers ? Math.max(1, Math.floor(maxKeys / 3)) : maxKeys;
 
-    for (let start = 0; start < unique.length; start += maxKeys) {
-      const ids = unique.slice(start, start + maxKeys);
-      const keys = ids.map((id) => ({ id, key: marketKey(deps.spec, id) }));
+    for (let start = 0; start < unique.length; start += idChunkSize) {
+      const ids = unique.slice(start, start + idChunkSize);
+      const keys: KeyEntry[] = [];
+      const requestedBreaker = new Set<string>();
+      for (const id of ids) {
+        keys.push({ id, key: marketKey(deps.spec, id), role: "market" });
+        if (withBreakers) {
+          if (!breakerCache.has(id.toString())) {
+            keys.push({ id, key: breakerKey(deps.spec, id), role: "breaker" });
+            requestedBreaker.add(id.toString());
+          }
+          keys.push({ id, key: bandKey(deps.spec, id), role: "band" });
+        }
+      }
       let response: Awaited<ReturnType<LedgerEntryServer["getLedgerEntries"]>>;
       try {
         response = await deps.server.getLedgerEntries(...keys.map(({ key }) => key));
@@ -127,21 +153,36 @@ export function createMarketBatcher(deps: MarketBatcherDeps): MarketBatcher {
         continue;
       }
 
-      const requested = new Map(keys.map(({ id, key }) => [key.toXDR("base64"), id]));
-      const decoded = new Map<bigint, { market: Market; liveUntil: number | null }>();
+      const requested = new Map(keys.map(({ id, key, role }) => [key.toXDR("base64"), { id, role }]));
+      const markets = new Map<bigint, { market: Market; liveUntil: number | null }>();
+      const configs = new Map<bigint, BreakerConfig | null>();
+      const bands = new Map<bigint, BandState | null>();
       const failed = new Map<bigint, unknown>();
 
       for (const entry of response.entries) {
-        const id = requested.get(keyOf(entry.key));
-        if (id === undefined) continue;
+        const match = requested.get(keyOf(entry.key));
+        if (match === undefined) continue;
         try {
-          decoded.set(id, {
-            market: decodeMarket(deps.spec, entry.val),
-            liveUntil: entry.liveUntilLedgerSeq ?? null,
-          });
+          const value = entry.val.contractData().val();
+          if (match.role === "market") {
+            markets.set(match.id, {
+              market: decodeMarket(deps.spec, entry.val),
+              liveUntil: entry.liveUntilLedgerSeq ?? null,
+            });
+          } else if (match.role === "breaker") {
+            const cfg = decodeUdt<BreakerConfig>(deps.spec, value, "BreakerConfig");
+            configs.set(match.id, cfg);
+            breakerCache.set(match.id.toString(), cfg);
+          } else {
+            const band = decodeUdt<BandState>(deps.spec, value, "BandState");
+            bands.set(match.id, band && band.ledger_seq === response.latestLedger ? band : null);
+          }
         } catch (error) {
-          failed.set(id, error);
+          failed.set(match.id, error);
         }
+      }
+      for (const id of requestedBreaker) {
+        if (!breakerCache.has(id)) breakerCache.set(id, null);
       }
 
       for (const id of ids) {
@@ -150,7 +191,7 @@ export function createMarketBatcher(deps: MarketBatcherDeps): MarketBatcher {
           settle(id, { ok: false, error });
           continue;
         }
-        const found = decoded.get(id);
+        const found = markets.get(id);
         if (found) {
           settle(id, {
             ok: true,
@@ -164,6 +205,8 @@ export function createMarketBatcher(deps: MarketBatcherDeps): MarketBatcher {
               ledger: response.latestLedger,
               liveUntil: found.liveUntil,
               via: "ledger-entry",
+              breaker: configs.get(id) ?? breakerCache.get(id.toString()) ?? null,
+              band: bands.get(id) ?? null,
             },
           });
           continue;
@@ -177,6 +220,8 @@ export function createMarketBatcher(deps: MarketBatcherDeps): MarketBatcher {
               ledger: view.ledger ?? response.latestLedger,
               liveUntil: null,
               via: "simulation",
+              breaker: breakerCache.get(id.toString()) ?? null,
+              band: null,
             },
           });
         } catch (fallbackError) {

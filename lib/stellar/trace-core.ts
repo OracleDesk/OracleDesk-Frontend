@@ -56,6 +56,8 @@ export interface RaceOptions {
   fetchImpl?: typeof fetch;
   onProgress?: (progress: RaceProgress) => void;
   carLimits?: CarLimits;
+  /** Optional per-gateway gate; resolves to a release function. */
+  acquire?: (gateway: string) => Promise<() => void>;
 }
 
 /** `bytes` is only set for a verified result, so unverified content never leaves the race. */
@@ -277,6 +279,7 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
   return new Promise<RaceResult>((resolve) => {
     const attempts: GatewayAttempt[] = [];
     const inFlight = new Map<string, { controller: AbortController; timer: ReturnType<typeof setTimeout>; started: number }>();
+    const releases = new Map<string, () => void>();
     const mismatches: { attempt: GatewayAttempt; cidCheck?: CidCheck }[] = [];
     let next = 0;
     let settled = false;
@@ -287,6 +290,8 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
       settled = true;
       clearTimeout(staggerTimer);
       opts.signal?.removeEventListener("abort", onCallerAbort);
+      for (const release of releases.values()) release();
+      releases.clear();
       for (const [gateway, run] of inFlight) {
         clearTimeout(run.timer);
         run.controller.abort();
@@ -320,6 +325,8 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
       const run = inFlight.get(gateway);
       if (run) clearTimeout(run.timer);
       inFlight.delete(gateway);
+      releases.get(gateway)?.();
+      releases.delete(gateway);
       attempts.push(result.attempt);
 
       if (result.attempt.outcome === "verified" && result.bytes && result.attempt.computedHash) {
@@ -346,13 +353,27 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
       if (inFlight.size === 0 && next >= gateways.length) finalizeFailure();
     };
 
-    const start = (gateway: string) => {
+    const start = async (gateway: string) => {
+      let release: (() => void) | undefined;
+      if (opts.acquire) {
+        try {
+          release = await opts.acquire(gateway);
+        } catch {
+          onAttemptDone(gateway, { attempt: { gateway, outcome: "skipped", ms: 0 } });
+          return;
+        }
+      }
+      if (settled) {
+        release?.();
+        return;
+      }
       const controller = new AbortController();
       let timedOut = false;
       const timer = setTimeout(() => {
         timedOut = true;
         controller.abort();
       }, timeoutMs);
+      releases.set(gateway, () => release?.());
       inFlight.set(gateway, { controller, timer, started: performance.now() });
 
       const runRawFetch = () => {
@@ -394,7 +415,7 @@ export function raceGateways(opts: RaceOptions): Promise<RaceResult> {
     function launchNext(): void {
       if (settled || next >= gateways.length) return;
       const gateway = gateways[next++];
-      start(gateway);
+      void start(gateway);
       clearTimeout(staggerTimer);
       if (next < gateways.length) staggerTimer = setTimeout(launchNext, staggerMs);
     }

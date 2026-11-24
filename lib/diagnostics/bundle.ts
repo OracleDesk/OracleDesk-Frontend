@@ -85,8 +85,6 @@ export function buildDiagnostics(input: DiagnosticsInput): DiagnosticsBundle {
   };
   return redact(JSON.parse(JSON.stringify(bundle, bigintReplacer))) as DiagnosticsBundle;
 }
-  return redact(JSON.parse(JSON.stringify(bundle, bigintReplacer))) as DiagnosticsBundle;
-}
 
 export function serializeDiagnostics(bundle: DiagnosticsBundle): string {
   return JSON.stringify(bundle, bigintReplacer, 2);

@@ -179,3 +179,17 @@ OracleDesk defines `capped` via an explicit exit floor:
 - If $s < \text{want}$, `capped` is set to `true`.
 - The extra proceeds from liquidating the remaining $\text{want} - s$ shares are reported as `tailValue`.
 - In a thin pool (e.g. 1,000 YES / 10 NO reserves, fee 100 bps, selling 50,000 YES), the portfolio UI warns: `"Only X of Y shares sellable. Selling the rest would return only Z USDC more"`.
+
+---
+
+## 9. Exact Equity Curve
+
+`lib/portfolio/wallet-ledger.ts` loads wallet-owned events (`Trade`, `Redeemed`, `MarketCreated`, `PoolRemainderClaimed`) with separate, cursor-persisted filters and then loads full, cached price streams only for held markets (up to `MAX_MARKETS_FULL`). Held markets beyond that bound use a wallet-trade-only fallback and are reported as approximate in the analytics UI.
+
+`lib/portfolio/equity.ts::exactEquitySeries` replays wallet ledger entries and every stored `PricePoint` together, ordered by `(ledger, id)`. It emits one point per ledger where the wallet position, cash flow, reserves, or resolution changes. There is no fixed 200-sample interpolation: a ledger with many price-changing trades produces many points, and a quiet ledger produces none. Rendering downsamples only after the exact series is built, while preserving the global minimum, maximum, first, and last points.
+
+The chart uses `basis: "mid"` and stores both `lower` and `upper` bounds. A point is `partial` only when the retained price history for a held market starts after the plotted ledger; in that interval `lower` values affected holdings at zero and `upper` values them at the maximum possible payout (`max(yesShares, noShares)`). Intervals with complete price history are exact and are never flagged.
+
+Curve calculation runs in `lib/portfolio/equity.worker.ts` with a synchronous fallback. `reconcileFinals: true` adds a final valuation for held markets whose current on-chain status is resolved but whose resolution event is outside retained history, so the last curve point agrees with the PnL engine's settlement basis.
+
+`IndexedDB` store `wallet-ledger` caches the serialized wallet entries and per-filter cursors; a bounded in-memory copy is used when IndexedDB is unavailable.

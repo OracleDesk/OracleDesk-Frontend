@@ -16,6 +16,7 @@ import { loadStellarWalletsKit, type WalletKitAdapter } from "./wallet-kit-adapt
 import { WalletInterpreter } from "./wallet-interpreter";
 import { viewOf } from "./wallet-machine";
 import { TransactionTrackerProvider } from "./tx-tracker";
+import { StepUpDialog } from "@/components/auth/step-up-dialog";
 import { storedPushWallet, unsubscribe as unsubscribePush } from "@/lib/notifications/push";
 import { LedgerInvalidator } from "./ledger-invalidation";
 import { getIndex, saveIndex, seedIndex, sortAndDedupeMarketIds } from "./wallet-market-index";
@@ -534,7 +535,10 @@ export function WalletProvider({ children, kitLoader = loadStellarWalletsKit, rp
             <SessionContext.Provider value={session}>
               <SignerContext.Provider value={signer}>
                 <MetaContext.Provider value={meta}>
-                  <TransactionTrackerProvider>{children}</TransactionTrackerProvider>
+                  <TransactionTrackerProvider>
+                    <StepUpDialog />
+                    {children}
+                  </TransactionTrackerProvider>
                 </MetaContext.Provider>
               </SignerContext.Provider>
             </SessionContext.Provider>

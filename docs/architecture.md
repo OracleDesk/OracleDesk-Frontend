@@ -512,6 +512,7 @@ Every origin-scoped store is classified and registered with `lib/storage/quota.t
 | Persistence record | `preference` | localStorage | `oracledesk_storage_persist_v1` |
 | Inbox notifications | `preference` | IndexedDB | `oracledesk-inbox` |
 | Price-history series cache | `disposable` | IndexedDB | `oracledesk-history` / store `series` |
+| Wallet ledger and cursors | `disposable` | IndexedDB | `oracledesk-history` / store `wallet-ledger` |
 | Service worker precache | `disposable` | Cache API | `shell-<BUILD_ID>` |
 
 ### Rules
@@ -520,6 +521,22 @@ Every origin-scoped store is classified and registered with `lib/storage/quota.t
 - `disposable` stores are evicted LRU under a `navigator.locks` Web Lock named `oracledesk-storage-evict`.
 - `navigator.storage.persist()` is requested after the first successful paid action, rate-limited to once per 7 days.
 - `assertDurableStorage(kind)` runs before x402 signing, daily-pass transfers, and copy-trade signing; it refuses with a user-facing error when evidence cannot be written durably.
+
+## Circuit breakers (#276)
+
+`lib/stellar/breaker.ts` reads the per-market `BreakerConfig` snapshot and the temporary one-ledger `BandState`, then reproduces the contract's two checks with `bigint` math while the user types: single-trade `max_impact_bps` and cumulative same-ledger `band_bps`. `maxBuyWithinBreakers` uses the monotone price movement to find the largest collateral amount that still passes, and the buy ticket shows that value beside the live estimated move.
+
+Contract errors 21 (`PriceImpactTooHigh`) and 22 (`PriceBandExceeded`) map to recovery advice in `lib/i18n/messages/en.json` and are also checked in local preflight before signing. The band is explicitly not a market halt: it resets at the next ledger, so the UI asks the user to wait or split the order. Market cards and the transaction review sheet show the configured limits. Batch reads use `withBreakers` so they share one `getLedgerEntries` request with the market view; legacy markets without a `Breaker` entry report no active checks.
+
+## Scoped step-up (#277)
+
+`lib/api/client.ts` recognizes `403 STEP_UP_REQUIRED` (or `details.reauthenticate`) for the current wallet/session only. It records the server's `maxAgeSeconds`, prompts through the globally mounted `StepUpDialog`, then replays the request once. Replay is limited to `GET`/`HEAD` and idempotent `PUT`/`PATCH` routes carrying an `Idempotency-Key`; `POST` and `DELETE` require explicit user action after the prompt instead. `StepUpCancelledError` is duck-typed as `rejected` to avoid a client/auth import cycle.
+
+The dialog re-checks wallet address, signer, network passphrase, scope wallet, scope session id and the abort signal before signing a fresh challenge. `useStepUpWindow` exposes the remaining freshness window from the bearer token's `auth_time` or the last local completion, and runs its timer only while the window is open. The administrators panel opts in with `{ stepUp: { reason: "view administrators" } }` and shows the freshness badge. Backend route contracts are listed in `docs/backend-followups.md`.
+
+## Trace-audit console (#278)
+
+`/admin/trace-audit` cross-checks backend audit findings against bounded browser verification. `lib/admin/trace-audit-compare.ts` maps each backend status to a browser outcome by CID digest, trace id and market/agent linkage; disagreements are explicit rather than silently preferring either side. `lib/stellar/gateway-gate.ts` caps verification at two concurrent fetches and four per second per gateway, and `lib/stellar/trace.worker.ts` keeps that state in the worker. `verifyMany` caches results per session and reads registry traces in batches where the binding supports it. Findings and disagreements export as CSV or JSON.
 
 ## On-Chain Storage TTL & Proactive Extension (#304)
 

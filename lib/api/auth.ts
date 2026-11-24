@@ -4,6 +4,7 @@ import {
   apiClient,
   clearAuthSession,
   getStoredSessionWallet,
+  getStoredSessionId,
   getStoredToken,
   setConfirmedSessionWallet,
   setCsrfToken,
@@ -367,3 +368,42 @@ export async function refreshSession(
 }
 
 export { clearAuthSession, getStoredSessionWallet, getStoredToken, isAuthError };
+
+/**
+ * Obtain a fresh SEP-10 proof for the same wallet without rotating the user
+ * scope. `verifyChallenge` keeps the existing session id; the bearer token is
+ * swapped with `replaceToken`, which refuses a changed wallet or session.
+ */
+export async function stepUpWithWallet(
+  expected: { wallet: string; sessionId: string },
+  signTransaction: (xdr: string, networkPassphrase: string) => Promise<string>,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (getStoredSessionId() !== expected.sessionId) {
+    throw new Error("Your session changed while confirming your identity. Try again.");
+  }
+  if (getStoredSessionWallet() !== expected.wallet) {
+    throw new Error("Step-up must use the wallet that started this action.");
+  }
+
+  const session = await signInWithWallet(
+    expected.wallet,
+    signTransaction,
+    () => !signal?.aborted && getStoredSessionId() === expected.sessionId && getStoredSessionWallet() === expected.wallet,
+    { signal },
+  );
+
+  if (session.walletAddress !== expected.wallet) {
+    throw new Error("Step-up must use the wallet that started this action.");
+  }
+  if (getStoredSessionId() !== expected.sessionId) {
+    throw new Error("Your session changed while confirming your identity. Try again.");
+  }
+  if (SESSION_MODE === "bearer" && session.token) {
+    const replaced = replaceToken(
+      { token: session.token, userId: session.userId, walletAddress: session.walletAddress },
+      expected.sessionId,
+    );
+    if (!replaced) throw new Error("Your session changed while confirming your identity. Try again.");
+  }
+}

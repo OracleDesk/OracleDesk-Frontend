@@ -3,6 +3,7 @@ import { Icon } from "@/components/ui/icon";
 
 import React from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { RequireWallet } from "@/components/require-wallet";
 import { useWallet } from "@/lib/contexts/WalletContext";
 import { useMarkets } from "@/lib/hooks/useMarkets";
@@ -13,6 +14,62 @@ import { DiagnosticsPanel } from "@/components/admin/diagnostics-panel";
 import { JobStatusChip } from "@/components/admin/job-status-chip";
 import { useAdminJobs } from "@/lib/admin/job-store";
 import { formatLocalTime, shortJobId } from "@/lib/admin/job-events";
+import { ApiError } from "@/lib/api/client";
+import { getAdmins } from "@/lib/api/admin";
+import { useUserScope } from "@/lib/query/scope";
+import { userKeys } from "@/lib/query/keys";
+import { useStepUpWindow } from "@/lib/auth/use-step-up-window";
+import { shortAddress } from "@/lib/stellar/units";
+
+/** First end-to-end step-up consumer: GET /admin/admins. */
+function AdministratorsPanel() {
+  const scope = useUserScope();
+  const stepUp = useStepUpWindow();
+  const query = useQuery({
+    queryKey: [...userKeys.adminAdmins(scope), "step-up"] as const,
+    queryFn: ({ signal }) => getAdmins({
+      expectScope: scope,
+      signal,
+      stepUp: { reason: "view administrators" },
+    }),
+    enabled: Boolean(scope.wallet),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const minutes = Math.floor(stepUp.secondsLeft / 60);
+  const seconds = stepUp.secondsLeft % 60;
+  const forbidden = query.error instanceof ApiError && query.error.status === 403 &&
+    query.error.code !== "STEP_UP_REQUIRED";
+
+  return (
+    <section className="bg-white border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+      <div className="p-6 border-b border-outline-variant flex justify-between items-center">
+        <h3 className="font-headline-sm text-headline-sm">Administrators</h3>
+        <span className="font-data-mono text-[11px] text-on-surface-variant">
+          {stepUp.fresh ? `Session fresh for ${minutes}:${String(seconds).padStart(2, "0")}` : "Re-authentication may be required"}
+        </span>
+      </div>
+      <div className="p-6 text-sm">
+        {query.isPending && <p className="text-on-surface-variant">Loading administrators…</p>}
+        {forbidden && <p role="alert">You do not have permission to view administrators.</p>}
+        {query.error && !forbidden && <p role="alert">{query.error instanceof Error ? query.error.message : "Could not load administrators."}</p>}
+        {query.data && (query.data.length === 0 ? (
+          <p className="text-on-surface-variant italic">No administrators found.</p>
+        ) : (
+          <ul className="space-y-2">
+            {query.data.map((admin) => (
+              <li key={admin.walletAddress} className="flex justify-between gap-4 font-data-mono">
+                <span>{shortAddress(admin.walletAddress)}</span>
+                <span>{admin.roleName}</span>
+              </li>
+            ))}
+          </ul>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /** Last five runs this browser started, from the job store (no polling here). */
 function RecentGenerationRuns({ address }: { address: string | null }) {
@@ -267,6 +324,8 @@ function AdminContent() {
       </div>
 
       <RecentGenerationRuns address={address} />
+
+      <AdministratorsPanel />
 
       <DiagnosticsPanel />
     </main>

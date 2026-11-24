@@ -1,3 +1,4 @@
+import { createGatewayGate, type GatewayGate } from "./gateway-gate";
 import { raceGateways, type RaceResult, type TraceCheck } from "./trace-core";
 import type { CarLimits } from "./car";
 
@@ -21,6 +22,8 @@ export type TraceWorkerRequest =
       timeoutMs?: number;
       staggerMs?: number;
       carLimits?: CarLimits;
+      perGatewayLimit?: number;
+      perGatewayRate?: number;
     }
   | { type: "cancel"; id: string };
 
@@ -48,6 +51,17 @@ export interface WorkerDeps {
 }
 
 const PROGRESS_INTERVAL_MS = 100;
+const gates = new Map<string, GatewayGate>();
+
+function gateFor(limit: number | undefined, rate: number | undefined): GatewayGate {
+  const key = `${limit ?? 2}|${rate ?? 4}`;
+  let gate = gates.get(key);
+  if (!gate) {
+    gate = createGatewayGate({ maxInFlight: limit, ratePerSecond: rate });
+    gates.set(key, gate);
+  }
+  return gate;
+}
 
 export function handleMessage(message: TraceWorkerRequest, deps: WorkerDeps): void {
   if (message.type === "cancel") {
@@ -85,6 +99,7 @@ export function handleMessage(message: TraceWorkerRequest, deps: WorkerDeps): vo
     carLimits: message.carLimits,
     signal: controller.signal,
     fetchImpl: deps.fetch,
+    acquire: gateFor(message.perGatewayLimit, message.perGatewayRate).acquire,
     onProgress: ({ received, total }) => {
       const now = Date.now();
       if (now - lastProgressAt < PROGRESS_INTERVAL_MS && received !== total) return;

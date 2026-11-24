@@ -47,6 +47,9 @@ import type { ReviewModel } from "@/lib/stellar/tx-decode";
 import type { TxPhase } from "@/lib/stellar/tx-lifecycle";
 import { bpsToPercent, formatUsdc, formatXlm, maxIn, minOut, tryParseUsdc } from "@/lib/stellar/units";
 import { userMessage } from "@/lib/errors/display";
+import { messageFor } from "@/lib/errors/messages";
+import { useBreaker } from "@/lib/hooks/useBreaker";
+import { breakerLimits, checkBreakers, isCurrentBand, maxBuyWithinBreakers, priceMoveBps } from "@/lib/stellar/breaker";
 import { Term } from "@/components/ui/term";
 import { useFormErrors, ErrorSummary, FieldError } from "@/components/ui/form-errors";
 import { mapErrorToField } from "@/lib/forms/error-map";
@@ -187,6 +190,36 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
   const spendRaw = buyMode === "shares" ? exactQuote.data?.collateralIn ?? null : amountRaw;
   const quote = useQuoteBuy(onChainMarketId, side, buyMode === "usdc" ? debouncedAmount : spendRaw);
 
+  const breakerState = useBreaker(onChainMarketId);
+  const breakerConfig = breakerState.data?.config ?? null;
+  const band = breakerState.data?.band && ledger.now !== null && isCurrentBand(breakerState.data.band, ledger.now)
+    ? breakerState.data.band
+    : null;
+  const breakerMarket = useMemo(() => view ? {
+    reserveYes: view.market.reserve_yes,
+    reserveNo: view.market.reserve_no,
+    feeBps: BigInt(view.market.fee_bps),
+  } : null, [view]);
+  const breakerLimitsView = breakerLimits(breakerConfig);
+  const breakerEnabled = breakerLimitsView.impactBps > 0n || breakerLimitsView.bandBps > 0n;
+  const breakerVerdict = useMemo(() => {
+    if (!breakerMarket || !spendRaw || spendRaw <= 0n) return null;
+    return checkBreakers(breakerMarket, breakerConfig, band, side, { kind: "buy", collateralIn: spendRaw });
+  }, [breakerMarket, breakerConfig, band, side, spendRaw]);
+  const breakerCap = useMemo(() => {
+    if (!breakerMarket || !breakerEnabled) return null;
+    const balanceCap = balance.data ?? 0n;
+    const cap = spendRaw && spendRaw > balanceCap ? spendRaw : balanceCap;
+    return maxBuyWithinBreakers(breakerMarket, breakerConfig, band, side, cap);
+  }, [breakerMarket, breakerConfig, band, side, spendRaw, balance.data, breakerEnabled]);
+  const breakerMove = useMemo(() => {
+    if (!breakerMarket || !spendRaw || spendRaw <= 0n) return null;
+    return priceMoveBps(breakerMarket, side, { kind: "buy", collateralIn: spendRaw });
+  }, [breakerMarket, side, spendRaw]);
+  const breakerError = breakerVerdict && !breakerVerdict.ok
+    ? messageFor(`contract.marketCore.${breakerVerdict.code}`)
+    : null;
+
   const quoteAnnouncementText = useMemo(() => {
     return (
       quoteAnnouncement({
@@ -266,6 +299,16 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
       return errs;
     });
     if (!valid) return;
+    if (breakerError) {
+      setBuyResult({
+        kind: "error",
+        message: breakerCap !== null && breakerCap > 0n
+          ? `${breakerError} Largest size that passes now is ${formatUsdc(breakerCap, { maxDecimals: 2 })} USDC. Split the order or wait for the next ledger.`
+          : `${breakerError} Wait for the next ledger and try a smaller amount.`,
+      });
+      return;
+    }
+
 
     if (ledger.now === null) {
       setBuyResult({ kind: "pending", message: "Checking market time…" });
@@ -417,6 +460,7 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
           disabled={
             buy.isPending ||
             isWatching ||
+            Boolean(breakerError) ||
             (isConnected && !isOpen) ||
             (isConnected && isUnfunded) ||
             (isConnected && isInsufficientXlm)
@@ -478,6 +522,27 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
         </span>
         {balance.data !== undefined && <span>Balance {formatUsdc(balance.data, { maxDecimals: 2, grouping: true })}<PendingValue state={balanceState.data} /></span>}
       </div>
+
+      {breakerEnabled && (
+        <div className="rounded border border-outline-variant bg-surface-container-low p-2 text-[11px] font-data-mono text-on-surface-variant space-y-1">
+          <div className="flex justify-between gap-2">
+            <span>
+              Breaker: impact ≤ {bpsToPercent(breakerLimitsView.impactBps, 0)} · band ≤ {bpsToPercent(breakerLimitsView.bandBps, 0)}
+            </span>
+            {breakerCap !== null && (
+              <span>Max now {formatUsdc(breakerCap, { maxDecimals: 2, grouping: true })} USDC</span>
+            )}
+          </div>
+          {breakerMove && (
+            <div>Estimated move {bpsToPercent(breakerMove.moveBps)} {breakerVerdict?.ok === false ? `· limit ${bpsToPercent(breakerVerdict.limitBps)}` : ""}</div>
+          )}
+          {breakerError && <p className="text-error" role="alert">{breakerError} Split the order or wait for the next ledger.</p>}
+          {breakerState.data?.band && !band && (
+            <p>Band reference is from a previous ledger; it resets automatically at the next ledger.</p>
+          )}
+          {breakerConfig === null && <p>No per-market breaker is configured; contract checks are disabled for this market.</p>}
+        </div>
+      )}
 
       {/* Network fee & reserve row */}
       {isConnected && (
@@ -645,6 +710,13 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
         <TxReview
           model={reviewModel.model}
           changedFrom={reviewModel.changedFrom}
+          breaker={breakerEnabled ? {
+            impactBps: breakerLimitsView.impactBps,
+            bandBps: breakerLimitsView.bandBps,
+            maxBuy: breakerCap,
+            estimatedMoveBps: breakerMove?.moveBps ?? null,
+            verdict: breakerVerdict,
+          } : undefined}
           onConfirm={() => closeReview(true)}
           onCancel={() => closeReview(false)}
         />,

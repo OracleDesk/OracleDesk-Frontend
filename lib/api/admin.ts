@@ -8,6 +8,8 @@ import {
   type DriftClass,
   type DriftFinding,
 } from "@/lib/admin/drift";
+import type { BackendAdminAssignment } from "@/lib/admin/permissions-types";
+import type { BackendTraceAuditRow } from "@/lib/admin/trace-audit-compare";
 
 /* ------------------------------------------------------------------ *
  * Spec Compatibility types & API (Issue #290)
@@ -184,6 +186,140 @@ export async function listReconcileRuns(
     apiPath`/admin/reconciliation/runs`,
     { limit: safeLimit },
     { ...options, schema: z.array(ReconcileRunSchema) },
+  );
+  return data;
+}
+
+const AdminAssignmentSchema = z
+  .object({
+    walletAddress: z.string(),
+    roleName: z.string(),
+    assignedAt: z.string().optional(),
+    assignedBy: z.string().optional(),
+  })
+  .passthrough();
+
+export interface TraceAuditRun {
+  id: string;
+  startedAt: string;
+  finishedAt: string | null;
+  cursorTraceId?: string | null;
+  stats?: unknown;
+}
+
+export interface TraceAuditFinding extends BackendTraceAuditRow {
+  id: string;
+  runId?: string | null;
+  checkedAt: string;
+}
+
+export interface TraceAuditSummary {
+  counts: Record<string, number>;
+  latestRun: TraceAuditRun | null;
+  findings: TraceAuditFinding[];
+  meta?: PaginationMeta;
+}
+
+export interface TraceAuditFilter {
+  status?: string;
+  agentId?: string;
+  marketId?: string;
+  fromTraceId?: string;
+  toTraceId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface TriggerTraceAuditResult {
+  runId: string;
+}
+
+const TraceAuditRunSchema = z
+  .object({
+    id: z.string(),
+    startedAt: z.string(),
+    finishedAt: z.union([z.string(), z.null()]),
+    cursorTraceId: z.union([z.string(), z.null()]).optional(),
+    stats: z.unknown().optional(),
+  })
+  .passthrough();
+
+const TraceAuditFindingSchema = z
+  .object({
+    id: z.string(),
+    runId: z.union([z.string(), z.null()]).optional(),
+    checkedAt: z.string(),
+    status: z.string(),
+    onChainTraceId: z.union([z.string(), z.null()]).optional(),
+    traceId: z.union([z.string(), z.null()]).optional(),
+    onChainMarketId: z.union([z.string(), z.null()]).optional(),
+    agent: z.union([z.string(), z.null()]).optional(),
+    action: z.union([z.string(), z.null()]).optional(),
+    ipfsCid: z.union([z.string(), z.null()]).optional(),
+    onChainHash: z.union([z.string(), z.null()]).optional(),
+    computedHash: z.union([z.string(), z.null()]).optional(),
+    detail: z.unknown().optional(),
+  })
+  .passthrough();
+
+const TraceAuditSummarySchema = z
+  .object({
+    counts: z.record(z.string(), z.number()),
+    latestRun: z.union([TraceAuditRunSchema, z.null()]),
+    findings: z.array(TraceAuditFindingSchema),
+  })
+  .passthrough();
+
+const TriggerTraceAuditSchema = z.object({ runId: z.string() }).passthrough();
+
+const TRACE_AUDIT_STATUSES = new Set([
+  "VERIFIED", "HASH_MISMATCH", "UNAVAILABLE", "UNKNOWN_TO_BACKEND", "WRONG_MARKET",
+  "UNLINKED_IN_DB", "NOT_ON_CHAIN", "FOREIGN_AGENT", "ARCHIVED",
+]);
+
+export async function getTraceAudit(
+  filter: TraceAuditFilter = {},
+  options: ApiRequestOptions = {},
+): Promise<TraceAuditSummary> {
+  const page = Number.isFinite(filter.page) ? Math.max(1, Math.floor(filter.page as number)) : 1;
+  const limit = Number.isFinite(filter.limit) ? Math.min(500, Math.max(1, Math.floor(filter.limit as number))) : 50;
+  const status = filter.status && TRACE_AUDIT_STATUSES.has(filter.status) ? filter.status : undefined;
+  const { data, meta } = await apiClient.get<TraceAuditSummary>(
+    apiPath`/admin/trace-audit`,
+    {
+      page,
+      limit,
+      ...(status ? { status } : {}),
+      ...(filter.agentId ? { agentId: filter.agentId } : {}),
+      ...(filter.marketId ? { marketId: filter.marketId } : {}),
+      ...(filter.fromTraceId ? { fromTraceId: filter.fromTraceId } : {}),
+      ...(filter.toTraceId ? { toTraceId: filter.toTraceId } : {}),
+    },
+    { ...options, schema: TraceAuditSummarySchema },
+  );
+  return { ...data, meta: meta as PaginationMeta | undefined };
+}
+
+export async function runTraceAudit(
+  options: ApiRequestOptions = {},
+): Promise<TriggerTraceAuditResult> {
+  const { data } = await apiClient.post<TriggerTraceAuditResult>(
+    apiPath`/admin/trace-audit/run`,
+    undefined,
+    undefined,
+    { ...options, schema: TriggerTraceAuditSchema },
+  );
+  return data;
+}
+
+/** Lists administrators. Callers opt into step-up with `{ stepUp: { reason } }`. */
+export async function getAdmins(
+  options: ApiRequestOptions = {},
+): Promise<BackendAdminAssignment[]> {
+  const { data } = await apiClient.get<BackendAdminAssignment[]>(
+    apiPath`/admin/admins`,
+    undefined,
+    { ...options, schema: z.array(AdminAssignmentSchema) },
   );
   return data;
 }

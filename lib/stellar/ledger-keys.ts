@@ -32,6 +32,12 @@ function fallbackDataKeyScVal(key: DataKey): xdr.ScVal {
         nativeToScVal(key.values[0], { type: "u64" }),
         new Address(key.values[1]).toScVal(),
       ]);
+    case "Breaker":
+    case "Band":
+      return xdr.ScVal.scvVec([
+        xdr.ScVal.scvSymbol(key.tag),
+        nativeToScVal(key.values[0], { type: "u64" }),
+      ]);
     default:
       return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(key.tag)]);
   }
@@ -62,6 +68,28 @@ export function positionKey(
   contractId: string = CONTRACTS.marketCore,
 ): xdr.LedgerKey {
   return contractDataKey(contractId, dataKeyScVal(spec, { tag: "Position", values: [id, holder] }));
+}
+
+/** Persistent, immutable per-market breaker configuration. */
+export function breakerKey(
+  spec: Spec,
+  id: bigint,
+  contractId: string = CONTRACTS.marketCore,
+): xdr.LedgerKey {
+  return contractDataKey(contractId, dataKeyScVal(spec, { tag: "Breaker", values: [id] }));
+}
+
+/** Temporary ledger-scoped band reference; missing entries are normal. */
+export function bandKey(
+  spec: Spec,
+  id: bigint,
+  contractId: string = CONTRACTS.marketCore,
+): xdr.LedgerKey {
+  return contractDataKey(
+    contractId,
+    dataKeyScVal(spec, { tag: "Band", values: [id] }),
+    xdr.ContractDataDurability.temporary(),
+  );
 }
 
 /** The short name of a contract-data key's variant (Market, Position, …), or

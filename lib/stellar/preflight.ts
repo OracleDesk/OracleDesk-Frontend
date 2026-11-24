@@ -1,8 +1,9 @@
-import type { Market, Position } from "./generated/market-core";
+import type { BandState, BreakerConfig, Market, Position } from "./generated/market-core";
 import { Errors } from "./generated/market-core";
 import { calcBuy, calcSell, MAX_SETS } from "./generated/fpmm";
 import { messageFor } from "@/lib/errors/messages";
 import type { OutcomeTag } from "./clients";
+import { checkBreakers } from "./breaker";
 
 export type PreflightCode =
   | "Paused"
@@ -15,7 +16,9 @@ export type PreflightCode =
   | "MarketTooLarge"
   | "InsufficientShares"
   | "NothingToRedeem"
-  | "InsufficientBalance";
+  | "InsufficientBalance"
+  | "PriceImpactTooHigh"
+  | "PriceBandExceeded";
 
 export interface PreflightFailure {
   code: PreflightCode;
@@ -38,6 +41,8 @@ export interface PreflightInput {
   position?: Position;
   positionIsStale?: boolean;
   usdcBalance?: bigint;
+  breaker?: BreakerConfig | null;
+  band?: BandState | null;
 }
 
 const ERROR_NUMBERS = new Map(
@@ -108,6 +113,19 @@ export function preflightBuy(input: PreflightInput, outcome: OutcomeTag, collate
         if (input.marketIsStale && difference === 1n) missing.push("fresh market size");
         else failures.push(failure("MarketTooLarge"));
       }
+
+      const verdict = checkBreakers(
+        {
+          reserveYes: input.market.reserve_yes,
+          reserveNo: input.market.reserve_no,
+          feeBps: BigInt(input.market.fee_bps),
+        },
+        input.breaker,
+        input.band,
+        outcome,
+        { kind: "buy", collateralIn },
+      );
+      if (!verdict.ok) failures.push(failure(verdict.code));
     }
   } else if (!input.marketIsStale) {
     missing.push("market reserves");
@@ -134,6 +152,18 @@ export function preflightSell(
         : [input.market.reserve_no, input.market.reserve_yes];
     try {
       calcSell(rSold, rOther, collateralOut, BigInt(input.market.fee_bps));
+      const verdict = checkBreakers(
+        {
+          reserveYes: input.market.reserve_yes,
+          reserveNo: input.market.reserve_no,
+          feeBps: BigInt(input.market.fee_bps),
+        },
+        input.breaker,
+        input.band,
+        outcome,
+        { kind: "sell", collateralOut },
+      );
+      if (!verdict.ok) failures.push(failure(verdict.code));
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       if (message.includes("insufficient liquidity")) failures.push(failure("InsufficientLiquidity"));
