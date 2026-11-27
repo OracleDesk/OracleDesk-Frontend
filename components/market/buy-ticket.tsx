@@ -45,7 +45,8 @@ import { useLedgerNow as useLedgerClock } from "@/lib/stellar/ledger-clock";
 import { isMultisigAccount, MULTISIG_DEFAULT_SLIPPAGE_BPS, type MultisigSession } from "@/lib/stellar/multisig";
 import type { ReviewModel } from "@/lib/stellar/tx-decode";
 import type { TxPhase } from "@/lib/stellar/tx-lifecycle";
-import { bpsToPercent, formatUsdc, formatXlm, maxIn, minOut, tryParseUsdc } from "@/lib/stellar/units";
+import { formatXlm, maxIn, minOut } from "@/lib/stellar/units";
+import { useFormat } from "@/lib/format/useFormat";
 import { userMessage } from "@/lib/errors/display";
 import { Term } from "@/components/ui/term";
 import { useFormErrors, ErrorSummary, FieldError } from "@/components/ui/form-errors";
@@ -108,6 +109,7 @@ function renderTxPhase(phase: TxPhase): string | null {
  * does not affect the trade does not re-render the ticket either.
  */
 export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketProps) {
+  const fmt = useFormat();
   const { address, isConnected } = useWalletAddress();
   const { isWrongNetwork } = useWalletNetwork();
   const { openModal } = useWalletActions();
@@ -181,7 +183,7 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
     };
   }, []);
 
-  const amountRaw = tryParseUsdc(amountInput);
+  const amountRaw = fmt.tryParseAmount(amountInput);
   const debouncedAmount = useDebounced(amountRaw, 400);
   const exactQuote = useExactBuyQuote(onChainMarketId, side, buyMode === "shares" ? debouncedAmount : null);
   const spendRaw = buyMode === "shares" ? exactQuote.data?.collateralIn ?? null : amountRaw;
@@ -296,7 +298,7 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
       });
       setBuyResult({
         kind: "success",
-        message: `Bought ${formatUsdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.`,
+        message: `Bought ${fmt.usdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.`,
         txHash: result.txHash,
       });
     } catch (err) {
@@ -456,13 +458,13 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
           {amountRaw === null
             ? buyMode === "usdc" ? "Enter an amount like 10 or 2.5" : "Enter a share amount"
             : buyMode === "shares" && exactQuote.data
-              ? `Costs ≈ ${formatUsdc(exactQuote.data.collateralIn, { maxDecimals: 2 })} USDC (fee ${formatUsdc(exactQuote.data.fee, { maxDecimals: 2 })}), at most ${formatUsdc(maxIn(exactQuote.data.collateralIn, slippageBps), { maxDecimals: 2 })} with ${bpsToPercent(slippageBps)} slippage`
+              ? `Costs ≈ ${fmt.usdc(exactQuote.data.collateralIn, { maxDecimals: 2 })} USDC (fee ${fmt.usdc(exactQuote.data.fee, { maxDecimals: 2 })}), at most ${fmt.usdc(maxIn(exactQuote.data.collateralIn, slippageBps), { maxDecimals: 2 })} with ${fmt.percent(slippageBps)} slippage`
               : buyMode === "shares" && exactQuote.error
                 ? userMessage(exactQuote.error)
                 : buyMode === "shares" && exactQuote.isFetching
                   ? "Quoting exact share amount…"
                   : quote.data !== undefined
-              ? `≈ ${formatUsdc(quote.data, { maxDecimals: 2 })} shares, at least ${formatUsdc(minOut(quote.data, slippageBps), { maxDecimals: 2 })} (${bpsToPercent(slippageBps)} slippage)`
+              ? `≈ ${fmt.usdc(quote.data, { maxDecimals: 2 })} shares, at least ${fmt.usdc(minOut(quote.data, slippageBps), { maxDecimals: 2 })} (${fmt.percent(slippageBps)} slippage)`
               : quote.error ? userMessage(quote.error) : quote.isFetching ? "Quoting…" : ""}
           <Link
             href={routes.learnFpmm({
@@ -476,7 +478,7 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
             How is this calculated?
           </Link>
         </span>
-        {balance.data !== undefined && <span>Balance {formatUsdc(balance.data, { maxDecimals: 2, grouping: true })}<PendingValue state={balanceState.data} /></span>}
+        {balance.data !== undefined && <span>Balance {fmt.usdc(balance.data, { maxDecimals: 2, grouping: true })}<PendingValue state={balanceState.data} /></span>}
       </div>
 
       {/* Network fee & reserve row */}
@@ -555,7 +557,7 @@ export function BuyTicket({ onChainMarketId, side, amountInputRef }: BuyTicketPr
       {trustlineUnauthorized && <p className="text-[11px] text-error">The issuer hasn&apos;t authorized your USDC trustline.</p>}
       {position.data && (position.data.yes > 0n || position.data.no > 0n || positionState.data?.provisional || positionState.data?.awaitingRpc) && (
         <p className="text-[11px] font-data-mono text-on-surface">
-          {isWatching ? "Watched position:" : "Your position:"} {formatUsdc(position.data.yes, { maxDecimals: 2 })} YES · {formatUsdc(position.data.no, { maxDecimals: 2 })} NO
+          {isWatching ? "Watched position:" : "Your position:"} {fmt.usdc(position.data.yes, { maxDecimals: 2 })} YES · {fmt.usdc(position.data.no, { maxDecimals: 2 })} NO
           <PendingValue state={positionState.data} fallback={<SourceTag source="chain" ledger={view?.ledger} readAt={chain.dataUpdatedAt} />} />
         </p>
       )}

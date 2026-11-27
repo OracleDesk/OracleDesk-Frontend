@@ -7,6 +7,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useMarket, useMarketQuestionIntegrity } from "@/lib/hooks/useMarkets";
 import { QuestionVerificationBadge } from "@/components/question-verification-badge";
+import { SafeText } from "@/components/safe-text";
+import { VerifiedQuestionViewer } from "@/components/market/verified-question-viewer";
 import dynamic from "next/dynamic";
 import { ResolverStatusPanel } from "@/components/resolver-status-panel";
 
@@ -21,7 +23,7 @@ import { useOnChainMarket, usePosition } from "@/lib/hooks/useStellar";
 import { useWalletAddress } from "@/lib/contexts/WalletContext";
 import { useViewedAddress } from "@/lib/hooks/useViewedAddress";
 import { floatUsdcToRaw, formatBps, formatUsdcDisplay } from "@/lib/format/money";
-import { formatUsdc, bpsToPercent } from "@/lib/stellar/units";
+import { useFormat } from "@/lib/format/useFormat";
 import { useRecentPriceWindow } from "@/lib/hooks/usePriceHistory";
 import { Sparkline } from "@/components/charts/sparkline";
 import { MIN_TX_TIMEOUT_S, SAFETY_MARGIN_S } from "@/lib/stellar/deadline";
@@ -106,6 +108,7 @@ function MarketQuickViewContent() {
     retry: false,
   });
 
+  const fmt = useFormat();
   const { address } = useWalletAddress();
   const { viewed } = useViewedAddress();
   const activeHolder = viewed ?? address;
@@ -130,7 +133,6 @@ function MarketQuickViewContent() {
   const initialFocusRef = (onChainMarketId !== null && isOpen) ? amountInputRef : yesButtonRef;
 
   const title = market?.question ?? `Market #${onChainMarketId} · ${view?.market.meta_uri ?? ""}`;
-  const fromChain = Boolean(view?.market);
   const questionIntegrity = useMarketQuestionIntegrity({
     marketId,
     onChainMarketId,
@@ -186,13 +188,13 @@ function MarketQuickViewContent() {
     : market?.status ?? "";
   const categoryLabel = market?.category ?? view?.market.category.tag ?? "";
   const liquidityText = view
-    ? `$${formatUsdc(view.market.sets_minted, { maxDecimals: 2, grouping: true })}`
+    ? `$${fmt.usdc(view.market.sets_minted, { maxDecimals: 2, grouping: true })}`
     : market ? `${formatUsdcDisplay(BigInt(Math.round(market.totalLiquidity)))}` : "—";
   const w24 = priceWindow.data;
   const activity = w24?.activity ?? null;
   const change = w24?.changeBps ?? null;
   const trend: "up" | "down" | "flat" = change === null || change === 0n ? "flat" : change > 0n ? "up" : "down";
-  const changePts = change === null ? null : `${change > 0n ? "+" : ""}${(Number(change) / 100).toFixed(2)}`;
+  const changePts = change === null ? null : `${change > 0n ? "+" : ""}${fmt.points(change, { decimals: 2 })}`;
   const periodText = w24?.reason === "too-young" ? "since opening" : "over the last 24 hours";
   const periodShort = w24?.reason === "too-young" ? "since opening" : "24h";
   const latestTrace = market?.reasoningTraces?.[0];
@@ -268,8 +270,7 @@ function MarketQuickViewContent() {
               <div className="flex items-start justify-between gap-3">
                 <DialogTitle asChild>
                   <h2 className="font-headline-sm text-headline-sm text-on-surface leading-tight">
-                    <SafeText text={title} />
-                    {displayTitle}
+                    <SafeText text={displayTitle} />
                   </h2>
                 </DialogTitle>
                 {questionIntegrity.data && (
@@ -307,13 +308,13 @@ function MarketQuickViewContent() {
                     </p>
                     <p className="sr-only">
                       YES {trend === "up" ? "rose" : trend === "down" ? "fell" : "was unchanged"} from{" "}
-                      {bpsToPercent(w24.points[0].yesBps)} to {bpsToPercent(w24.points[w24.points.length - 1].yesBps)} {periodText}{" "}
+                      {fmt.percent(w24.points[0].yesBps)} to {fmt.percent(w24.points[w24.points.length - 1].yesBps)} {periodText}{" "}
                       across {w24.trades} trades.
                     </p>
                   </>
                 )}
                 {view?.ledger != null && (
-                  <p className="text-[11px] text-outline font-data-mono">as of ledger {view.ledger.toLocaleString()}</p>
+                  <p className="text-[11px] text-outline font-data-mono">as of ledger {fmt.amount(BigInt(view.ledger), { decimals: 0, grouping: true })}</p>
                 )}
               </div>
               {w24 && w24.points.length >= 2 ? (
@@ -374,7 +375,7 @@ function MarketQuickViewContent() {
               >
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-label-caps text-label-caps text-secondary font-bold">YES</span>
-                  <span className="font-data-mono text-data-mono text-on-surface">${(yesProb/100).toFixed(2)}</span>
+                  <span className="font-data-mono text-data-mono text-on-surface">${fmt.amount(BigInt(yesProb), { decimals: 2, minDecimals: 2 })}</span>
                 </div>
                 <div className="w-full bg-surface-container h-1 rounded-full overflow-hidden">
                   <div className="bg-secondary h-full transition-all duration-500" style={{ width: `${yesProb}%` }}></div>
@@ -388,7 +389,7 @@ function MarketQuickViewContent() {
               >
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-label-caps text-label-caps text-tertiary font-bold">NO</span>
-                  <span className="font-data-mono text-data-mono text-on-surface">${(noProb/100).toFixed(2)}</span>
+                  <span className="font-data-mono text-data-mono text-on-surface">${fmt.amount(BigInt(noProb), { decimals: 2, minDecimals: 2 })}</span>
                 </div>
                 <div className="w-full bg-surface-container h-1 rounded-full overflow-hidden">
                   <div className="bg-tertiary h-full transition-all duration-500" style={{ width: `${noProb}%` }}></div>

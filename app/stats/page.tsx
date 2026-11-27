@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { usePlatformStats } from "@/lib/hooks/usePortfolio";
 import { floatUsdcToRaw, formatUsdcDisplay } from "@/lib/format/money";
 import { DemoBadge } from "@/components/ui/demo-badge";
+import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { CalibrationChart } from "@/components/charts/calibration-chart";
 import { handleMessage } from "@/lib/analytics/calibration.worker";
 import type { GroupStats } from "@/lib/analytics/calibration";
@@ -89,39 +90,68 @@ const VolumeChart = () => {
   );
 };
 
-const TopTrades = () => {
-  const trades = [
-    { icon: "trending_up", title: "ETH Long 25x", builder: "AlphaQuants", volume: "+$1.2M", copies: "2.4k", iconBg: "bg-primary-container", iconColor: "text-on-primary-container" },
-    { icon: "shield", title: "BTC Delta Neutral", builder: "Delta_Force", volume: "+$840k", copies: "1.8k", iconBg: "bg-surface-container-highest", iconColor: "text-primary" },
-    { icon: "token", title: "SOL Accumulation", builder: "SolanaWhale", volume: "+$612k", copies: "940", iconBg: "bg-tertiary-fixed", iconColor: "text-tertiary" },
-  ];
+interface TopTrade {
+  icon: IconName;
+  title: string;
+  builder: string;
+  /** Display string for the sample volume. */
+  volume: string;
+  /** Sample volume in USDC base units: the sort key (never the formatted string). */
+  volumeRaw: bigint;
+  copies: string;
+  copiesCount: number;
+  iconBg: string;
+  iconColor: string;
+}
 
+const TOP_TRADES: TopTrade[] = [
+  { icon: "trending_up", title: "ETH Long 25x", builder: "AlphaQuants", volume: "+$1.2M", volumeRaw: 12_000_000_000_000n, copies: "2.4k", copiesCount: 2400, iconBg: "bg-primary-container", iconColor: "text-on-primary-container" },
+  { icon: "shield", title: "BTC Delta Neutral", builder: "Delta_Force", volume: "+$840k", volumeRaw: 8_400_000_000_000n, copies: "1.8k", copiesCount: 1800, iconBg: "bg-surface-container-highest", iconColor: "text-primary" },
+  { icon: "token", title: "SOL Accumulation", builder: "SolanaWhale", volume: "+$612k", volumeRaw: 6_120_000_000_000n, copies: "940", copiesCount: 940, iconBg: "bg-tertiary-fixed", iconColor: "text-tertiary" },
+];
+
+const TOP_TRADE_COLUMNS: ColumnDef<TopTrade>[] = [
+  {
+    id: "trade",
+    header: "Trade",
+    isRowHeader: true,
+    sortValue: (row) => row.title,
+    cell: (row) => (
+      <span className="flex items-center gap-3">
+        <span className={`w-10 h-10 ${row.iconBg} rounded flex items-center justify-center ${row.iconColor}`}>
+          <Icon name={row.icon} />
+        </span>
+        <span>
+          <span className="block font-label-caps text-label-caps text-on-surface font-bold">{row.title}</span>
+          <span className="block text-[11px] text-on-surface-variant">Builder: {row.builder}</span>
+        </span>
+      </span>
+    ),
+  },
+  { id: "volume", header: "Volume", numeric: true, sortValue: (row) => row.volumeRaw, cell: (row) => <span className="text-secondary">{row.volume}</span> },
+  { id: "copies", header: "Copies", numeric: true, sortValue: (row) => row.copiesCount, cell: (row) => row.copies },
+];
+
+const topTradeId = (row: TopTrade) => row.title;
+
+const TopTrades = () => {
   return (
     <div className="bg-white border border-outline-variant rounded-lg overflow-hidden flex flex-col hover:shadow-md transition-all">
       <div className="p-6 border-b border-outline-variant">
         <h3 className="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">Top Copied Trades <DemoBadge /></h3>
         <p className="text-on-surface-variant font-label-caps text-label-caps uppercase">HIGHEST 24H VELOCITY</p>
       </div>
-      <div className="flex-1 divide-y divide-outline-variant overflow-y-auto">
-        {trades.map((trade, i) => (
-          <div key={i} className="p-4 hover:bg-surface-container-low transition-colors flex items-center justify-between group">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 ${trade.iconBg} rounded flex items-center justify-center ${trade.iconColor}`}>
-                <Icon name={trade.icon as IconName} />
-              </div>
-              <div>
-                <p className="font-label-caps text-label-caps text-on-surface font-bold">{trade.title}</p>
-                <p className="text-[11px] text-on-surface-variant">Builder: {trade.builder}</p>
-              </div>
-            </div>
-            <div className="text-end">
-              <p className="font-data-mono text-data-mono text-secondary">{trade.volume}</p>
-              <p className="text-[11px] text-on-surface-variant">{trade.copies} copies</p>
-            </div>
-          </div>
-        ))}
+      <div className="flex-1 overflow-y-auto p-2">
+        <DataTable<TopTrade>
+          caption="Top copied trades by 24-hour velocity. Demo data."
+          captionHidden
+          columns={TOP_TRADE_COLUMNS}
+          rows={TOP_TRADES}
+          getRowId={topTradeId}
+          emptyState="No copied trades yet."
+        />
       </div>
-      <button className="w-full p-4 font-label-caps text-label-caps text-primary border-t border-outline-variant hover:bg-surface-container-low transition-all">View All Leaders</button>
+      <button type="button" className="w-full p-4 font-label-caps text-label-caps text-primary border-t border-outline-variant hover:bg-surface-container-low transition-all">View All Leaders</button>
     </div>
   );
 };
@@ -137,20 +167,20 @@ const ProtocolReliability = () => {
   return (
     <div className="bg-white border border-outline-variant rounded-lg p-6 hover:shadow-md transition-all">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">Protocol Reliability <DemoBadge /></h3>
+        <h3 id="protocol-reliability-heading" className="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">Protocol Reliability <DemoBadge /></h3>
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-secondary"></span>
           <span className="font-label-caps text-label-caps text-secondary">Operational</span>
         </div>
       </div>
-      <div className="space-y-4">
-        {stats.map((stat, i) => (
-          <div key={i} className="flex justify-between items-end border-b border-outline-variant pb-2">
-            <span className="text-on-surface-variant font-label-caps text-label-caps">{stat.label}</span>
-            <span className="font-data-mono text-data-mono">{stat.value}</span>
+      <dl aria-labelledby="protocol-reliability-heading" className="space-y-4">
+        {stats.map((stat) => (
+          <div key={stat.label} className="flex justify-between items-end border-b border-outline-variant pb-2">
+            <dt className="text-on-surface-variant font-label-caps text-label-caps">{stat.label}</dt>
+            <dd className="font-data-mono text-data-mono tabular-nums">{stat.value}</dd>
           </div>
         ))}
-      </div>
+      </dl>
     </div>
   );
 };

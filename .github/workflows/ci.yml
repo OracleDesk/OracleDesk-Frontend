@@ -77,6 +77,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run check:docs
+      - name: Message catalogs are valid and in sync
+        run: npm run i18n:check
       - run: npm test
       - run: npm run test:scripts
       - run: npm run build

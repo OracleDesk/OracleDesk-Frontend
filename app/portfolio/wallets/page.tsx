@@ -8,6 +8,7 @@ import { useUsdcBalance } from "@/lib/hooks/useStellar";
 import { NETWORK_LABEL, explorerAccount } from "@/lib/stellar/config";
 import { formatUsdc, shortAddress } from "@/lib/stellar/units";
 import { DemoBadge } from "@/components/ui/demo-badge";
+import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 
 const WalletCard = ({ name, address, balance, active }: { name: string, address: string, balance: string, active?: boolean }) => (
   <div className={`bg-white border ${active ? 'border-primary' : 'border-outline-variant'} rounded p-4 flex items-center justify-between group hover:border-primary transition-colors cursor-pointer`}>
@@ -29,37 +30,82 @@ const WalletCard = ({ name, address, balance, active }: { name: string, address:
   </div>
 );
 
-interface TransactionRowProps {
+/** Sample row with typed sort keys; display strings are kept separate. */
+interface SampleTransaction {
+  id: string;
   type: string;
   icon: IconName;
   iconColor: string;
   asset: string;
   amount: string;
+  /** Signed USDC base units, the sort key for the amount column. */
+  amountRaw: bigint;
   amountColor: string;
   status: string;
   statusClass: string;
-  date: string;
+  date: Date;
+  dateLabel: string;
 }
 
-const TransactionRow = ({ type, icon, iconColor, asset, amount, amountColor, status, statusClass, date }: TransactionRowProps) => (
-  <tr className="zebra-stripe border-b border-outline-variant group transition-colors hover:bg-surface-container/40">
-    <td className="px-4 py-4">
-      <div className="flex items-center gap-2">
-        <Icon name={icon} className={`${iconColor} text-[18px]`} />
-        <span className="font-body-md text-on-surface">{type}</span>
-      </div>
-    </td>
-    <td className="px-4 py-4 font-data-mono text-on-surface">{asset}</td>
-    <td className={`px-4 py-4 font-data-mono font-bold ${amountColor}`}>{amount}</td>
-    <td className="px-4 py-4">
-      <span className={`${statusClass} text-[10px] px-2 py-0.5 rounded font-bold`}>{status}</span>
-    </td>
-    <td className="px-4 py-4 text-on-surface-variant text-[12px]">{date}</td>
-    <td className="px-4 py-4 text-end">
-      <span className="text-on-surface-variant font-label-caps text-[11px]">—</span>
-    </td>
-  </tr>
-);
+const SAMPLE_TRANSACTIONS: SampleTransaction[] = [
+  {
+    id: "sample-deposit", type: "Deposit", icon: "south_west", iconColor: "text-secondary",
+    asset: "USDC", amount: "+150,000.00", amountRaw: 1_500_000_000_000n, amountColor: "text-secondary",
+    status: "COMPLETED", statusClass: "bg-secondary-container text-on-secondary-container",
+    date: new Date(Date.UTC(2025, 9, 28, 14, 22)), dateLabel: "Oct 28, 14:22",
+  },
+  {
+    id: "sample-buy", type: "Market Buy", icon: "north_east", iconColor: "text-tertiary",
+    asset: "POLITICS/YES", amount: "-12,450.00", amountRaw: -124_500_000_000n, amountColor: "text-tertiary",
+    status: "COMPLETED", statusClass: "bg-secondary-container text-on-secondary-container",
+    date: new Date(Date.UTC(2025, 9, 27, 9, 15)), dateLabel: "Oct 27, 09:15",
+  },
+  {
+    id: "sample-withdraw", type: "Withdraw", icon: "swap_horiz", iconColor: "text-primary",
+    asset: "USDC", amount: "-50,000.00", amountRaw: -500_000_000_000n, amountColor: "text-on-surface-variant",
+    status: "PENDING", statusClass: "bg-surface-container-highest text-on-surface-variant",
+    date: new Date(Date.UTC(2025, 9, 26, 18, 40)), dateLabel: "Oct 26, 18:40",
+  },
+  {
+    id: "sample-reward", type: "Reward Claim", icon: "payments", iconColor: "text-secondary",
+    asset: "USDC", amount: "+2,105.12", amountRaw: 21_051_200_000n, amountColor: "text-secondary",
+    status: "COMPLETED", statusClass: "bg-secondary-container text-on-secondary-container",
+    date: new Date(Date.UTC(2025, 9, 25, 11, 2)), dateLabel: "Oct 25, 11:02",
+  },
+];
+
+const TRANSACTION_COLUMNS: ColumnDef<SampleTransaction>[] = [
+  {
+    id: "type",
+    header: "Type",
+    isRowHeader: true,
+    sortValue: (row) => row.type,
+    cell: (row) => (
+      <span className="flex items-center gap-2">
+        <Icon name={row.icon} className={`${row.iconColor} text-[18px]`} />
+        <span className="font-body-md text-on-surface">{row.type}</span>
+      </span>
+    ),
+  },
+  { id: "asset", header: "Asset", sortValue: (row) => row.asset, cell: (row) => <span className="text-on-surface">{row.asset}</span> },
+  {
+    id: "amount",
+    header: "Amount",
+    numeric: true,
+    sortValue: (row) => row.amountRaw,
+    cell: (row) => <span className={`font-bold ${row.amountColor}`}>{row.amount}</span>,
+  },
+  {
+    id: "status",
+    header: "Status",
+    sortValue: (row) => row.status,
+    cell: (row) => <span className={`${row.statusClass} text-[10px] px-2 py-0.5 rounded font-bold`}>{row.status}</span>,
+  },
+  { id: "date", header: "Date", sortValue: (row) => row.date, cell: (row) => <span className="text-on-surface-variant text-[12px]">{row.dateLabel}</span> },
+  { id: "action", header: "Action", align: "end", cell: () => <span className="text-on-surface-variant font-label-caps text-[11px]">—</span> },
+];
+
+const transactionId = (row: SampleTransaction) => row.id;
 
 export default function WalletsPage() {
   const { address, isConnected, openModal, isWrongNetwork } = useWallet();
@@ -219,45 +265,16 @@ export default function WalletsPage() {
               </a>
             )}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-start border-collapse">
-              <thead>
-                <tr className="bg-surface text-on-surface-variant font-label-caps text-[11px] border-b border-outline-variant uppercase tracking-wider">
-                  <th className="px-4 py-3 font-bold">TYPE</th>
-                  <th className="px-4 py-3 font-bold">ASSET</th>
-                  <th className="px-4 py-3 font-bold">AMOUNT</th>
-                  <th className="px-4 py-3 font-bold">STATUS</th>
-                  <th className="px-4 py-3 font-bold">DATE</th>
-                  <th className="px-4 py-3 font-bold text-end">ACTION</th>
-                </tr>
-              </thead>
-              <tbody className="font-body-md">
-                <TransactionRow 
-                  type="Deposit" icon="south_west" iconColor="text-secondary"
-                  asset="USDC" amount="+150,000.00" amountColor="text-secondary"
-                  status="COMPLETED" statusClass="bg-secondary-container text-on-secondary-container"
-                  date="Oct 28, 14:22"
-                />
-                <TransactionRow 
-                  type="Market Buy" icon="north_east" iconColor="text-tertiary"
-                  asset="POLITICS/YES" amount="-12,450.00" amountColor="text-tertiary"
-                  status="COMPLETED" statusClass="bg-secondary-container text-on-secondary-container"
-                  date="Oct 27, 09:15"
-                />
-                <TransactionRow 
-                  type="Withdraw" icon="swap_horiz" iconColor="text-primary"
-                  asset="USDC" amount="-50,000.00" amountColor="text-on-surface-variant"
-                  status="PENDING" statusClass="bg-surface-container-highest text-on-surface-variant"
-                  date="Oct 26, 18:40"
-                />
-                <TransactionRow 
-                  type="Reward Claim" icon="payments" iconColor="text-secondary"
-                  asset="USDC" amount="+2,105.12" amountColor="text-secondary"
-                  status="COMPLETED" statusClass="bg-secondary-container text-on-secondary-container"
-                  date="Oct 25, 11:02"
-                />
-              </tbody>
-            </table>
+          <div className="p-2">
+            <DataTable<SampleTransaction>
+              caption="Transaction history. Sample rows: indexed history is on the roadmap."
+              captionHidden
+              columns={TRANSACTION_COLUMNS}
+              rows={SAMPLE_TRANSACTIONS}
+              getRowId={transactionId}
+              emptyState="No transactions yet."
+              initialSort={{ columnId: "date", direction: "descending" }}
+            />
           </div>
           <div className="p-4 bg-white border-t border-outline-variant flex items-center justify-center gap-4">
             <span className="text-[11px] text-on-surface-variant">Sample rows. Indexed history is on the roadmap.</span>

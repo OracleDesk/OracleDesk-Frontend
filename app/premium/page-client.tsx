@@ -31,6 +31,7 @@ import { isUnfinishedPayment, listPending, removePending, savePending, type Pend
 import { verifyPendingPayment, type VerifyResult } from "@/lib/payments/verify";
 import { DAILY_PASS_TRACE_PLACEHOLDER } from "@/lib/api/traces";
 import { userMessage } from "@/lib/errors/display";
+import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { setSpanAttribute, withOperation } from "@/lib/observability/tracing";
 import { track } from "@/lib/observability/analytics";
 
@@ -118,6 +119,17 @@ const features = [
   { name: "API Endpoints", free: "None", pro: "Read-only (Standard)", institutional: "Read/Write (Websockets)" },
   { name: "AI Insights (Oracle)", free: "Daily Summaries", pro: "Real-time Reasoning", institutional: "Predictive Modeling" },
 ];
+
+type FeatureRow = (typeof features)[number];
+
+const FEATURE_COLUMNS: ColumnDef<FeatureRow>[] = [
+  { id: "name", header: "Features", isRowHeader: true, cell: (row) => <span className="font-medium">{row.name}</span> },
+  { id: "free", header: "Free", align: "center", cell: (row) => <span className="text-on-surface-variant">{row.free}</span> },
+  { id: "pro", header: "Pro", align: "center", cell: (row) => <span className="text-on-surface-variant">{row.pro}</span> },
+  { id: "institutional", header: "Institutional", align: "center", cell: (row) => <span className="text-on-surface-variant">{row.institutional}</span> },
+];
+
+const featureId = (row: FeatureRow) => row.name;
 
 export default function PremiumPageClient() {
   const { address, isConnected, isWrongNetwork, openModal, ensureSession } = useWallet();
@@ -421,27 +433,15 @@ export default function PremiumPageClient() {
 
         <div className="mb-24">
           <h2 className="font-headline-md text-headline-md mb-8 text-center">Feature Breakdown</h2>
-          <div className="overflow-x-auto border border-outline-variant rounded-xl bg-white shadow-sm">
-            <table className="w-full text-start border-collapse min-w-[600px]">
-              <thead>
-                <tr className="bg-surface-container-low border-b border-outline-variant">
-                  <th className="p-4 font-label-caps text-label-caps">Features</th>
-                  <th className="p-4 font-label-caps text-label-caps text-center">Free</th>
-                  <th className="p-4 font-label-caps text-label-caps text-center">Pro</th>
-                  <th className="p-4 font-label-caps text-label-caps text-center">Institutional</th>
-                </tr>
-              </thead>
-              <tbody className="font-body-md divide-y divide-outline-variant">
-                {features.map((f, i) => (
-                  <tr key={i} className="hover:bg-surface-container-low/50 transition-colors">
-                    <td className="p-4 font-medium">{f.name}</td>
-                    <td className="p-4 text-center text-on-surface-variant">{f.free}</td>
-                    <td className="p-4 text-center text-on-surface-variant">{f.pro}</td>
-                    <td className="p-4 text-center text-on-surface-variant">{f.institutional}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="border border-outline-variant rounded-xl bg-white p-4 shadow-sm">
+            <DataTable<FeatureRow>
+              caption="Feature comparison by plan"
+              captionHidden
+              columns={FEATURE_COLUMNS}
+              rows={features}
+              getRowId={featureId}
+              emptyState="No features to compare."
+            />
           </div>
         </div>
 

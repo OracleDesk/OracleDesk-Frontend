@@ -2,11 +2,10 @@
 import { Icon } from "@/components/ui/icon";
 
 import React, { useCallback, useState, useEffect, useMemo } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { useDirection } from "@/components/layout/DirectionProvider";
-import { slideIn } from "@/lib/motion/directional";
+import { motion, useReducedMotion } from "framer-motion";
 import { useBurstFeed } from "@/lib/realtime/useBurst";
 import { formatFeedTime } from "@/lib/realtime/format";
+import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { RealtimeProfiler } from "@/components/realtime-profiler";
 import Link from "next/link";
 import { useMarkets, useInfiniteMarkets, useMarketQuestionIntegrity } from "@/lib/hooks/useMarkets";
@@ -252,37 +251,70 @@ const MarketCard = ({ href, yesHref, noHref, category, onChainMarketId, reasonin
   );
 };
 
+/** Raw trade as received; display strings are produced at render time only. */
+interface FeedTrade {
+  eventId: string;
+  receivedAt: Date;
+  /** Ledger close time when the event carries one; otherwise the row shows its receipt time. */
+  closedAt?: Date;
+  ledger: number;
+  market: string;
+  collateralRaw: bigint;
+  direction: "YES" | "NO";
+  isBuy: boolean;
+  priceYesBps: number;
+}
+
+const feedTradeId = (row: FeedTrade) => row.eventId;
+const betLabel = (row: FeedTrade) => `${row.isBuy ? "BUY" : "SELL"} ${row.direction}`;
+
+const FEED_COLUMNS: ColumnDef<FeedTrade>[] = [
+  {
+    id: "time",
+    header: "Time",
+    sortValue: (row) => row.closedAt ?? row.receivedAt,
+    cell: (row) => (
+      <span className="text-on-surface-variant">
+        {formatFeedTime((row.closedAt ?? row.receivedAt).getTime())}
+        {row.closedAt ? "" : " received"}
+      </span>
+    ),
+  },
+  { id: "market", header: "Market", isRowHeader: true, sortValue: (row) => row.market, cell: (row) => row.market },
+  { id: "size", header: "Size", numeric: true, sortValue: (row) => row.collateralRaw, cell: (row) => formatUsdcDisplay(row.collateralRaw) },
+  {
+    id: "bet",
+    header: "Bet",
+    align: "end",
+    sortValue: (row) => betLabel(row),
+    cell: (row) => <span className={`font-bold ${row.direction === "YES" ? "text-secondary" : "text-tertiary"}`}>{betLabel(row)}</span>,
+  },
+  { id: "probability", header: "Probability", numeric: true, sortValue: (row) => row.priceYesBps, cell: (row) => `YES ${formatBps(row.priceYesBps)}` },
+];
+
 const TradingFeed = () => {
   const { rows, burst } = useBurstFeed({ capacity: 8, type: "TRADE_EXECUTED" });
-  const reduceMotion = useReducedMotion();
-  const dir = useDirection();
-  const feed = rows.flatMap(event => {
-    if (event.type !== "TRADE_EXECUTED") return [];
-    const data = event.payload;
-    return [{
-      key: data.eventId,
-      time: formatFeedTime(data.closedAt ?? event.receivedAt) + (data.closedAt ? "" : " received"),
-      market: data.marketQuestion || `Market #${data.onChainMarketId}`,
-      size: formatUsdcDisplay(BigInt(data.collateralRaw)),
-      bet: `${data.isBuy ? "BUY" : "SELL"} ${data.direction}`,
-      prob: `YES ${formatBps(data.priceYesBps)}`,
-      color: data.direction === "YES" ? "text-secondary" : "text-tertiary",
-    }];
-  });
-  const animate = !reduceMotion && !burst;
-  const tableRows = feed.map(row => {
-    const cells = <>
-      <td className="py-3 text-on-surface-variant">{row.time}</td>
-      <td className="py-3">{row.market}</td>
-      <td className="py-3 text-end">{row.size}</td>
-      <td className={`py-3 text-end ${row.color} font-bold`}>{row.bet}</td>
-      <td className="py-3 text-end">{row.prob}</td>
-    </>;
-    const className = "hover:bg-surface-container transition-colors border-b border-outline-variant/30";
-    return animate
-      ? <motion.tr key={row.key} {...slideIn(dir, 20)} className={className}>{cells}</motion.tr>
-      : <tr key={row.key} className={className}>{cells}</tr>;
-  });
+  const feed = useMemo<FeedTrade[]>(
+    () =>
+      rows.flatMap((event) => {
+        if (event.type !== "TRADE_EXECUTED") return [];
+        const data = event.payload;
+        return [
+          {
+            eventId: data.eventId,
+            receivedAt: new Date(event.receivedAt),
+            closedAt: data.closedAt ? new Date(data.closedAt) : undefined,
+            ledger: data.ledger,
+            market: data.marketQuestion || `Market #${data.onChainMarketId}`,
+            collateralRaw: BigInt(data.collateralRaw),
+            direction: data.direction,
+            isBuy: data.isBuy,
+            priceYesBps: data.priceYesBps,
+          },
+        ];
+      }),
+    [rows],
+  );
 
   return (
     <section className="mt-12">
@@ -292,22 +324,21 @@ const TradingFeed = () => {
       </div>
       {burst && <p className="text-xs text-on-surface-variant mb-2">{burst.count} trades in the last second{burst.overflow ? ` · ${burst.overflow} more events while this tab was hidden` : ""}.</p>}
       <div className="terminal-log-flow border border-outline-variant rounded-xl overflow-hidden bg-white">
-        <div className="p-4 overflow-x-auto">
-          <table className="w-full text-start">
-            <thead>
-              <tr className="border-b border-outline-variant">
-                <th className="pb-3 text-label-caps text-on-surface-variant">Time</th>
-                <th className="pb-3 text-label-caps text-on-surface-variant">Market</th>
-                <th className="pb-3 text-label-caps text-on-surface-variant text-end">Size</th>
-                <th className="pb-3 text-label-caps text-on-surface-variant text-end">Bet</th>
-                <th className="pb-3 text-label-caps text-on-surface-variant text-end">Probability</th>
-              </tr>
-            </thead>
-            <tbody key={animate ? "animated" : "static"} className="font-data-mono text-body-md">
-              {feed.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-on-surface-variant">Waiting for on-chain trades…</td></tr>}
-              {animate ? <AnimatePresence initial={false}>{tableRows}</AnimatePresence> : tableRows}
-            </tbody>
-          </table>
+        <div className="p-4">
+          <DataTable<FeedTrade>
+            caption="Recent on-chain trades"
+            columns={FEED_COLUMNS}
+            rows={feed}
+            getRowId={feedTradeId}
+            emptyState="Waiting for on-chain trades…"
+            live={{
+              mode: "prepend",
+              maxRows: 8,
+              announce: (row) => `New trade: ${betLabel(row).toLowerCase()} on ${row.market}`,
+              announceCount: (count) => `${count} new trades`,
+              pendingLabel: (count) => `${count} new ${count === 1 ? "trade" : "trades"} — show`,
+            }}
+          />
         </div>
       </div>
     </section>
@@ -393,19 +424,14 @@ export default function MarketsPageClient() {
   return (
     <div className="min-h-screen bg-surface">
       <main className="pt-24 pb-12 px-gutter max-w-container-max-width mx-auto">
+        <h1 id="markets-heading" tabIndex={-1} className="sr-only outline-none">
+          Markets
+        </h1>
         <FilterBar
           status={status}
           setStatus={handleSetStatus}
           category={category}
           setCategory={setCategory}
-        <h1 id="markets-heading" tabIndex={-1} className="sr-only outline-none">
-          Markets
-        </h1>
-        <FilterBar 
-          status={status} 
-          setStatus={(s) => setStatus(s as MarketStatus)} 
-          category={category} 
-          setCategory={setCategory} 
         />
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

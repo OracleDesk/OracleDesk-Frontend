@@ -11,8 +11,10 @@ import { HealthIndicator } from "./HealthIndicator";
 import { MobileNav } from "./MobileNav";
 import { NAV_ITEMS, isActive, activeHref } from "./nav-items";
 import { useAdminPermissions } from "@/lib/admin/useAdminPermissions";
+import { useTranslations } from "@/lib/i18n/provider";
 
 const Navbar = () => {
+  const t = useTranslations();
   const pathname = usePathname();
   const { unread } = useInbox();
   const { can } = useAdminPermissions();
@@ -47,7 +49,7 @@ const Navbar = () => {
                             : "text-on-surface-variant font-medium hover:text-primary"
                         } transition-colors duration-200 cursor-pointer font-label-caps text-label-caps flex items-center gap-1 h-full focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-sm bg-transparent border-0`}
                       >
-                        {item.label}
+                        {t(item.labelKey)}
                         <Icon name="expand_more" className="text-[18px] transition-transform duration-200 group-data-[state=open]:rotate-180" />
                       </NM.Trigger>
                       <NM.Content className="absolute top-full start-0 mt-0 w-48 bg-white border border-outline-variant shadow-lg py-2 rounded-md z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none">
@@ -64,7 +66,7 @@ const Navbar = () => {
                                       pathname === subItem.href ? "text-primary font-bold" : "text-on-surface-variant"
                                     }`}
                                   >
-                                    {subItem.label}
+                                    {t(subItem.labelKey)}
                                   </Link>
                                 </NM.Link>
                               </li>
@@ -89,7 +91,7 @@ const Navbar = () => {
                             : "text-on-surface-variant font-medium hover:text-primary"
                         } transition-colors duration-200 cursor-pointer font-label-caps text-label-caps h-full flex items-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-sm`}
                       >
-                        {item.label}
+                        {t(item.labelKey)}
                       </Link>
                     </NM.Link>
                   </NM.Item>
@@ -102,7 +104,7 @@ const Navbar = () => {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            aria-label="Open command palette (Ctrl+K)"
+            aria-label={t("nav.openCommandPalette")}
             aria-keyshortcuts="Control+k Meta+k"
             className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-surface-container border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary text-body-sm transition-colors"
             onClick={() => {
@@ -112,12 +114,12 @@ const Navbar = () => {
             }}
           >
             <Icon name="search" className="text-[16px]" />
-            <span className="font-body-sm">Search</span>
+            <span className="font-body-sm">{t("nav.search")}</span>
             <kbd className="font-mono text-[10px] px-1 bg-surface border border-outline-variant">⌘K</kbd>
           </button>
           <HealthIndicator />
           <Link
-            aria-label="Notifications"
+            aria-label={t("nav.notifications")}
             className={`${
               pathname === "/notifications" ? "text-primary" : "text-on-surface-variant"
             } hover:text-primary transition-colors cursor-pointer relative p-1 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none`}

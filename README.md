@@ -82,6 +82,9 @@ Configuration is validated at startup and before `next build`: contract ids and 
 | `npm run check:sdk` | Check the Stellar SDK major version (CI runs this) |
 | `npm run check:origins` | Check external origins against the allowlist (CI runs this) |
 | `npm run check:docs` | Fail if the docs reference npm scripts or script files that do not exist (CI runs this) |
+| `npm run i18n:check` | Validate message catalogs: ICU syntax, key parity with `en.json`, unused keys, stale generated types (CI runs this) |
+| `npm run i18n:types` | Regenerate the typed message arguments after editing `en.json` |
+| `npm run i18n:pseudo` | Regenerate the `en-XA` pseudo-locale catalog |
 | `npm run scan:secrets` | Scan the build output for secrets (CI runs this) |
 | `npm run install:allowed-scripts` | Run the allow-listed dependency install scripts |
 | `npm run perf:lhci` | Lighthouse CI budgets |

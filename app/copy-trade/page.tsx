@@ -23,7 +23,9 @@ import { useMarket } from "@/lib/hooks/useMarkets";
 import { useQuoteBuy, useUsdcBalance, useAccountReserve, usePrepareBuy, useOnChainMarket, fetchOnChainMarketBySimulation, useUsdcTrustline, useEnableUsdc, useUsdcBalanceState, type PreparedWriteReview } from "@/lib/hooks/useStellar";
 import { explorerTx, NETWORK_LABEL } from "@/lib/stellar/config";
 import { parseCopyTradeParams, routes } from "@/lib/routes";
-import { formatUsdc, formatXlm, minOut, bpsToPercent, probabilityToBps, tryParseUsdc, BPS } from "@/lib/stellar/units";
+import { formatXlm, minOut, probabilityToBps, BPS } from "@/lib/stellar/units";
+import { useFormat, type Formatters } from "@/lib/format/useFormat";
+import { useTranslations } from "@/lib/i18n/provider";
 import { chooseCollateral, maxCollateralForEdge, quoteCopy, type CopyMarket, type CopyQuote, type SizingMode } from "@/lib/stellar/quote";
 import type { OutcomeTag } from "@/lib/stellar/clients";
 import { TxPhase } from "@/lib/stellar/tx-lifecycle";
@@ -45,6 +47,9 @@ import { LiveRegion } from "@/components/ui/live-region";
 import { useDirection } from "@/components/layout/DirectionProvider";
 import { Ltr } from "@/components/ui/ltr";
 import Link from "next/link";
+import { BpsSlider } from "@/components/ui/slider";
+import { SlippagePicker } from "@/components/ui/slippage-picker";
+import { amountForBps, bpsForAmount } from "@/lib/format/allocation";
 const QUOTE_DEBOUNCE_MS = 400;
 /** Below this remaining edge (1 point) the user must tick a box before copying. */
 const MIN_EDGE_WARN_BPS = 100n;
@@ -83,7 +88,7 @@ function tryQuoteCopy(
   }
 }
 
-const formatEdge = (bps: bigint) => `${bps >= 0n ? "+" : ""}${(Number(bps) / 100).toFixed(1)} pts`;
+const formatEdge = (bps: bigint, fmt: Formatters) => `${bps >= 0n ? "+" : ""}${fmt.points(bps)} pts`;
 
 function renderTxPhase(phase: TxPhase): string | null {
   switch (phase.name) {
@@ -138,6 +143,8 @@ function CopyTradeContent() {
 
   const { viewed, isWatching } = useViewedAddress();
   const dir = useDirection();
+  const fmt = useFormat();
+  const t = useTranslations();
   const balance = useUsdcBalance(address);
   const balanceState = useUsdcBalanceState(address);
   const ledger = useLedgerNow();
@@ -152,6 +159,10 @@ function CopyTradeContent() {
 
   // Allocation as a share of the wallet's USDC balance, in basis points.
   const [allocationBps, setAllocationBps] = useState(1250);
+  // Numeric alternative: the text is only used while the user is mid-edit.
+  const [amountText, setAmountText] = useState("");
+  const [amountFocused, setAmountFocused] = useState(false);
+  const [amountError, setAmountError] = useState<string | null>(null);
   const [sizingKind, setSizingKind] = useState<SizingKind>("percent");
   const [fixedInput, setFixedInput] = useState("");
   const [capInput, setCapInput] = useState("");
@@ -164,7 +175,6 @@ function CopyTradeContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reviewModel, setReviewModel] = useState<{ model: ReviewModel; changedFrom?: ReviewModel } | null>(null);
   const reviewResolver = useRef<((approved: boolean) => void) | null>(null);
-  const sliderRef = useRef<HTMLDivElement>(null);
   const allocationControlRef = useRef<HTMLButtonElement | null>(null);
 
   const form = useFormErrors(["fixedAmount", "cap", "outcome", "amount"] as const);
@@ -197,9 +207,8 @@ function CopyTradeContent() {
   const waitingForBuy =
     submitQueue.waiting.some((job) => job.label === buyLabel) ||
     (submitQueue.lockWaiting && submitQueue.running?.label === buyLabel);
-  const allocation = allocationBps / 100;
-  const fixedAmount = tryParseUsdc(fixedInput);
-  const userCap = tryParseUsdc(capInput);
+  const fixedAmount = fmt.tryParseAmount(fixedInput);
+  const userCap = fmt.tryParseAmount(capInput);
   const sizingMode: SizingMode =
     sizingKind === "fixed"
       ? { kind: "fixed", amount: fixedAmount ?? 0n }
@@ -209,6 +218,31 @@ function CopyTradeContent() {
   const choice = balance.data !== undefined ? chooseCollateral(sizingMode, { balance: balance.data, userCap }) : null;
   const amountRaw = choice ? choice.amount : null;
   const slippageBps = slippageOverrideBps ?? settings.slippageBps;
+
+  // The trade amount is always amountForBps(balance, bps): typing an exact
+  // amount picks the largest whole-bps share that does not exceed it, so the
+  // amount shown after editing can be slightly below what was typed.
+  const allocationValueText = (bps: number) =>
+    balance.data !== undefined
+      ? t("trade.copy.sliderValueText", { percent: fmt.percent(bps, { decimals: 2 }), amount: fmt.usdc(amountForBps(balance.data, bps), { maxDecimals: 2, grouping: true }) })
+      : t("trade.copy.sliderValueTextNoBalance", { percent: fmt.percent(bps, { decimals: 2 }) });
+  const onAmountTyped = (text: string) => {
+    setAmountText(text);
+    if (balance.data === undefined) return;
+    if (text.trim() === "") {
+      setAmountError(null);
+      return;
+    }
+    const parsed = fmt.tryParseAmount(text);
+    if (parsed === null) {
+      setAmountError(t("trade.copy.amountInvalid"));
+    } else if (parsed > balance.data) {
+      setAmountError(t("trade.copy.amountOverBalance", { balance: fmt.usdc(balance.data, { maxDecimals: 2, grouping: true }) }));
+    } else {
+      setAmountError(null);
+      setAllocationBps(bpsForAmount(balance.data, parsed));
+    }
+  };
 
   // The agent's estimate and the copy's own cost on the current reserves, all in bigint bps.
   const estimateYesBps = trace ? estimateToBps(trace.probabilityEstimate) : null;
@@ -228,11 +262,11 @@ function CopyTradeContent() {
 
   useEffect(() => {
     if (localQuote && amountRaw !== null && amountRaw > 0n) {
-      const shares = formatUsdc(localQuote.sharesOut, { maxDecimals: 1 });
-      const edge = bpsToPercent(localQuote.edgeAfterBps, 1);
+      const shares = fmt.usdc(localQuote.sharesOut, { maxDecimals: 1 });
+      const edge = fmt.percent(localQuote.edgeAfterBps);
       form.announceSettled("quote", `Estimated ${shares} shares, edge ${edge}`);
     }
-  }, [localQuote?.sharesOut, localQuote?.edgeAfterBps, amountRaw, form]);
+  }, [localQuote?.sharesOut, localQuote?.edgeAfterBps, amountRaw, form, fmt]);
   const prepareBuy = usePrepareBuy({
     marketId: onChainMarketId,
     outcome: side ?? "Yes",
@@ -252,61 +286,28 @@ function CopyTradeContent() {
     ? fees.totalFee - reserve.data.spendable
     : null;
 
-  const handleSliderInteraction = (clientX: number) => {
-    if (!sliderRef.current) return;
-    const rect = sliderRef.current.getBoundingClientRect();
-    const x = dir === "rtl" ? rect.right - clientX : clientX - rect.left;
-    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
-    setAllocationBps(Math.round(percentage * 100));
-  };
-
-  const onMouseDown = (e: React.MouseEvent) => {
-    handleSliderInteraction(e.clientX);
-    const onMouseMove = (moveEvent: MouseEvent) => handleSliderInteraction(moveEvent.clientX);
-    const onMouseUp = () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    handleSliderInteraction(e.touches[0].clientX);
-  };
-
-  const onSliderKey = (e: React.KeyboardEvent) => {
-    const step = e.shiftKey ? 1000 : 100;
-    const incKey = dir === "rtl" ? "ArrowLeft" : "ArrowRight";
-    const decKey = dir === "rtl" ? "ArrowRight" : "ArrowLeft";
-    if (e.key === incKey || e.key === "ArrowUp") setAllocationBps((v) => Math.min(10_000, v + step));
-    if (e.key === decKey || e.key === "ArrowDown") setAllocationBps((v) => Math.max(0, v - step));
-  };
-
   const handleConfirm = async () => {
     if (!isConnected || !address) {
-      setStatusMessage("Connect your wallet to confirm the copy trade.");
+      setStatusMessage(t("trade.copy.connectToConfirm"));
       void openModal();
       return;
     }
     if (isWrongNetwork) {
-      setStatusMessage(`Switch your wallet to ${NETWORK_LABEL} to place this trade.`);
+      setStatusMessage(t("trade.copy.switchNetwork", { network: NETWORK_LABEL }));
       return;
     }
     if (!trace || !side) {
       setStatusMessage(
-        !trace
-          ? "There's no reasoning trace to copy, so there's no side to take."
-          : "This trace shows no edge, so there's no trade to copy.",
+        !trace ? t("trade.copy.noTrace") : t("trade.copy.noEdge"),
       );
       return;
     }
     if (!onChainMarketId || !market) {
-      setStatusMessage("This market isn't on-chain yet, so it can't be traded.");
+      setStatusMessage(t("trade.copy.notOnChain"));
       return;
     }
     if (!onChainMarket.data) {
-      setStatusMessage("Checking the on-chain market and ledger time…");
+      setStatusMessage(t("trade.copy.checkingMarket"));
       return;
     }
     const valid = form.attemptSubmit(() => {
@@ -328,7 +329,7 @@ function CopyTradeContent() {
     if (!valid) return;
 
     if (!marketCanTrade) {
-      setStatusMessage("This market is closed or too close to its deadline to safely place a trade.");
+      setStatusMessage(t("trade.copy.marketClosed"));
       return;
     }
     if (!trustlineReady) {
@@ -342,7 +343,7 @@ function CopyTradeContent() {
       return;
     }
     if (!amountRaw || amountRaw <= 0n) {
-      setStatusMessage("Choose an allocation greater than zero. You may need USDC in your wallet first.");
+      setStatusMessage(t("trade.copy.zeroAllocation"));
       return;
     }
 
@@ -361,7 +362,7 @@ function CopyTradeContent() {
         freshMarket.market.status.tag !== "Open" ||
         BigInt(Math.floor(freshLedgerNow)) + BigInt(SAFETY_MARGIN_S + MIN_TX_TIMEOUT_S) >= freshMarket.market.close_time
       ) {
-        setStatusMessage("This market is closed or too close to its deadline to safely place a trade.");
+        setStatusMessage(t("trade.copy.marketClosed"));
         return;
       }
 
@@ -400,7 +401,7 @@ function CopyTradeContent() {
 
       setStatusMessage(
         (result.durable ? "Trade done; recording will retry automatically. " : "Trade done; browser storage is unavailable, so keep this tab open to finish recording. ") +
-        `You received ${formatUsdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.` +
+        `You received ${fmt.usdc(result.sharesOut, { maxDecimals: 2 })} ${side.toUpperCase()} shares.` +
           (result.txHash ? ` Transaction ${result.txHash.slice(0, 10)}…` : ""),
       );
       const explorerUrl = result.txHash ? explorerTx(result.txHash) : null;
@@ -513,7 +514,7 @@ function CopyTradeContent() {
               <div className="flex justify-between items-end flex-wrap gap-2">
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase text-[10px]">Amount to copy</label>
                 <span className="font-data-mono text-data-mono text-primary font-bold text-xs sm:text-sm">
-                  {amountRaw !== null ? <Ltr>{`${formatUsdc(amountRaw, { maxDecimals: 2, minDecimals: 2, grouping: true })} USDC`}</Ltr> : isConnected ? "loading balance…" : "connect a wallet"}
+                  {amountRaw !== null ? <Ltr>{`${fmt.usdc(amountRaw, { maxDecimals: 2, minDecimals: 2, grouping: true })} USDC`}</Ltr> : isConnected ? "loading balance…" : "connect a wallet"}
                   {choice && choice.limitedBy !== "none" && (
                     <span className="block text-[10px] font-normal text-on-surface-variant">limited by your {choice.limitedBy}</span>
                   )}
@@ -604,59 +605,51 @@ function CopyTradeContent() {
               {choice?.unavailable && sizingKind === "mirror" && <p className="text-[11px] text-error">{choice.unavailable}</p>}
               {sizingKind === "percent" && (
               <>
-              <div
-                ref={sliderRef}
-                className="relative h-2 bg-surface-container rounded-full cursor-pointer touch-none focus:outline-none focus:ring-2 focus:ring-primary"
-                role="slider"
-                tabIndex={0}
-                aria-label="Share of your USDC balance"
-                aria-valuemin={0}
-                aria-valuemax={10000}
-                aria-valuenow={allocationBps}
-                aria-valuetext={`${bpsToPercent(allocationBps, 2)} of your balance${amountRaw !== null ? `, ${formatUsdc(amountRaw, { maxDecimals: 2, minDecimals: 2, grouping: true })} USDC` : ""}`}
-                onKeyDown={onSliderKey}
-                onMouseDown={onMouseDown}
-                onTouchStart={(e) => handleSliderInteraction(e.touches[0].clientX)}
-                onTouchMove={onTouchMove}
-              >
-                <div className="absolute inset-y-0 bg-primary-container rounded-full" style={{ insetInlineStart: 0, width: `${allocation}%` }}></div>
-                <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-primary border-2 border-white rounded-full shadow-md" style={{ insetInlineStart: `calc(${allocation}% - 8px)` }}></div>
-              </div>
-              <div className="flex justify-between text-[10px] font-medium text-on-surface-variant px-1">
-                <span>0%</span>
-                <span>25%</span>
-                <span>50%</span>
-                <span>75%</span>
-                <span>100%</span>
+              <span id="allocation-slider-label" className="block text-[11px] text-on-surface-variant">{t("trade.copy.allocationLabel")}</span>
+              <BpsSlider
+                id="allocation-slider"
+                labelledBy="allocation-slider-label"
+                label={t("trade.copy.allocationLabel")}
+                value={allocationBps}
+                onValueChange={setAllocationBps}
+                dir={dir}
+                valueText={allocationValueText}
+                describedBy="allocation-amount-help"
+              />
+              <div className="space-y-1">
+                <label htmlFor="allocation-amount" className="text-[11px] text-on-surface-variant">{t("trade.copy.amountLabel")}</label>
+                <input
+                  id="allocation-amount"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  disabled={balance.data === undefined || (isWatching && !isConnected)}
+                  value={amountFocused ? amountText : amountRaw !== null ? fmt.usdc(amountRaw) : ""}
+                  placeholder={balance.data === undefined ? "Balance not loaded" : "0"}
+                  onFocus={() => {
+                    setAmountText(amountRaw !== null ? fmt.usdc(amountRaw) : "");
+                    setAmountFocused(true);
+                  }}
+                  onBlur={() => {
+                    setAmountFocused(false);
+                    setAmountError(null);
+                  }}
+                  onChange={(e) => onAmountTyped(e.target.value)}
+                  aria-invalid={amountError !== null}
+                  aria-describedby={amountError ? "allocation-amount-error allocation-amount-help" : "allocation-amount-help"}
+                  className="w-full border border-outline-variant rounded px-3 py-2 font-data-mono text-sm bg-white disabled:opacity-50"
+                />
+                {amountError && <p id="allocation-amount-error" className="text-[11px] text-error">{amountError}</p>}
+                <p id="allocation-amount-help" className="text-[11px] text-on-surface-variant">
+                  {balance.data === undefined ? t("trade.copy.amountDisconnected") : t("trade.copy.amountHelp")}
+                </p>
               </div>
               </>
               )}
             </div>
 
             <div className="p-4 bg-surface-container-low rounded-lg space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Icon name="settings" className="text-outline text-sm" />
-                  <span className="font-label-caps text-label-caps text-on-surface-variant uppercase text-[10px]">
-                    Slippage Tolerance ({bpsToPercent(slippageBps)})
-                  </span>
-                </div>
-                <div className="flex gap-2 w-full sm:w-auto">
-                  {SLIPPAGE_PRESET_BPS.map((bps) => (
-                    <button
-                      key={bps}
-                      onClick={() => setSlippageOverrideBps(bps)}
-                      className={`flex-1 sm:flex-none px-3 py-1 text-[11px] font-bold border rounded transition-all ${
-                        slippageBps === bps
-                          ? "border-primary border-2 bg-white text-primary"
-                          : "border-outline-variant bg-white hover:border-primary text-on-surface-variant"
-                      }`}
-                    >
-                      {bpsToPercent(bps)}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <SlippagePicker value={slippageBps} onChange={setSlippageOverrideBps} presets={[...SLIPPAGE_PRESET_BPS]} dir={dir} />
               {slippageOverrideBps === null && (
                 <p className="text-[11px] text-on-surface-variant">
                   Using your default from Settings. Pick a value above to override it for this trade only.
@@ -670,9 +663,9 @@ function CopyTradeContent() {
                 <div className="text-end font-data-mono text-xs">
                   {quote.data !== undefined && minShares !== null ? (
                     <>
-                      <span className="text-on-surface font-bold">{formatUsdc(quote.data, { maxDecimals: 2 })}</span>
+                      <span className="text-on-surface font-bold">{fmt.usdc(quote.data, { maxDecimals: 2 })}</span>
                       <span className="block text-[10px] text-on-surface-variant">
-                        at least {formatUsdc(minShares, { maxDecimals: 2 })} after <Term id="slippage">slippage</Term>
+                        at least {fmt.usdc(minShares, { maxDecimals: 2 })} after <Term id="slippage">slippage</Term>
                         {fees && (
                           <span className="block text-[10px] text-on-surface-variant mt-1">
                             Network fee ≈ {formatXlm(fees.totalFee)} XLM (inclusion: {formatXlm(fees.inclusionFee)}, resource: {formatXlm(fees.resourceFee)}) ·{" "}
@@ -704,10 +697,10 @@ function CopyTradeContent() {
               {localQuote && estimateSideBps !== null && (
                 <div className="p-4 border border-outline-variant rounded-lg bg-white space-y-2">
                   <div className="flex flex-wrap gap-x-4 gap-y-1 font-data-mono text-xs text-on-surface-variant">
-                    <span>Agent estimate <span className="font-bold text-on-surface">{bpsToPercent(estimateSideBps)}</span></span>
-                    <span>Your avg price <span className="font-bold text-on-surface">{bpsToPercent(localQuote.avgPriceBps)}</span></span>
+                    <span>Agent estimate <span className="font-bold text-on-surface">{fmt.percent(estimateSideBps)}</span></span>
+                    <span>Your avg price <span className="font-bold text-on-surface">{fmt.percent(localQuote.avgPriceBps)}</span></span>
                     <span className={localQuote.edgeAfterBps > 0n ? "font-bold text-secondary" : "font-bold text-error"}>
-                      Remaining edge {formatEdge(localQuote.edgeAfterBps)}
+                      Remaining edge {formatEdge(localQuote.edgeAfterBps, fmt)}
                     </span>
                   </div>
                   {maxForEdge !== null && amountRaw !== null && maxForEdge > 0n && maxForEdge < amountRaw && (
@@ -716,10 +709,10 @@ function CopyTradeContent() {
                       className="text-xs text-primary underline"
                       onClick={() => {
                         setSizingKind("fixed");
-                        setFixedInput(formatUsdc(maxForEdge, { maxDecimals: 2 }));
+                        setFixedInput(fmt.usdc(maxForEdge, { maxDecimals: 2 }));
                       }}
                     >
-                      Use max with edge ({formatUsdc(maxForEdge, { maxDecimals: 2 })} USDC keeps at least {formatEdge(MIN_EDGE_WARN_BPS)})
+                      Use max with edge ({fmt.usdc(maxForEdge, { maxDecimals: 2 })} USDC keeps at least {formatEdge(MIN_EDGE_WARN_BPS, fmt)})
                     </button>
                   )}
                   {quote.data !== undefined && quote.data !== localQuote.sharesOut && (
@@ -742,7 +735,7 @@ function CopyTradeContent() {
                     checked={acknowledgeThinEdge}
                     onChange={(e) => setAcknowledgeThinEdge(e.target.checked)}
                   />
-                  <span>The remaining edge is only {formatEdge(localQuote.edgeAfterBps)}. I still want to copy this trade.</span>
+                  <span>The remaining edge is only {formatEdge(localQuote.edgeAfterBps, fmt)}. I still want to copy this trade.</span>
                 </label>
               )}
               {isConnected && isUnfunded && (

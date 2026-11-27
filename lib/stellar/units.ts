@@ -23,18 +23,41 @@ export function mulDivCeil(a: bigint, b: bigint, c: bigint): bigint {
   return p % c !== 0n ? q + 1n : q;
 }
 
+export type DecimalParseReason = "empty" | "format" | "too-many-decimals";
+
+/** Thrown by `parseDecimalAscii`; `message` is the user-facing English sentence. */
+export class DecimalParseError extends Error {
+  constructor(
+    message: string,
+    readonly reason: DecimalParseReason,
+  ) {
+    super(message);
+    this.name = "DecimalParseError";
+  }
+}
+
+/**
+ * The single numeric rule for fixed-point amounts: ASCII digits with an
+ * optional `.` fraction, no signs, exponents or separators, at most `decimals`
+ * fraction digits. Never goes through a float. `parseUsdc` and the
+ * locale-aware parser in `lib/format/locale.ts` both call this.
+ */
+export function parseDecimalAscii(input: string, decimals: number, unit = "USDC"): bigint {
+  const trimmed = input.trim();
+  const match = /^(\d+)(?:\.(\d*))?$/.exec(trimmed) ?? /^()\.(\d+)$/.exec(trimmed);
+  if (!match) throw new DecimalParseError(`Enter an amount like 10 or 2.5`, trimmed === "" ? "empty" : "format");
+  const [, whole, frac = ""] = match;
+  if (frac.length > decimals) throw new DecimalParseError(`${unit} has at most ${decimals} decimal places`, "too-many-decimals");
+  return BigInt(whole || "0") * 10n ** BigInt(decimals) + BigInt(frac.padEnd(decimals, "0") || "0");
+}
+
 /**
  * Parses a decimal USDC string into base units. Accepts "1", "1.5", "0.0000001".
  * Rejects exponents ("1e5"), signs, spaces inside, empty strings and more
  * than 7 decimal places. Never goes through a float.
  */
 export function parseUsdc(input: string): bigint {
-  const trimmed = input.trim();
-  const match = /^(\d+)(?:\.(\d*))?$/.exec(trimmed) ?? /^()\.(\d+)$/.exec(trimmed);
-  if (!match) throw new Error(`Enter an amount like 10 or 2.5`);
-  const [, whole, frac = ""] = match;
-  if (frac.length > USDC_DECIMALS) throw new Error(`USDC has at most ${USDC_DECIMALS} decimal places`);
-  return BigInt(whole || "0") * USDC_UNIT + BigInt(frac.padEnd(USDC_DECIMALS, "0") || "0");
+  return parseDecimalAscii(input, USDC_DECIMALS);
 }
 
 /** Like parseUsdc but returns null instead of throwing. */
@@ -119,6 +142,7 @@ export function probabilityToBps(probability: number): bigint {
 /** Share of `amount` given in basis points, rounded down. */
 export const shareOf = (amount: bigint, bps: number | bigint) => (amount * BigInt(bps)) / BPS;
 
+/** @deprecated Use `formatBpsPercent` from `lib/format/locale.ts` (locale-aware, no float division). */
 export const bpsToPercent = (bps: number | bigint, decimals = 1) => `${(Number(bps) / 100).toFixed(decimals)}%`;
 
 export function shortAddress(address: string | null | undefined, lead = 4, tail = 4): string {

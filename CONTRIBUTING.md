@@ -47,6 +47,7 @@ node scripts/spec-diff.mjs --base origin/develop # report contract interface cha
 npm run typecheck
 npm run lint
 npm run check:docs
+npm run i18n:check       # message catalogs: ICU syntax, key parity, unused keys, typed params
 npm test
 npm run test:scripts
 npm run build
@@ -246,6 +247,18 @@ through [`lib/format/money.ts`](lib/format/money.ts):
   literals in `app/**/*.tsx`. If a non-money value matches the naming
   heuristic, rename the identifier or add
   `// eslint-disable-next-line no-restricted-syntax -- not money: <reason>`.
+
+## Formatting money and time
+
+Everything that formats or parses an amount, a percentage or a ledger time lives in `lib/format/locale.ts`:
+
+- **Never `Number(raw)` for display math.** Amounts are `bigint` base units until the moment they are shown. Use `formatUsdcLocale` / `formatAmount`; they format the whole part with `Intl.NumberFormat#format(bigint)` and truncate the fraction as a digit string. `lib/format/__tests__/locale.test.ts` greps the module for `parseFloat`, `toFixed` and `Number(raw)`.
+- **Truncate money, round percentages.** Amounts never round up. `formatBpsPercent` rounds half away from zero in bigint (53.19% shows as 53.2%).
+- **Components use `useFormat()`** (`lib/format/useFormat.ts`). It returns `usdc`, `amount`, `percent`, `points`, `ledgerTime`, `parseAmount` and `tryParseAmount` bound to the active locale. It renders `en` during prerender and hydration, then switches on mount, so there are no hydration mismatches.
+- **Parsing inputs:** use `fmt.parseAmount` / `fmt.tryParseAmount` (wrapping `parseLocaleAmount`), not `tryParseUsdc`, for text a person types. It accepts the locale's decimal separator and digits, strips bidi marks, and rejects exponents, signs and ambiguous separators (a lone `.` in `de-DE`). `parseUsdc` stays the ASCII rule both build on (`parseDecimalAscii`).
+- **Dates:** `formatLedgerTime(seconds, locale, { timeZone, style })`; pass `timeZone: "UTC"` in verification views. Do not hardcode `en-US` / `en-GB` in migrated code.
+- `bpsToPercent` is deprecated; new code uses `formatBpsPercent`.
+- Tests compare exact code points: `Intl` emits U+00A0, U+202F and U+061C.
 
 ## Dialogs
 

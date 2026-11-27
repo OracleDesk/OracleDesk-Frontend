@@ -25,7 +25,7 @@ import { useRedeemAll, reviewPreparedWrite, submitPrepared, type PreparedWriteRe
 import { shouldSkipTxReview, TxReview, TxReviewPreferenceControl } from "@/components/tx-review";
 import type { ReviewModel } from "@/lib/stellar/tx-decode";
 import { TreasuryRiskLimits } from "@/components/treasury-risk-limits";
-import { VirtualTableBody } from "@/components/ui/virtual-list";
+import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { ExportHistoryDialog } from "@/components/portfolio/export-history-dialog";
 import { PendingCopyTrades } from "@/components/copy-trade/PendingCopyTrades";
 import { SourceTag } from "@/components/ui/source-tag";
@@ -102,117 +102,163 @@ const TerminalLog = () => {
   );
 };
 
-interface PositionRowProps {
+/** One position as the table needs it: display strings plus typed sort keys. */
+interface PositionTableRow {
+  id: string;
   market: string;
   category: string;
   platform: string;
-  side: string;
-  sideColor: string;
+  side: "YES" | "NO";
   entry: string;
+  /** Backend float today; only this accessor changes when positions move to bigint. */
+  entryValue: number;
   prob: number | null;
-  yesNo: string;
   size: string;
+  costRaw: bigint | null;
   exitValue: string;
   exitSubLabel?: string;
   cappedWarning?: string | null;
   pnl: string;
+  pnlRaw: bigint | null;
   pnlPercent: string;
   pnlColor: string;
   status: string;
-  resolved?: boolean;
-  claimable?: boolean;
-  ariaRowIndex?: number;
+  resolved: boolean;
+  claimable: boolean;
 }
 
-const PositionRow = ({ market, category, platform, side, sideColor, entry, prob, yesNo, size, exitValue, exitSubLabel, cappedWarning, pnl, pnlPercent, pnlColor, status, resolved, claimable, ariaRowIndex }: PositionRowProps) => {
-  return (
-    <tr
-      aria-rowindex={ariaRowIndex}
-      data-virtual-table-row={ariaRowIndex !== undefined ? ariaRowIndex - 2 : undefined}
-      className={`transition-colors border-b border-outline-variant hover:bg-surface-container/50 ${resolved ? 'bg-surface-container-highest' : ''}`}
-    >
-      <td className="px-6 py-4 font-body-md text-on-surface max-w-xs">
-        <span className="block truncate font-semibold">{market}</span>
-        <span className="text-[11px] text-outline uppercase">{category} • {platform}</span>
-      </td>
-      <td className="px-4 py-4">
-        <span className={`${sideColor} px-2 py-0.5 rounded text-[11px] font-bold`}>{side}</span>
-      </td>
-      <td className="px-4 py-4 text-end font-data-mono">{entry}</td>
-      <td className="px-4 py-4">
-        {prob === null ? (
-          <div className="text-center font-data-mono text-outline">—</div>
-        ) : (
-          <div className="flex flex-col gap-1 w-32 mx-auto">
-            <div className="flex justify-between text-[10px] text-outline font-bold">
-              <span>{prob}%</span>
-              <span>{yesNo}</span>
-            </div>
-            <div className="h-1 bg-outline-variant rounded-full overflow-hidden relative">
-              <div 
-                className={`h-full absolute start-0 top-0 ${side === 'YES' ? 'bg-secondary' : 'bg-tertiary'}`} 
-                style={{ width: `${prob}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
-      </td>
-      <td className="px-4 py-4 text-end font-data-mono">
-        <div>{size}</div>
+const positionRowId = (row: PositionTableRow) => row.id;
+
+const POSITION_COLUMNS: ColumnDef<PositionTableRow>[] = [
+  {
+    id: "market",
+    header: "Market",
+    isRowHeader: true,
+    sortValue: (row) => row.market,
+    cell: (row) => (
+      <span className="block max-w-xs text-start font-body-md text-on-surface">
+        <span className="block truncate font-semibold">{row.market}</span>
+        <span className="text-[11px] text-outline uppercase">{row.category} • {row.platform}</span>
+      </span>
+    ),
+  },
+  {
+    id: "side",
+    header: "Side",
+    sortValue: (row) => row.side,
+    cell: (row) => (
+      <span className={`${row.side === "YES" ? "bg-secondary-container text-on-secondary-container" : "bg-tertiary-container text-on-tertiary-container"} px-2 py-0.5 rounded text-[11px] font-bold`}>{row.side}</span>
+    ),
+  },
+  { id: "entry", header: "Entry", numeric: true, sortValue: (row) => row.entryValue, cell: (row) => row.entry },
+  {
+    id: "probability",
+    header: "Probability",
+    align: "center",
+    sortValue: (row) => row.prob,
+    cell: (row) =>
+      row.prob === null ? (
+        <span className="text-outline">—</span>
+      ) : (
+        <span className="mx-auto flex w-32 flex-col gap-1">
+          <span className="flex justify-between text-[10px] font-bold text-outline">
+            <span>{row.prob}%</span>
+            <span>{row.side}</span>
+          </span>
+          <span aria-hidden="true" className="relative block h-1 overflow-hidden rounded-full bg-outline-variant">
+            <span className={`absolute start-0 top-0 block h-full ${row.side === "YES" ? "bg-secondary" : "bg-tertiary"}`} style={{ width: `${row.prob}%` }} />
+          </span>
+        </span>
+      ),
+  },
+  {
+    id: "size",
+    header: "Size (backend record)",
+    numeric: true,
+    sortValue: (row) => row.costRaw,
+    cell: (row) => (
+      <>
+        <div>{row.size}</div>
         <div className="text-[10px] text-outline">Backend record</div>
-      </td>
-      <td className="px-4 py-4 text-end font-data-mono">
-        <div className="font-semibold text-on-surface">{exitValue}</div>
-        {exitSubLabel && <div className="text-[10px] text-outline">{exitSubLabel}</div>}
-        {cappedWarning && (
-          <span
-            role="status"
-            className="mt-1 inline-block rounded bg-error-container px-1.5 py-0.5 text-[10px] font-bold text-tertiary-container"
-          >
-            {cappedWarning}
+      </>
+    ),
+  },
+  {
+    id: "exit",
+    header: "Exit value (on-chain)",
+    numeric: true,
+    cell: (row) => (
+      <>
+        <div className="font-semibold text-on-surface">{row.exitValue}</div>
+        {row.exitSubLabel && <div className="text-[10px] text-outline">{row.exitSubLabel}</div>}
+        {row.cappedWarning && (
+          <span role="status" className="mt-1 inline-block rounded bg-error-container px-1.5 py-0.5 text-[10px] font-bold text-tertiary-container">
+            {row.cappedWarning}
           </span>
         )}
-      </td>
-      <td className="px-4 py-4 text-end font-data-mono">
-        <div className={`${pnlColor} font-bold`}>{pnl}</div>
-        <div className={`text-[11px] ${pnlColor === 'text-secondary' ? 'text-secondary-container bg-on-secondary-fixed-variant' : 'text-tertiary-container bg-error-container'} px-1 rounded inline-block`}>
-          {pnlPercent}
+      </>
+    ),
+  },
+  {
+    id: "pnl",
+    header: "PnL (backend record)",
+    numeric: true,
+    sortValue: (row) => row.pnlRaw,
+    cell: (row) => (
+      <>
+        <div className={`${row.pnlColor} font-bold`}>{row.pnl}</div>
+        <div className={`text-[11px] ${row.pnlColor === "text-secondary" ? "text-secondary-container bg-on-secondary-fixed-variant" : "text-tertiary-container bg-error-container"} px-1 rounded inline-block`}>
+          {row.pnlPercent}
         </div>
         <div className="text-[10px] text-outline">Backend record</div>
-      </td>
-      <td className="px-4 py-4 text-center">
-        <span className={`text-[10px] ${resolved ? 'bg-on-background text-surface' : 'bg-primary-container text-on-primary-container'} px-2 py-0.5 rounded-full uppercase`}>
-          {status}
-        </span>
-      </td>
-      <td className="px-6 py-4 text-end space-x-2">
-        {claimable ? (
-          <button 
-            className="bg-secondary text-primary-foreground px-3 py-1 rounded font-label-caps text-[10px] uppercase shadow-sm active:scale-95 transition-transform"
-            onClick={() => alert("Reward claiming coming soon.")}
+      </>
+    ),
+  },
+  {
+    id: "status",
+    header: "Status",
+    align: "center",
+    sortValue: (row) => row.status,
+    cell: (row) => (
+      <span className={`text-[10px] ${row.resolved ? "bg-on-background text-surface" : "bg-primary-container text-on-primary-container"} px-2 py-0.5 rounded-full uppercase`}>{row.status}</span>
+    ),
+  },
+  {
+    id: "actions",
+    header: "Actions",
+    align: "end",
+    cell: (row) =>
+      row.claimable ? (
+        <button
+          type="button"
+          aria-label={`Claim rewards for ${row.market}`}
+          className="bg-secondary text-primary-foreground px-3 py-1 rounded font-label-caps text-[10px] uppercase shadow-sm active:scale-95 transition-transform"
+          onClick={() => alert("Reward claiming coming soon.")}
+        >
+          Claim Rewards
+        </button>
+      ) : (
+        <span className="space-x-2">
+          <button
+            type="button"
+            aria-label={`Manage position in ${row.market}`}
+            className="text-primary hover:underline font-label-caps text-label-caps"
+            onClick={() => alert("Position management coming soon.")}
           >
-            Claim Rewards
+            Manage
           </button>
-        ) : (
-          <>
-            <button 
-              className="text-primary hover:underline font-label-caps text-label-caps"
-              onClick={() => alert("Position management coming soon.")}
-            >
-              Manage
-            </button>
-            <button 
-              className="text-tertiary hover:underline font-label-caps text-label-caps"
-              onClick={() => alert("Closing functionality coming soon.")}
-            >
-              Close
-            </button>
-          </>
-        )}
-      </td>
-    </tr>
-  );
-};
+          <button
+            type="button"
+            aria-label={`Close position in ${row.market}`}
+            className="text-tertiary hover:underline font-label-caps text-label-caps"
+            onClick={() => alert("Closing functionality coming soon.")}
+          >
+            Close
+          </button>
+        </span>
+      ),
+  },
+];
 
 export default function PortfolioPage() {
   const [status, setStatus] = useState<"OPEN" | "CLOSED">("OPEN");
@@ -230,6 +276,61 @@ export default function PortfolioPage() {
     basis: rawTreasuryValuation.mode,
     setBasis: rawTreasuryValuation.setMode,
   };
+
+  const positionRows: PositionTableRow[] = positions.map((pos) => {
+    const costRaw = floatUsdcToRaw(pos.size);
+    const pnlRaw = pos.pnl !== null ? floatUsdcToRaw(pos.pnl) : null;
+    const returnBps = pnlRaw !== null && costRaw !== null && costRaw > 0n ? ratioBps(pnlRaw, costRaw) : null;
+    const chainId = pos.market.onChainMarketId;
+    const valEntry = chainId !== null ? treasuryValuation.byMarketId.get(chainId) : undefined;
+    const val = valEntry?.valuation;
+
+    let exitValue = "—";
+    let exitSubLabel: string | undefined;
+    let cappedWarning: string | null = null;
+
+    if (val) {
+      if (val.basis === "resolution" && val.resolution !== null) {
+        exitValue = formatUsdcDisplay(val.resolution);
+        exitSubLabel = "Redeemable (on-chain)";
+      } else if (val.basis === "mid-only") {
+        exitValue = treasuryValuation.basis === "mid" ? formatUsdcDisplay(val.mid) : "—";
+        exitSubLabel = "Closed, awaiting resolution";
+      } else {
+        exitValue = formatUsdcDisplay(treasuryValuation.basis === "mid" ? val.mid : val.liquidation.value);
+        exitSubLabel = treasuryValuation.basis === "mid" ? "Mid (on-chain)" : "Exit (on-chain)";
+      }
+
+      if (val.liquidation.capped && valEntry) {
+        const soldShares = val.liquidation.sold.yes + val.liquidation.sold.no;
+        const heldShares = valEntry.holding.yes + valEntry.holding.no;
+        cappedWarning = `Only ${formatUsdc(soldShares, { maxDecimals: 2, grouping: true })} of ${formatUsdc(heldShares, { maxDecimals: 2, grouping: true })} shares sellable. Selling the rest would return only ${formatUsdcDisplay(val.liquidation.tailValue)} more`;
+      }
+    }
+
+    return {
+      id: pos.id,
+      market: pos.market.question,
+      category: pos.market.category,
+      platform: pos.market.onChainMarketId !== null ? `On-chain #${pos.market.onChainMarketId}` : "Not on-chain",
+      side: pos.direction,
+      entry: formatProbability(pos.entryPrice),
+      entryValue: pos.entryPrice,
+      prob: pos.currentPrice !== null ? Math.round(pos.currentPrice * 100) : null,
+      size: costRaw !== null ? formatUsdcDisplay(costRaw) : "—",
+      costRaw,
+      exitValue,
+      exitSubLabel,
+      cappedWarning,
+      pnl: pnlRaw !== null ? formatSignedUsdc(pnlRaw) : "—",
+      pnlRaw,
+      pnlPercent: returnBps !== null ? formatBps(returnBps, { signed: true }) : "—",
+      pnlColor: (pos.pnl ?? 0) >= 0 ? "text-secondary" : "text-tertiary",
+      status: pos.status,
+      resolved: pos.status !== "OPEN",
+      claimable: pos.status === "CLOSED",
+    };
+  });
   const { viewed, isWatching, pendingWatch, confirmPendingWatch, dismissPendingWatch, setWatch, clearWatch } = useViewedAddress();
   const [watchInput, setWatchInput] = useState("");
   const [validatedWatch, setValidatedWatch] = useState<PolicyCheckedAddress | null>(null);
@@ -1065,104 +1166,18 @@ export default function PortfolioPage() {
             </div>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table
-            className="w-full border-collapse text-start min-w-[1000px]"
-            aria-rowcount={positions.length > 0 ? positions.length + 1 : undefined}
-          >
-            <thead>
-              <tr aria-rowindex={1} className="bg-surface font-label-caps text-label-caps text-outline border-b border-outline-variant">
-                <th className="px-6 py-4 font-semibold">MARKET</th>
-                <th className="px-4 py-4 font-semibold">SIDE</th>
-                <th className="px-4 py-4 font-semibold text-end">ENTRY</th>
-                <th className="px-4 py-4 font-semibold text-center">PROBABILITY</th>
-                <th className="px-4 py-4 font-semibold text-end">SIZE (BACKEND RECORD)</th>
-                <th className="px-4 py-4 font-semibold text-end">EXIT VALUE (ON-CHAIN)</th>
-                <th className="px-4 py-4 font-semibold text-end">PNL (BACKEND RECORD)</th>
-                <th className="px-4 py-4 font-semibold text-center">STATUS</th>
-                <th className="px-6 py-4 font-semibold text-end">ACTIONS</th>
-              </tr>
-            </thead>
-            {isPositionsLoading ? (
-              <tbody className="divide-y divide-outline-variant">
-                <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-on-surface-variant">Loading positions...</td>
-                </tr>
-              </tbody>
-            ) : positions.length === 0 ? (
-              <tbody className="divide-y divide-outline-variant">
-                <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-on-surface-variant">No active positions found.</td>
-                </tr>
-              </tbody>
-            ) : (
-              <VirtualTableBody
-                items={positions}
-                colSpan={9}
-                getKey={(pos) => pos.id}
-                estimateSize={() => 68}
-                restorationKey="portfolio_positions"
-                renderRow={(pos, _idx, a11y) => {
-                  const costRaw = floatUsdcToRaw(pos.size);
-                  const pnlRaw = pos.pnl !== null ? floatUsdcToRaw(pos.pnl) : null;
-                  const returnBps = pnlRaw !== null && costRaw !== null && costRaw > 0n ? ratioBps(pnlRaw, costRaw) : null;
-                  const chainId = pos.market.onChainMarketId;
-                  const valEntry = chainId !== null ? treasuryValuation.byMarketId.get(chainId) : undefined;
-                  const val = valEntry?.valuation;
-
-                  let exitValue = "—";
-                  let exitSubLabel: string | undefined;
-                  let cappedWarning: string | null = null;
-
-                  if (val) {
-                    if (val.basis === "resolution" && val.resolution !== null) {
-                      exitValue = formatUsdcDisplay(val.resolution);
-                      exitSubLabel = "Redeemable (on-chain)";
-                    } else if (val.basis === "mid-only") {
-                      exitValue = treasuryValuation.basis === "mid" ? formatUsdcDisplay(val.mid) : "—";
-                      exitSubLabel = "Closed, awaiting resolution";
-                    } else {
-                      exitValue = formatUsdcDisplay(
-                        treasuryValuation.basis === "mid" ? val.mid : val.liquidation.value,
-                      );
-                      exitSubLabel = treasuryValuation.basis === "mid" ? "Mid (on-chain)" : "Exit (on-chain)";
-                    }
-
-                    if (val.liquidation.capped && valEntry) {
-                      const soldShares = val.liquidation.sold.yes + val.liquidation.sold.no;
-                      const heldShares = valEntry.holding.yes + valEntry.holding.no;
-                      cappedWarning = `Only ${formatUsdc(soldShares, { maxDecimals: 2, grouping: true })} of ${formatUsdc(heldShares, { maxDecimals: 2, grouping: true })} shares sellable. Selling the rest would return only ${formatUsdcDisplay(val.liquidation.tailValue)} more`;
-                    }
-                  }
-
-                  return (
-                    <PositionRow 
-                      key={pos.id}
-                      ariaRowIndex={a11y["aria-rowindex"]}
-                      market={pos.market.question}
-                      category={pos.market.category}
-                      platform={pos.market.onChainMarketId !== null ? `On-chain #${pos.market.onChainMarketId}` : "Not on-chain"}
-                      side={pos.direction}
-                      sideColor={pos.direction === 'YES' ? "bg-secondary-container text-on-secondary-container" : "bg-tertiary-container text-on-tertiary-container"}
-                      entry={formatProbability(pos.entryPrice)}
-                      prob={pos.currentPrice !== null ? Math.round(pos.currentPrice * 100) : null}
-                      yesNo={pos.direction}
-                      size={costRaw !== null ? formatUsdcDisplay(costRaw) : "—"}
-                      exitValue={exitValue}
-                      exitSubLabel={exitSubLabel}
-                      cappedWarning={cappedWarning}
-                      pnl={pnlRaw !== null ? formatSignedUsdc(pnlRaw) : "—"}
-                      pnlPercent={returnBps !== null ? formatBps(returnBps, { signed: true }) : "—"}
-                      pnlColor={(pos.pnl ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}
-                      status={pos.status}
-                      resolved={pos.status !== 'OPEN'}
-                      claimable={pos.status === 'CLOSED'}
-                    />
-                  );
-                }}
-              />
-            )}
-          </table>
+        <div className="px-2 pb-2">
+          <DataTable<PositionTableRow>
+            caption={status === "OPEN" ? "Open positions" : "Resolved positions"}
+            captionHidden
+            columns={POSITION_COLUMNS}
+            rows={positionRows}
+            getRowId={positionRowId}
+            loading={isPositionsLoading}
+            emptyState="No active positions found."
+            rowClassName={(row) => (row.resolved ? "bg-surface-container-highest" : undefined)}
+            virtualize={{ estimateSize: 68, restorationKey: "portfolio_positions" }}
+          />
         </div>
       </section>
 
